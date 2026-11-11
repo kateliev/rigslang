@@ -4,7 +4,7 @@
 	"description": "Syntax highlighting for Rig (.rig) files: reason, intent and gates.",
 	"version": "0.1.0",
 	"publisher": "riglang",
-	"license": "SEE LICENSE IN LICENSE.md",
+	"license": "Apache-2.0",
 	"repository": {
 		"type": "git",
 		"url": "https://github.com/kateliev/riglang"

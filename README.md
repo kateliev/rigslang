@@ -75,5 +75,5 @@ Early design, version 0. The syntax can still change. Read [docs/logic.md](docs/
 
 ## License and privacy
 
-- [PolyForm Noncommercial 1.0.0](LICENSE.md): free for personal use, research, education and non-profit organizations. Commercial use needs a separate license from the author.
+- [Apache License 2.0](LICENSE): free to use, change and share, also in commercial work. Keep the copyright notice and the [NOTICE](NOTICE) file. The license gives no right to use the name "Rig" for your own product.
 - [PRIVACY.md](PRIVACY.md): this project collects no personal data.
