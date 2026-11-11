@@ -14,17 +14,21 @@ unit slugify snippet
   out str
   example "Hello World" => "hello-world"
   example "Ça va?" => "ca-va"
+  example "  many   spaces  " => "many-spaces"
   ensure "the result has only a-z, 0-9 and -"
     check py "re.fullmatch(r'[a-z0-9-]*', result)"
-  cast py #3f0c9e21
+  ensure "the result does not start or end with -"
+    check py "not result.startswith('-') and not result.endswith('-')"
+  cast py #1a80d208 #9fe3f5f5 proved 2026-11-11
     import re, unicodedata
+
     def slugify(text):
         t = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
         return re.sub(r"[^a-z0-9]+", "-", t).strip("-")
 ```
 
 - **reason / intent / in / out / example / ensure** make the *matrix*: the spec of the unit.
-- **cast** is code that was proved against the matrix in a real runtime. Its hash pins it to the matrix.
+- **cast** is code that was proved against the matrix in a real runtime. Two hashes pin it: the first to the matrix, the second to the code.
 - If you change the matrix, the hash does not match any more. The cast *remelts*, and the unit becomes a *hole* again.
 - In an agent, **gate** nodes are checkpoints. A `hard` or `soft` gate is decided by code; a `judge` gate is decided by the model and is marked as a guess.
 
