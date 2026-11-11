@@ -41,6 +41,7 @@ unit slugify snippet
 | [skills/rig/rig.py](skills/rig/rig.py) | Reference tool, Python standard library only: `check`, `hash`, `prove`, `json`. |
 | [viewer/index.html](viewer/index.html) | Viewer for `.rig` files: a table tab and a graph tab. One file, no install. |
 | [examples/](examples/) | Example units: a snippet, a tool and an agent. |
+| [tests/](tests/) | Tests for `rig.py`, and a test that the viewer computes the same hashes and errors. |
 | [docs/logic.md](docs/logic.md) | How the language works, and why. |
 | [docs/](docs/) | Research notes and the first design memos. |
 
@@ -51,7 +52,19 @@ python skills/rig/rig.py check examples/slugify.rig
 python skills/rig/rig.py prove examples/slugify.rig
 ```
 
-Open `viewer/index.html` in a browser, then drop a `.rig` file on the page.
+Open `viewer/index.html` in a browser, then drop a `.rig` file on the page. To load the examples with one click, serve the folder first:
+
+```bash
+python -m http.server 8000 --bind 127.0.0.1
+```
+
+Then open `http://127.0.0.1:8000/viewer/?src=../examples/release-check.rig`.
+
+Run the tests (the viewer parity test needs Node.js):
+
+```bash
+python -m unittest discover tests
+```
 
 To give the skill to an agent, copy `skills/rig/` into the agent's skills folder (for example `.claude/skills/rig/`).
 

@@ -1,0 +1,710 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rig viewer</title>
+<style>
+:root {
+  --bg: #f6f6f3; --panel: #ffffff; --ink: #1c1c1e; --muted: #626268; --faint: #9a9aa0; --line: #e2e2de;
+  --chip: #efefeb; --code: #f3f3ef; --accent: #2f5bd3;
+  --hard: #2f5bd3; --soft: #b0731a; --judge: #8a4fd1; --step: #5a6472; --end: #2f8a55;
+  --ok: #2f8a55; --warn: #b0731a; --err: #c2453d; --fail: #c2453d; --changed: #fff4d6;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141416; --panel: #1d1d20; --ink: #ececee; --muted: #a5a5ab; --faint: #737379; --line: #313136;
+    --chip: #2a2a2e; --code: #18181b; --accent: #7d9cf5;
+    --hard: #7d9cf5; --soft: #e0a447; --judge: #b68af0; --step: #9ba5b3; --end: #6cc28d;
+    --ok: #6cc28d; --warn: #e0a447; --err: #ec7a72; --fail: #ec7a72; --changed: #3a3320;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141416; --panel: #1d1d20; --ink: #ececee; --muted: #a5a5ab; --faint: #737379; --line: #313136;
+  --chip: #2a2a2e; --code: #18181b; --accent: #7d9cf5;
+  --hard: #7d9cf5; --soft: #e0a447; --judge: #b68af0; --step: #9ba5b3; --end: #6cc28d;
+  --ok: #6cc28d; --warn: #e0a447; --err: #ec7a72; --fail: #ec7a72; --changed: #3a3320;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+code, pre, .mono { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 12.5px; }
+button, select, input { font: inherit; color: inherit; }
+button { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+button:hover { border-color: var(--faint); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:disabled { opacity: .45; cursor: default; }
+
+.bar { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line);
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 16px; }
+.brand { font-weight: 650; letter-spacing: .01em; }
+.brand small { font-weight: 400; color: var(--muted); margin-left: 6px; }
+.tabs { display: flex; gap: 2px; background: var(--chip); border-radius: 8px; padding: 2px; }
+.tabs button { border: 0; background: transparent; padding: 3px 12px; border-radius: 6px; }
+.tabs button[aria-selected="true"] { background: var(--panel); box-shadow: 0 1px 2px rgba(0,0,0,.18); font-weight: 600; color: var(--accent); }
+.spacer { flex: 1; }
+#fname { color: var(--muted); max-width: 30ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#dirty { color: var(--warn); }
+
+main { padding: 16px; max-width: 1200px; margin: 0 auto; }
+.empty { border: 2px dashed var(--line); border-radius: 12px; padding: 28px; text-align: center; color: var(--muted); }
+.empty textarea { width: 100%; min-height: 160px; margin-top: 12px; background: var(--panel); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px; font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; }
+.empty .row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+body.drag main { outline: 3px dashed var(--accent); outline-offset: -8px; }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+.card h2 { font-size: 16px; margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.scope { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 500; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.chip { font-size: 12px; padding: 1px 8px; border-radius: 99px; background: var(--chip); color: var(--muted); }
+.chip.ok { color: var(--ok); } .chip.warn { color: var(--warn); } .chip.err { color: var(--err); }
+.lead { margin: 10px 0 0; }
+.lead b { display: inline-block; width: 64px; color: var(--muted); font-weight: 500; }
+.unknown { color: var(--warn); }
+h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 16px 0 6px; font-weight: 600; }
+.tw { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; vertical-align: top; padding: 5px 8px; border-bottom: 1px solid var(--line); }
+th { font-size: 12px; color: var(--muted); font-weight: 500; }
+tr.changed td { background: var(--changed); }
+td.mono { white-space: pre-wrap; }
+td input, td select { background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 2px 6px; width: 100%; min-width: 80px; }
+td input.bad { border-color: var(--err); }
+.k { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+.k.hard { color: var(--hard); } .k.soft { color: var(--soft); } .k.judge { color: var(--judge); } .k.step { color: var(--step); } .k.end { color: var(--end); }
+.to { white-space: nowrap; }
+.to .x { color: var(--fail); }
+.dim { color: var(--muted); }
+pre.cast { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow-x: auto; margin: 6px 0 0; }
+details summary { cursor: pointer; }
+.diag { margin: 0; padding-left: 18px; }
+.diag li.err { color: var(--err); } .diag li.warn { color: var(--warn); }
+
+/* graph */
+.gbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+.stage { position: relative; overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  background-image: radial-gradient(var(--line) 1px, transparent 1px); background-size: 18px 18px; }
+.canvas { position: relative; }
+.canvas svg { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+.node { position: absolute; width: 230px; background: var(--panel); border: 1px solid var(--line); border-top: 3px solid var(--step);
+  border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); cursor: pointer; font-size: 12.5px; }
+.node.hard { border-top-color: var(--hard); } .node.soft { border-top-color: var(--soft); }
+.node.judge { border-top-color: var(--judge); border-style: dashed; border-top-style: solid; }
+.node.end { border-top-color: var(--end); border-radius: 18px; width: 170px; }
+.node.sel { outline: 2px solid var(--accent); }
+.node .hd { display: flex; gap: 6px; align-items: baseline; padding: 6px 10px 2px; }
+.node .id { font-weight: 650; }
+.node .nm { padding: 0 10px 6px; color: var(--muted); }
+.node .rw { display: flex; justify-content: space-between; gap: 8px; padding: 2px 10px; border-top: 1px solid var(--line); }
+.node .rw span:last-child { color: var(--muted); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.edge { fill: none; stroke: var(--faint); stroke-width: 1.6; }
+.edge.fail { stroke: var(--fail); stroke-dasharray: 5 4; }
+.edge.hot { stroke: var(--accent); stroke-width: 2.4; }
+.edge.fail.hot { stroke: var(--fail); }
+.elabel { font-size: 11px; fill: var(--muted); paint-order: stroke; stroke: var(--panel); stroke-width: 4px; }
+.elabel.fail { fill: var(--fail); }
+.detail { margin-top: 12px; }
+.detail dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 8px 0 0; }
+.detail dt { color: var(--muted); }
+.detail dd { margin: 0; }
+@media (max-width: 640px) { .lead b { display: block; width: auto; } }
+</style>
+</head>
+<body>
+<div class="bar">
+  <span class="brand">Rig <small>viewer</small></span>
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tab-table" aria-selected="true">Table</button>
+    <button role="tab" id="tab-graph" aria-selected="false">Graph</button>
+  </div>
+  <span id="fname"></span><span id="dirty"></span>
+  <span class="spacer"></span>
+  <button id="open">Open…</button>
+  <button id="save" class="primary" disabled title="Download the file with your rule changes">Save</button>
+  <button id="close" disabled>Close</button>
+  <input type="file" id="file" accept=".rig,text/plain" hidden>
+</div>
+<main id="main"></main>
+
+<script>
+"use strict";
+/* Rig viewer, version 0. One file, no network requests (except loading examples next to it
+   over http). It mirrors skills/rig/rig.py: the same parser, hashes, status and checks. */
+
+// - DOM helpers --------------------------------------
+const $ = s => document.querySelector(s);
+function el(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else if (k === "class") e.className = v;
+    else e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kids.flat(Infinity)) if (k != null && k !== false) e.append(k instanceof Node ? k : String(k));
+  return e;
+}
+function sv(tag, attrs) {
+  const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v);
+  return e;
+}
+const store = {
+  get(k) { try { return localStorage.getItem("rig." + k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem("rig." + k, v); } catch (e) { /* private mode */ } },
+};
+
+// - SHA-256 (no secure context needed) -----------------
+const SHA = (() => {
+  const K = [], H = [], frac = x => ((x - Math.floor(x)) * 4294967296) >>> 0;
+  for (let n = 2, c = 0; c < 64; n++) {
+    let p = true;
+    for (let d = 2; d * d <= n; d++) if (n % d === 0) { p = false; break; }
+    if (!p) continue;
+    if (c < 8) H.push(frac(Math.sqrt(n)));
+    K.push(frac(Math.cbrt(n)));
+    c++;
+  }
+  return { K, H };
+})();
+function sha256hex(str) {
+  const msg = new TextEncoder().encode(str), len = msg.length;
+  const total = ((len + 9 + 63) >> 6) << 6, buf = new Uint8Array(total);
+  buf.set(msg); buf[len] = 0x80;
+  const dv = new DataView(buf.buffer);
+  dv.setUint32(total - 8, Math.floor(len / 536870912)); dv.setUint32(total - 4, (len * 8) >>> 0);
+  const h = SHA.H.slice(), w = new Uint32Array(64), r = (x, n) => (x >>> n) | (x << (32 - n));
+  for (let off = 0; off < total; off += 64) {
+    for (let i = 0; i < 16; i++) w[i] = dv.getUint32(off + i * 4);
+    for (let i = 16; i < 64; i++) {
+      const a = w[i - 15], b = w[i - 2];
+      w[i] = (w[i - 16] + (r(a, 7) ^ r(a, 18) ^ (a >>> 3)) + w[i - 7] + (r(b, 17) ^ r(b, 19) ^ (b >>> 10))) >>> 0;
+    }
+    let [A, B, C, D, E, F, G, X] = h;
+    for (let i = 0; i < 64; i++) {
+      const t1 = (X + (r(E, 6) ^ r(E, 11) ^ r(E, 25)) + ((E & F) ^ (~E & G)) + SHA.K[i] + w[i]) >>> 0;
+      const t2 = ((r(A, 2) ^ r(A, 13) ^ r(A, 22)) + ((A & B) ^ (A & C) ^ (B & C))) >>> 0;
+      X = G; G = F; F = E; E = (D + t1) >>> 0; D = C; C = B; B = A; A = (t1 + t2) >>> 0;
+    }
+    [A, B, C, D, E, F, G, X].forEach((v, i) => { h[i] = (h[i] + v) >>> 0; });
+  }
+  return h.map(x => x.toString(16).padStart(8, "0")).join("");
+}
+const h8 = s => "#" + sha256hex(s).slice(0, 8);
+
+// - Parser (same rules as rig.py) ----------------------
+const NUMBER = /^-?\d+(\.\d+)?$/;
+const MATRIX = ["in", "out", "intent", "example", "ensure"];
+const FLOW = ["step", "gate", "end"];
+const KINDS = ["hard", "soft", "judge"];
+const SCOPES = ["snippet", "tool", "agent"];
+const CHILDREN = {
+  unit: ["in", "out", "intent", "example", "ensure", "reason", "note", "uses", "rule", "cast", "step", "gate", "end"],
+  ensure: ["check", "note"], reason: ["evidence"],
+  rule: ["min", "max", "options", "unit", "label", "reason", "evidence", "note"],
+  step: ["do", "by", "reads", "next", "note", "reason"],
+  gate: ["when", "reads", "ensure", "by", "brief", "pass", "fail", "note", "reason"],
+  end: ["note"],
+};
+class RigError extends Error { constructor(line, text) { super("line " + line + ": " + text); this.line = line; } }
+
+function tokenize(s, line) {
+  let out = [], stack = [], i = 0;
+  const n = s.length;
+  while (i < n) {
+    const c = s[i];
+    if (c === " " || c === "\t") { i++; continue; }
+    if (c === ";") break;
+    if (c === '"') {
+      let j = i + 1;
+      while (j < n && s[j] !== '"') j += s[j] === "\\" ? 2 : 1;
+      if (j >= n) throw new RigError(line, "the string is not closed");
+      out.push({ k: "str", t: s.slice(i, j + 1), a: i, b: j + 1 }); i = j + 1; continue;
+    }
+    if (c === "(") { stack.push([out, i]); out = []; i++; continue; }
+    if (c === ")") {
+      if (!stack.length) throw new RigError(line, 'a ")" without "("');
+      const [prev, a] = stack.pop();
+      prev.push({ k: "list", v: out, a, b: i + 1 }); out = prev; i++; continue;
+    }
+    if (c === "/") {
+      let j = i + 1;
+      while (j < n && s[j] !== "/") j += s[j] === "\\" ? 2 : 1;
+      if (j < n && (j + 1 === n || " \t)".includes(s[j + 1]))) { out.push({ k: "re", t: s.slice(i, j + 1), a: i, b: j + 1 }); i = j + 1; continue; }
+    }
+    let j = i;
+    while (j < n && !" \t();".includes(s[j])) j++;
+    const w = s.slice(i, j);
+    out.push({ k: NUMBER.test(w) ? "num" : "word", t: w, a: i, b: j }); i = j;
+  }
+  if (stack.length) throw new RigError(line, 'a "(" is not closed');
+  return out;
+}
+const ser = a => a.k === "list" ? "(" + a.v.map(ser).join(" ") + ")" : a.t;
+
+function parse(text) {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const root = { head: "file", args: [], line: 0, indent: -1, children: [] };
+  const stack = [root];
+  let i = 0;
+  while (i < lines.length) {
+    const raw = lines[i], line = i + 1, body = raw.replace(/^[ \t]+/, "");
+    if (!body.trim() || body.startsWith(";")) { i++; continue; }
+    const lead = raw.slice(0, raw.length - body.length);
+    if (lead.includes("\t")) throw new RigError(line, "a tab in the indentation: indent with spaces");
+    const indent = lead.length;
+    while (stack[stack.length - 1].indent >= indent) stack.pop();
+    const toks = tokenize(body, line);
+    if (!toks.length) { i++; continue; }
+    if (toks[0].k !== "word") throw new RigError(line, "a line must start with a word");
+    const node = { head: toks[0].t, args: toks.slice(1), line, indent, children: [], body: null };
+    stack[stack.length - 1].children.push(node);
+    i++;
+    if (node.head === "cast") {
+      const cast = [];
+      while (i < lines.length) {
+        const r = lines[i];
+        if (r.trim() && r.length - r.replace(/^[ \t]+/, "").length <= indent) break;
+        cast.push(r); i++;
+      }
+      while (cast.length && !cast[cast.length - 1].trim()) cast.pop();
+      node.body = cast;
+      continue;
+    }
+    stack.push(node);
+  }
+  return root;
+}
+const word = (n, i, d) => n.args.length > i ? ser(n.args[i]) : d;
+const kids = (n, h) => n.children.filter(c => c.head === h);
+const units = root => root.children.filter(u => u.head === "unit");
+function str(a) {  // a string token -> its text
+  if (!a) return "";
+  if (a.k !== "str") return ser(a);
+  return a.t.slice(1, -1).replace(/\\(.)/g, (m, c) => ({ n: "\n", t: "\t" })[c] || c);
+}
+const text1 = n => n && n.args.length ? n.args.map(str).join(" ") : "";
+
+// - Hashes and status ----------------------------------
+function matrixText(u) {
+  const out = [];
+  const walk = (n, d) => { out.push("  ".repeat(d) + [n.head, ...n.args.map(ser)].join(" ")); n.children.forEach(c => walk(c, d + 1)); };
+  u.children.forEach(c => { if (MATRIX.includes(c.head)) walk(c, 0); });
+  return out.join("\n");
+}
+function bodyText(lines) {
+  let ls = (lines || []).map(l => l.trimEnd());
+  while (ls.length && !ls[0]) ls.shift();
+  while (ls.length && !ls[ls.length - 1]) ls.pop();
+  const full = ls.filter(Boolean);
+  const cut = full.length ? Math.min(...full.map(l => l.length - l.replace(/^[ \t]+/, "").length)) : 0;
+  return ls.map(l => l.slice(cut)).join("\n");
+}
+function castInfo(c) {
+  const w = c.args.map(ser), hs = w.filter(x => x.startsWith("#")), p = w.indexOf("proved");
+  return { lang: w[0] || "?", matrix: hs[0] || null, body: hs[1] || null, proved: p >= 0 ? w[p + 1] || null : null };
+}
+function castState(u, c) {
+  const i = castInfo(c);
+  if (!i.matrix) return { s: "unproved", cls: "warn", t: "unproved " + i.lang, i };
+  if (i.matrix !== h8(matrixText(u))) return { s: "remelted", cls: "err", t: "remelted " + i.lang, i };
+  if (i.body !== h8(bodyText(c.body))) return { s: "stale", cls: "warn", t: "stale " + i.lang, i };
+  return { s: "proved", cls: "ok", t: "proved " + i.lang + (i.proved ? " " + i.proved : ""), i };
+}
+function coverage(u) {
+  const gates = kids(u, "gate");
+  const code = gates.filter(g => ["hard", "soft"].includes(word(g, 1)) && kids(g, "by").length);
+  return { gates: gates.length, code: code.length, judge: gates.filter(g => word(g, 1) === "judge").length };
+}
+function unitStatus(u) {
+  const out = kids(u, "cast").map(c => { const s = castState(u, c); return { t: s.t, cls: s.cls }; });
+  const cv = coverage(u);
+  if (cv.gates) out.push({ t: `coverage ${Math.round(100 * cv.code / cv.gates)}% (${cv.code}/${cv.gates} by code, ${cv.judge} judge)`, cls: cv.code === cv.gates ? "ok" : "" });
+  else if (kids(u, "step").length) out.push({ t: kids(u, "step").length + " steps, no gates", cls: "" });
+  if (!kids(u, "cast").length && u.children.some(c => MATRIX.includes(c.head)) && !cv.gates && !kids(u, "step").length) out.push({ t: "hole", cls: "warn" });
+  return out.length ? out : [{ t: "empty", cls: "" }];
+}
+function check(root) {
+  const err = [], warn = [], names = new Set();
+  root.children.forEach(t => { if (t.head !== "unit") err.push([t.line, `"${t.head}" at the top level: only "unit" is allowed`]); });
+  for (const u of units(root)) {
+    const name = word(u, 0);
+    if (!name) err.push([u.line, "a unit without a name"]);
+    else if (names.has(name)) err.push([u.line, `unit "${name}" is defined twice`]);
+    names.add(name);
+    if (word(u, 1) && !SCOPES.includes(word(u, 1))) err.push([u.line, `scope "${word(u, 1)}": use snippet, tool or agent`]);
+    const walk = n => { const ok = CHILDREN[n.head]; n.children.forEach(c => { if (ok && !ok.includes(c.head)) warn.push([c.line, `"${c.head}" is not a known word inside "${n.head}"`]); walk(c); }); };
+    walk(u);
+    kids(u, "example").forEach(e => { if (!e.args.map(ser).includes("=>")) err.push([e.line, 'an example needs "=>"']); });
+    kids(u, "reason").forEach(r => { if (word(r, 0) === "?") warn.push([r.line, "the reason is unknown: ask the human"]); });
+    const langs = kids(u, "cast").map(c => castInfo(c).lang);
+    new Set(langs).forEach(l => { if (langs.filter(x => x === l).length > 1) err.push([u.line, `two casts in "${l}"`]); });
+    const rules = new Set(kids(u, "rule").map(r => word(r, 0)));
+    const flow = u.children.filter(c => FLOW.includes(c.head)), ids = {}, read = new Set(), edges = {};
+    flow.forEach(f => { const id = word(f, 0); if (!id) err.push([f.line, `"${f.head}" needs an id`]); else if (ids[id]) err.push([f.line, `id "${id}" is used twice`]); ids[id] = f; });
+    for (const f of flow) {
+      const id = word(f, 0); edges[id] = [];
+      for (const c of f.children) {
+        if (c.head === "reads") c.args.forEach(a => { read.add(a.t); if (!rules.has(a.t)) err.push([c.line, `rule "${a.t}" is not defined in this unit`]); });
+        if (["next", "pass", "fail"].includes(c.head)) {
+          if (word(c, 0) !== "->" || !word(c, 1)) err.push([c.line, `write "${c.head} -> <id>"`]);
+          else if (!ids[word(c, 1)]) err.push([c.line, `"${id}" leads to "${word(c, 1)}", which does not exist`]);
+          else edges[id].push(word(c, 1));
+        }
+      }
+      if (f.head === "gate") {
+        const k = word(f, 1);
+        if (!KINDS.includes(k)) err.push([f.line, `gate "${id}": the kind must be hard, soft or judge`]);
+        else if (k !== "judge" && !kids(f, "by").length) warn.push([f.line, `gate "${id}" is ${k} but no code decides it: add "by", or make it judge`]);
+        else if (k === "judge" && !kids(f, "brief").length) warn.push([f.line, `judge gate "${id}" has no brief`]);
+        if (!kids(f, "pass").length) warn.push([f.line, `gate "${id}" has no "pass"`]);
+      }
+    }
+    if (flow.length) {
+      const starts = flow.filter(f => f.head !== "end"), seen = new Set(), todo = starts.length ? [word(starts[0], 0)] : [];
+      while (todo.length) { const x = todo.pop(); if (seen.has(x)) continue; seen.add(x); todo.push(...(edges[x] || [])); }
+      flow.forEach(f => { if (!seen.has(word(f, 0))) warn.push([f.line, `"${word(f, 0)}" cannot be reached from the start`]); });
+      kids(u, "rule").forEach(r => { if (!read.has(word(r, 0))) warn.push([r.line, `rule "${word(r, 0)}" is not read by any step or gate`]); });
+    }
+  }
+  const by = (a, b) => a[0] - b[0];
+  return { err: err.sort(by), warn: warn.sort(by) };
+}
+
+// - State ----------------------------------------------
+const S = { text: null, name: "", root: null, error: null, diag: null, dirty: false, changed: new Set(), tab: store.get("tab") || "table", unit: null, sel: null };
+
+function load(text, name) {
+  S.text = text; S.name = name || "untitled.rig"; S.dirty = false; S.changed = new Set(); S.sel = null;
+  reparse();
+  const flowUnits = S.root ? units(S.root).filter(u => u.children.some(c => FLOW.includes(c.head))) : [];
+  S.unit = flowUnits.length ? word(flowUnits[0], 0) : null;
+  render();
+}
+function reparse() {
+  try { S.root = parse(S.text); S.error = null; S.diag = check(S.root); }
+  catch (e) { S.root = null; S.error = e.message; S.diag = null; }
+}
+function ruleValue(r) { const a = r.args[1]; return a ? ser(a) : ""; }
+function ruleById(u, id) { return kids(u, "rule").find(r => word(r, 0) === id); }
+function setRule(r, tokText) {
+  const ls = S.text.split("\n"), raw = ls[r.line - 1], a = r.args[1];
+  const at = r.indent;
+  ls[r.line - 1] = a ? raw.slice(0, at + a.a) + tokText + raw.slice(at + a.b) : raw.replace(/\r?$/, " " + tokText + (raw.endsWith("\r") ? "\r" : ""));
+  S.text = ls.join("\n"); S.dirty = true;
+  reparse(); render();
+}
+
+// - Rendering ------------------------------------------
+function render() {
+  $("#fname").textContent = S.text != null ? S.name : "";
+  $("#dirty").textContent = S.dirty ? " • changed" : "";
+  $("#save").disabled = !S.dirty; $("#close").disabled = S.text == null;
+  $("#tab-table").setAttribute("aria-selected", S.tab === "table");
+  $("#tab-graph").setAttribute("aria-selected", S.tab === "graph");
+  const main = $("#main");
+  main.replaceChildren();
+  if (S.text == null) { main.append(emptyView()); return; }
+  if (S.error) { main.append(el("div", { class: "card" }, el("h2", {}, "The file does not parse"), el("p", { class: "unknown" }, S.error))); return; }
+  main.append(S.tab === "graph" ? graphView() : tableView());
+}
+
+function emptyView() {
+  const ta = el("textarea", { placeholder: "…or paste Rig text here", spellcheck: "false", "aria-label": "Rig text" });
+  const examples = ["slugify.rig", "contacts.rig", "release-check.rig"];
+  const http = location.protocol.startsWith("http");
+  return el("div", { class: "empty" },
+    el("p", {}, "Drop a ", el("code", {}, ".rig"), " file here, or ", el("button", { onclick: () => $("#file").click() }, "open one"), "."),
+    ta,
+    el("div", { class: "row" }, el("button", { class: "primary", onclick: () => ta.value.trim() && load(ta.value, "pasted.rig") }, "Show pasted text")),
+    http ? el("div", { class: "row" }, "Examples:", examples.map(x => el("button", { onclick: () => fetchFile("../examples/" + x) }, x))) :
+      el("p", { class: "dim" }, "Tip: serve the repository folder over http (for example ", el("code", {}, "python -m http.server"), ") to load the examples with one click."));
+}
+async function fetchFile(url) {
+  try { const r = await fetch(url); if (!r.ok) throw new Error(r.status); load(await r.text(), url.split("/").pop()); }
+  catch (e) { alert("Could not load " + url + ": " + e.message); }
+}
+
+function kindOf(n) { return n.head === "gate" ? (word(n, 1) || "gate") : n.head; }
+function arrows(n) {
+  const out = [];
+  for (const c of n.children) {
+    if (!["next", "pass", "fail"].includes(c.head)) continue;
+    out.push(el("div", { class: "to" }, c.head === "fail" ? el("span", { class: "x" }, "✕ ") : "✓ ", word(c, 1, "?"), c.args[2] ? el("span", { class: "dim" }, " — " + str(c.args[2])) : null));
+  }
+  return out;
+}
+
+function tableView() {
+  const wrap = el("div");
+  if (S.diag && (S.diag.err.length || S.diag.warn.length)) {
+    wrap.append(el("div", { class: "card" }, el("h3", { style: "margin-top:0" }, "Check"),
+      el("ul", { class: "diag" }, S.diag.err.map(([l, t]) => el("li", { class: "err" }, `error, line ${l}: ${t}`)),
+        S.diag.warn.map(([l, t]) => el("li", { class: "warn" }, `warning, line ${l}: ${t}`)))));
+  }
+  for (const u of units(S.root)) wrap.append(unitCard(u));
+  return wrap;
+}
+
+function unitCard(u) {
+  const reason = kids(u, "reason")[0], intent = kids(u, "intent")[0];
+  const card = el("section", { class: "card" },
+    el("h2", {}, word(u, 0), el("span", { class: "scope" }, word(u, 1, "snippet"))),
+    el("div", { class: "chips" }, unitStatus(u).map(s => el("span", { class: "chip " + s.cls }, s.t)),
+      kids(u, "uses").map(x => el("span", { class: "chip" }, "uses " + word(x, 0)))),
+    reason ? el("p", { class: "lead" }, el("b", {}, "reason"), word(reason, 0) === "?" ? el("span", { class: "unknown" }, "unknown — ask the human") : text1(reason),
+      kids(reason, "evidence").map(e => el("span", { class: "dim" }, "  (evidence: " + text1(e) + ")"))) : null,
+    intent ? el("p", { class: "lead" }, el("b", {}, "intent"), text1(intent)) : null);
+
+  const ins = kids(u, "in"), out = kids(u, "out")[0];
+  if (ins.length || out) card.append(el("p", { class: "lead" }, el("b", {}, "signature"),
+    el("code", {}, "(" + ins.map(i => word(i, 0) + (word(i, 1) ? ": " + word(i, 1) : "")).join(", ") + ")" + (out ? " → " + word(out, 0, "?") : ""))));
+
+  const ex = kids(u, "example");
+  if (ex.length) card.append(el("h3", {}, "Examples"), el("div", { class: "tw" }, el("table", {},
+    el("tr", {}, el("th", {}, "input"), el("th", {}, "result")),
+    ex.map(e => { const w = e.args.map(ser), k = w.indexOf("=>"); return el("tr", {}, el("td", { class: "mono" }, w.slice(0, k).join("  ")), el("td", { class: "mono" }, w.slice(k + 1).join(" "))); }))));
+
+  const ens = kids(u, "ensure");
+  if (ens.length) card.append(el("h3", {}, "Ensure"), el("div", { class: "tw" }, el("table", {},
+    ens.map(e => el("tr", {}, el("td", {}, text1(e)), el("td", { class: "mono dim" }, kids(e, "check").map(c => el("div", {}, word(c, 0) + ": " + str(c.args[1])))))))));
+
+  const rules = kids(u, "rule");
+  if (rules.length) {
+    const flow = u.children.filter(c => FLOW.includes(c.head));
+    card.append(el("h3", {}, "Rules"), el("div", { class: "tw" }, el("table", {},
+      el("tr", {}, el("th", {}, "rule"), el("th", {}, "value"), el("th", {}, "limits"), el("th", {}, "read by"), el("th", {}, "reason")),
+      rules.map(r => {
+        const id = word(r, 0), lab = kids(r, "label")[0], rs = kids(r, "reason")[0];
+        const readers = flow.filter(f => kids(f, "reads").some(x => x.args.some(a => a.t === id))).map(f => word(f, 0));
+        const lim = [kids(r, "min")[0] && "min " + word(kids(r, "min")[0], 0), kids(r, "max")[0] && "max " + word(kids(r, "max")[0], 0),
+          kids(r, "options")[0] && "options: " + kids(r, "options")[0].args.map(ser).join(", ")].filter(Boolean).join(" · ");
+        return el("tr", { class: S.changed.has(id) ? "changed" : "" },
+          el("td", {}, el("div", {}, lab ? text1(lab) : id), lab ? el("div", { class: "mono dim" }, id) : null),
+          el("td", {}, ruleEditor(r)), el("td", { class: "dim" }, lim || "—"),
+          el("td", { class: "mono" }, readers.join(", ") || el("span", { class: "unknown" }, "unused")),
+          el("td", { class: "dim" }, rs ? (word(rs, 0) === "?" ? "unknown" : text1(rs)) : "—"));
+      }))));
+  }
+
+  const flow = u.children.filter(c => FLOW.includes(c.head));
+  if (flow.length) card.append(el("h3", {}, "Flow"), el("div", { class: "tw" }, el("table", {},
+    el("tr", {}, el("th", {}, "id"), el("th", {}, "kind"), el("th", {}, "what"), el("th", {}, "reads"), el("th", {}, "by"), el("th", {}, "then")),
+    flow.map(f => {
+      const what = ["do", "when", "ensure", "brief"].flatMap(h => kids(f, h).map(x => el("div", {}, h === "do" ? "" : el("span", { class: "dim" }, h + ": "), text1(x))));
+      return el("tr", {},
+        el("td", {}, el("div", { class: "mono" }, word(f, 0)), el("div", { class: "dim" }, str(f.head === "gate" ? f.args[2] : f.args[1]))),
+        el("td", {}, el("span", { class: "k " + kindOf(f) }, kindOf(f))),
+        el("td", {}, what.length ? what : "—"),
+        el("td", { class: "mono" }, kids(f, "reads").flatMap(x => x.args.map(a => el("div", {}, a.t + " = " + (ruleById(u, a.t) ? ruleValue(ruleById(u, a.t)) : "?"))))),
+        el("td", { class: "mono" }, kids(f, "by").map(b => word(b, 0)).join(", ") || (f.head === "gate" ? el("span", { class: "dim" }, "model") : "—")),
+        el("td", {}, arrows(f)));
+    }))));
+
+  for (const c of kids(u, "cast")) {
+    const st = castState(u, c);
+    card.append(el("h3", {}, "Cast · " + st.i.lang),
+      el("details", { open: st.s !== "proved" }, el("summary", {}, el("span", { class: "chip " + st.cls }, st.t), "  ", el("span", { class: "mono dim" }, [st.i.matrix, st.i.body].filter(Boolean).join(" "))),
+        el("pre", { class: "cast" }, bodyText(c.body))));
+  }
+  return card;
+}
+
+function ruleEditor(r) {
+  const a = r.args[1], v = a ? ser(a) : "";
+  const min = kids(r, "min")[0], max = kids(r, "max")[0], opts = kids(r, "options")[0];
+  const mark = () => { S.changed.add(word(r, 0)); };
+  if (a && a.k === "word" && (v === "on" || v === "off"))
+    return el("select", { onchange: e => { mark(); setRule(r, e.target.value); } }, ["on", "off"].map(o => el("option", { value: o, selected: o === v }, o)));
+  if (opts) return el("select", { onchange: e => { mark(); setRule(r, e.target.value); } }, opts.args.map(o => el("option", { value: ser(o), selected: ser(o) === v }, ser(o))));
+  if (a && a.k === "num") {
+    const inp = el("input", { type: "number", value: v, step: "any", min: min ? word(min, 0) : null, max: max ? word(max, 0) : null });
+    inp.addEventListener("change", () => {
+      const n = Number(inp.value), lo = min ? Number(word(min, 0)) : -Infinity, hi = max ? Number(word(max, 0)) : Infinity;
+      if (inp.value === "" || Number.isNaN(n) || n < lo || n > hi) { inp.classList.add("bad"); inp.title = "outside the limits"; return; }
+      mark(); setRule(r, String(n));
+    });
+    return inp;
+  }
+  const inp = el("input", { type: "text", value: v, class: "mono", title: "the value as written in the file (keep quotes and slashes)" });
+  inp.addEventListener("change", () => {
+    try { const t = tokenize(inp.value, r.line); if (t.length !== 1) throw new Error("one value only"); mark(); setRule(r, inp.value.trim()); }
+    catch (e) { inp.classList.add("bad"); inp.title = e.message; }
+  });
+  return inp;
+}
+
+// - Graph ----------------------------------------------
+function graphView() {
+  const flowUnits = units(S.root).filter(u => u.children.some(c => FLOW.includes(c.head)));
+  if (!flowUnits.length) return el("div", { class: "card" }, el("p", {}, "This file has no flow. The graph shows the steps, gates and ends of tool and agent units."));
+  const u = flowUnits.find(x => word(x, 0) === S.unit) || flowUnits[0];
+  S.unit = word(u, 0);
+  const cv = coverage(u);
+  const bar = el("div", { class: "gbar" },
+    flowUnits.length > 1 ? el("div", { class: "tabs" }, flowUnits.map(x => el("button", { "aria-selected": x === u, onclick: () => { S.unit = word(x, 0); S.sel = null; render(); } }, word(x, 0)))) : el("b", {}, word(u, 0)),
+    el("span", { class: "chip" + (cv.gates && cv.code === cv.gates ? " ok" : "") }, cv.gates ? `coverage ${Math.round(100 * cv.code / cv.gates)}% · ${cv.code} of ${cv.gates} gates by code` : "no gates"),
+    el("span", { class: "spacer" }),
+    el("div", { class: "legend" }, [["hard", "hard gate"], ["soft", "soft gate"], ["judge", "judge (model)"], ["step", "step"], ["end", "end"]].map(([k, t]) => el("span", {}, el("i", { style: `background:var(--${k})` }), t)),
+      el("span", {}, "— pass / next"), el("span", { style: "color:var(--fail)" }, "- - fail")));
+  const canvas = el("div", { class: "canvas" }), stage = el("div", { class: "stage" }, canvas);
+  const detail = el("div", { class: "card detail" });
+  const wrap = el("div", {}, bar, stage, detail);
+  requestAnimationFrame(() => drawGraph(u, canvas, detail));
+  return wrap;
+}
+
+function drawGraph(u, canvas, detail) {
+  const flow = u.children.filter(c => FLOW.includes(c.head));
+  const ids = flow.map(f => word(f, 0)), byId = Object.fromEntries(flow.map(f => [word(f, 0), f]));
+  const edges = [];
+  flow.forEach(f => f.children.forEach(c => {
+    if (["next", "pass", "fail"].includes(c.head) && byId[word(c, 1)]) edges.push({ from: word(f, 0), to: word(c, 1), fail: c.head === "fail", label: c.args[2] ? str(c.args[2]) : "" });
+  }));
+  // layers: longest path from the start over the graph without back edges
+  const start = flow.find(f => f.head !== "end"), out = id => edges.filter(e => e.from === id);
+  const state = {}, order = [];
+  const dfs = id => { state[id] = 1; for (const e of out(id)) { if (state[e.to] === 1) e.back = true; else if (!state[e.to]) dfs(e.to); } state[id] = 2; order.push(id); };
+  if (start) dfs(word(start, 0));
+  ids.forEach(id => { if (!state[id]) dfs(id); });
+  const layer = {};
+  order.reverse().forEach(id => { layer[id] = layer[id] || 0; out(id).filter(e => !e.back).forEach(e => { layer[e.to] = Math.max(layer[e.to] || 0, layer[id] + 1); }); });
+  const ends = ids.filter(id => byId[id].head === "end"), maxL = Math.max(0, ...ids.map(id => layer[id]));
+  ends.forEach(id => { if (!out(id).length) layer[id] = Math.max(layer[id], ...edges.filter(e => e.to === id && !e.back).map(e => layer[e.from] + 1)); });
+  const rows = [];
+  ids.forEach(id => { (rows[layer[id]] = rows[layer[id]] || []).push(id); });
+
+  // nodes as HTML, measured, then placed
+  canvas.replaceChildren();
+  const svg = sv("svg", {}), nodes = {};
+  const defs = sv("defs");
+  [["a", "var(--faint)"], ["af", "var(--fail)"], ["ah", "var(--accent)"]].forEach(([id, col]) => {
+    const m = sv("marker", { id: "rig-" + id, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse" });
+    const p = sv("path", { d: "M0,0 L10,5 L0,10 z" }); p.style.fill = col; m.append(p); defs.append(m);
+  });
+  svg.append(defs);
+  canvas.append(svg);
+  for (const id of ids) {
+    const f = byId[id], k = kindOf(f);
+    const rows2 = [];
+    kids(f, "reads").forEach(x => x.args.forEach(a => { const r = ruleById(u, a.t); rows2.push([a.t, r ? ruleValue(r) : "?"]); }));
+    kids(f, "by").forEach(b => rows2.push(["by", word(b, 0)]));
+    if (k === "judge") rows2.push(["decided by", "the model"]);
+    const nm = str(f.head === "gate" ? f.args[2] : f.args[1]);
+    const n = el("div", { class: "node " + k + (S.sel === id ? " sel" : ""), title: id },
+      el("div", { class: "hd" }, el("span", { class: "id mono" }, id), el("span", { class: "k " + k }, k)),
+      nm ? el("div", { class: "nm" }, nm) : null,
+      rows2.map(([a, b]) => el("div", { class: "rw mono" }, el("span", {}, a), el("span", { title: b }, b))));
+    n.addEventListener("click", () => { S.sel = id; canvas.querySelectorAll(".node").forEach(x => x.classList.toggle("sel", x === n)); showDetail(u, f, detail); });
+    n.addEventListener("pointerenter", () => hot(id, true));
+    n.addEventListener("pointerleave", () => hot(id, false));
+    canvas.append(n); nodes[id] = n;
+  }
+  const GX = 36, GY = 64, PAD = 28;
+  let y = PAD, width = 0;
+  const box = {};
+  rows.forEach(row => {
+    if (!row) return;
+    const ws = row.map(id => nodes[id].offsetWidth), hs = row.map(id => nodes[id].offsetHeight);
+    const rw = ws.reduce((a, b) => a + b, 0) + GX * (row.length - 1);
+    width = Math.max(width, rw);
+    row._w = rw; row._y = y; row._h = Math.max(...hs);
+    y += row._h + GY;
+  });
+  // an edge to the next row is drawn straight down; every other edge (back, or skipping rows) gets a lane on the right
+  edges.forEach(e => { e.lane = e.back || layer[e.to] - layer[e.from] !== 1; });
+  const lanes = edges.filter(e => e.lane).length;
+  const W = width + PAD * 2 + 24 + lanes * 16, H = y - GY + PAD;
+  rows.forEach(row => {
+    if (!row) return;
+    let x = PAD + (width - row._w) / 2;
+    row.forEach(id => { const n = nodes[id]; n.style.left = x + "px"; n.style.top = row._y + "px"; box[id] = { x, y: row._y, w: n.offsetWidth, h: n.offsetHeight }; x += n.offsetWidth + GX; });
+  });
+  canvas.style.width = W + "px"; canvas.style.height = H + "px";
+  svg.setAttribute("width", W); svg.setAttribute("height", H);
+
+  const paths = [];
+  let lane = 0;
+  const right = PAD + width, inLane = {};
+  ids.forEach(id => {
+    const outs = out(id).filter(e => !e.lane), b = box[id];
+    outs.forEach((e, k) => {
+      const t = box[e.to], sx = b.x + b.w * (k + 1) / (outs.length + 1), sy = b.y + b.h, tx = t.x + t.w / 2, ty = t.y;
+      const dy = Math.max(28, (ty - sy) / 2);
+      paths.push([e, `M${sx},${sy} C${sx},${sy + dy} ${tx},${ty - dy} ${tx},${ty - 2}`]);
+    });
+    out(id).filter(e => e.lane).forEach((e, k) => {
+      const t = box[e.to], r = 8, xr = right + 24 + 16 * lane++;
+      const sy = b.y + b.h / 2 + k * 8, ty = t.y + t.h / 2 + 8 * (inLane[e.to] = (inLane[e.to] || 0) + 1) - 8;
+      const sx = b.x + b.w, tx = t.x + t.w, d = ty > sy ? 1 : -1;
+      paths.push([e, `M${sx},${sy} H${xr - r} Q${xr},${sy} ${xr},${sy + d * r} V${ty - d * r} Q${xr},${ty} ${xr - r},${ty} H${tx + 2}`]);
+    });
+  });
+  for (const [e, d] of paths) {
+    const p = sv("path", { d, class: "edge" + (e.fail ? " fail" : ""), "marker-end": `url(#rig-${e.fail ? "af" : "a"})` });
+    p.dataset.from = e.from; p.dataset.to = e.to;
+    svg.append(p);
+    const lab = (e.fail ? "✕ " : "") + e.label;
+    if (lab.trim()) {
+      const L = p.getTotalLength(), pt = p.getPointAtLength(L / 2);
+      const t = sv("text", { x: pt.x + 6, y: pt.y + 4, class: "elabel" + (e.fail ? " fail" : "") });
+      t.textContent = lab.length > 28 ? lab.slice(0, 27) + "…" : lab;
+      svg.append(t);
+    }
+  }
+  function hot(id, on) {
+    svg.querySelectorAll("path.edge").forEach(p => {
+      const h = on && (p.dataset.from === id || p.dataset.to === id);
+      p.classList.toggle("hot", h);
+      if (!p.classList.contains("fail")) p.setAttribute("marker-end", `url(#rig-${h ? "ah" : "a"})`);
+    });
+  }
+  const sel = S.sel && byId[S.sel] ? byId[S.sel] : flow[0];
+  if (sel) showDetail(u, sel, detail);
+}
+
+function showDetail(u, f, detail) {
+  const id = word(f, 0), k = kindOf(f), rows = [];
+  const add = (t, v) => { if (v != null && v !== "" && !(Array.isArray(v) && !v.length)) rows.push(el("dt", {}, t), el("dd", {}, v)); };
+  add("kind", el("span", { class: "k " + k }, k));
+  add("name", str(f.head === "gate" ? f.args[2] : f.args[1]));
+  ["when", "do", "ensure", "brief", "note"].forEach(h => kids(f, h).forEach(x => add(h, text1(x))));
+  add("reads", kids(f, "reads").flatMap(x => x.args.map(a => { const r = ruleById(u, a.t); return el("div", { class: "mono" }, a.t + " = " + (r ? ruleValue(r) : "? (not defined)")); })));
+  add("by", kids(f, "by").map(b => el("div", { class: "mono" }, word(b, 0))));
+  if (k === "judge") add("result", el("span", { class: "unknown" }, "guessed: the model decides"));
+  add("then", arrows(f));
+  add("line", String(f.line));
+  detail.replaceChildren(el("h2", {}, id), el("dl", {}, rows));
+}
+
+// - Events ---------------------------------------------
+function readFile(file) {
+  const fr = new FileReader();
+  fr.onload = () => load(String(fr.result), file.name);
+  fr.readAsText(file);
+}
+$("#open").addEventListener("click", () => $("#file").click());
+$("#file").addEventListener("change", e => { if (e.target.files[0]) readFile(e.target.files[0]); e.target.value = ""; });
+$("#close").addEventListener("click", () => { if (S.dirty && !confirm("Close without saving your changes?")) return; S.text = null; render(); });
+$("#save").addEventListener("click", () => {
+  const a = el("a", { href: URL.createObjectURL(new Blob([S.text], { type: "text/plain" })), download: S.name });
+  document.body.append(a); a.click(); a.remove(); S.dirty = false; S.changed = new Set(); render();
+});
+["table", "graph"].forEach(t => $("#tab-" + t).addEventListener("click", () => { S.tab = t; store.set("tab", t); render(); }));
+document.addEventListener("dragover", e => { e.preventDefault(); document.body.classList.add("drag"); });
+document.addEventListener("dragleave", e => { if (!e.relatedTarget) document.body.classList.remove("drag"); });
+document.addEventListener("drop", e => { e.preventDefault(); document.body.classList.remove("drag"); const f = e.dataTransfer.files[0]; if (f) readFile(f); });
+window.addEventListener("beforeunload", e => { if (S.dirty) { e.preventDefault(); e.returnValue = ""; } });
+let rz; window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (S.tab === "graph" && S.root) render(); }, 150); });
+
+const src = new URLSearchParams(location.search).get("src");
+if (src && location.protocol.startsWith("http")) fetchFile(src); else render();
+</script>
+</body>
+</html>
