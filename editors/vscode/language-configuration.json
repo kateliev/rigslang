@@ -1,0 +1,24 @@
+{
+	"comments": {
+		"lineComment": ";"
+	},
+	"brackets": [
+		["(", ")"]
+	],
+	"autoClosingPairs": [
+		{ "open": "(", "close": ")" },
+		{ "open": "\"", "close": "\"", "notIn": ["string", "comment"] }
+	],
+	"surroundingPairs": [
+		["(", ")"],
+		["\"", "\""]
+	],
+	"folding": {
+		"offSide": true
+	},
+	"wordPattern": "[^\s();\"]+",
+	"indentationRules": {
+		"increaseIndentPattern": "^\s*(unit|rule|step|gate|ensure|reason|cast)\b.*$",
+		"decreaseIndentPattern": "^\s*$"
+	}
+}

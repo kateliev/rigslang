@@ -1,0 +1,54 @@
+{
+	"name": "rig-language",
+	"displayName": "Rig",
+	"description": "Syntax highlighting for Rig (.rig) files: reason, intent and gates.",
+	"version": "0.1.0",
+	"publisher": "riglang",
+	"license": "SEE LICENSE IN LICENSE.md",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/kateliev/riglang"
+	},
+	"engines": {
+		"vscode": "^1.75.0"
+	},
+	"categories": [
+		"Programming Languages"
+	],
+	"contributes": {
+		"languages": [
+			{
+				"id": "rig",
+				"aliases": [
+					"Rig",
+					"rig"
+				],
+				"extensions": [
+					".rig"
+				],
+				"configuration": "./language-configuration.json"
+			}
+		],
+		"grammars": [
+			{
+				"language": "rig",
+				"scopeName": "source.rig",
+				"path": "./syntaxes/rig.tmLanguage.json",
+				"embeddedLanguages": {
+					"meta.embedded.block.py.rig": "python",
+					"meta.embedded.block.js.rig": "javascript",
+					"meta.embedded.block.ts.rig": "typescript",
+					"meta.embedded.block.sh.rig": "shellscript",
+					"meta.embedded.block.rust.rig": "rust"
+				}
+			}
+		],
+		"configurationDefaults": {
+			"[rig]": {
+				"editor.tabSize": 2,
+				"editor.insertSpaces": true,
+				"editor.detectIndentation": false
+			}
+		}
+	}
+}

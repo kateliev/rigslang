@@ -59,5 +59,23 @@ class ViewerParity(unittest.TestCase):
 		self.assertEqual(got, want)
 
 
+class EditorGrammars(unittest.TestCase):
+	def test_grammars_are_current(self):
+		build = os.path.join(ROOT, 'editors', 'build.py')
+		r = subprocess.run([sys.executable, build, '--check'], capture_output=True, text=True)
+		self.assertEqual(r.returncode, 0, r.stdout)
+
+	def test_head_words_match_the_spec(self):
+		sys.path.insert(0, os.path.join(ROOT, 'editors'))
+		import build
+		with open(os.path.join(ROOT, 'skills', 'rig', 'spec.md'), encoding='utf-8') as f:
+			spec = f.read()
+		words = set()
+		for rx, _, _ in build.HEADS:
+			words.update(rx.split('(', 1)[1].split(')', 1)[0].split('|'))
+		for w in sorted(words):
+			self.assertIn('`' + w, spec, w)
+
+
 if __name__ == '__main__':
 	unittest.main()

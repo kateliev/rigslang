@@ -40,6 +40,7 @@ unit slugify snippet
 | [skills/rig/spec.md](skills/rig/spec.md) | The language specification (one page of grammar, a short list of words). |
 | [skills/rig/rig.py](skills/rig/rig.py) | Reference tool, Python standard library only: `check`, `hash`, `prove`, `json`. |
 | [viewer/index.html](viewer/index.html) | Viewer for `.rig` files: a table tab and a graph tab. One file, no install. |
+| [editors/](editors/) | Syntax highlighting for VS Code and Sublime Text, built from one table. |
 | [examples/](examples/) | Example units: a snippet, a tool and an agent. |
 | [tests/](tests/) | Tests for `rig.py`, and a test that the viewer computes the same hashes and errors. |
 | [docs/logic.md](docs/logic.md) | How the language works, and why. |

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0">
+<dict>
+	<key>scope</key>
+	<string>source.rig - meta.embedded</string>
+	<key>settings</key>
+	<dict>
+		<key>increaseIndentPattern</key>
+		<string>^\s*(unit|rule|step|gate|ensure|reason|cast)\b.*$</string>
+	</dict>
+</dict>
+</plist>

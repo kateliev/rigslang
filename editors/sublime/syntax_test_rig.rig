@@ -1,0 +1,129 @@
+; SYNTAX TEST "Packages/Rig/Rig.sublime-syntax"
+; Run in Sublime Text: open this file, then Tools > Build.
+; Assertion lines start at column 0, so they end a cast block: test cast heads and bodies apart.
+
+unit slugify snippet  ; a comment
+; <- storage.type.unit.rig
+;    ^^^^^^^ entity.name.type.unit.rig
+;            ^^^^^^^ storage.modifier.scale.rig
+;                     ^^^^^^^^^^^ comment.line.semicolon.rig
+  reason ?
+; ^^^^^^ keyword.other.context.rig
+;        ^ constant.language.unknown.rig
+    evidence docs/why.md
+;   ^^^^^^^^ keyword.other.context.rig
+;            ^^^^^^^^^^^ markup.underline.link.rig
+  intent "say \"hi\"; not a comment"
+; ^^^^^^ keyword.other.matrix.rig
+;        ^^^^^^^^^^^^^^^^^^^^^^^^^^^ string.quoted.double.rig
+;             ^^ constant.character.escape.rig
+;                   ^^^^^ - comment
+  in text str
+; ^^ keyword.other.matrix.rig
+;    ^^^^ variable.parameter.input.rig
+;         ^^^ support.type.rig
+  out str
+; ^^^ keyword.other.matrix.rig
+;     ^^^ support.type.rig
+  example (1 2.5 -3) => "x"
+; ^^^^^^^ keyword.other.matrix.rig
+;         ^ punctuation.section.parens.begin.rig
+;          ^ constant.numeric.rig
+;            ^^^ constant.numeric.rig
+;                ^^ constant.numeric.rig
+;                  ^ punctuation.section.parens.end.rig
+;                    ^^ keyword.operator.arrow.rig
+;                       ^^^ string.quoted.double.rig
+  ensure "only a-z"
+; ^^^^^^ keyword.other.matrix.rig
+;        ^^^^^^^^^^ string.quoted.double.rig
+    check py "re.fullmatch(r'[a-z]*', result)"
+;   ^^^^^ keyword.other.matrix.rig
+;         ^^ storage.type.language.rig
+;            ^^^^ string.quoted.double.rig
+  cast py #1a80d208 #9fe3f5f5 proved 2026-11-11
+; ^^^^ storage.type.cast.rig
+;      ^^ storage.type.language.rig
+;         ^^^^^^^^^ constant.other.hash.rig
+;                   ^^^^^^^^^ constant.other.hash.rig
+;                             ^^^^^^ keyword.other.proved.rig
+;                                    ^^^^^^^^^^ constant.numeric.date.rig
+  cast py
+    def slugify(text):
+
+        return text  ; not rig
+;       ^^^^^^ meta.embedded.block.py.rig
+;                    ^^^^^^^^^ - comment.line.semicolon.rig
+  cast zz
+    anything (goes) "here
+;   ^^^^^^^^^^^^^^^^^^^^^ markup.raw.block.rig
+;                   ^^^^^ - string
+  cast js
+; ^^^^ storage.type.cast.rig
+  note "the cast above is empty"
+; ^^^^ keyword.other.context.rig
+;      ^^^^ - meta.embedded
+;      ^^^^ string.quoted.double.rig
+
+unit release-check agent
+;    ^^^^^^^^^^^^^ entity.name.type.unit.rig
+;                  ^^^^^ storage.modifier.scale.rig
+  uses slugify
+; ^^^^ keyword.other.context.rig
+;      ^^^^^^^ entity.other.inherited-class.rig
+  rule notes.min_words 50
+; ^^^^ storage.type.rule.rig
+;      ^^^^^^^^^^^^^^^ entity.name.constant.rule.rig
+;                      ^^ constant.numeric.rig
+    min 10
+;   ^^^ keyword.other.context.rig
+;       ^^ constant.numeric.rig
+    unit words
+;   ^^^^ keyword.other.context.rig
+;        ^^^^^ - entity
+  rule version.pattern /^\d+\.\d+$/
+;      ^^^^^^^^^^^^^^^ entity.name.constant.rule.rig
+;                      ^^^^^^^^^^^^ string.regexp.rig
+  rule tests.required on
+;                     ^^ constant.language.rig
+  step collect "Collect"
+; ^^^^ storage.type.node.rig
+;      ^^^^^^^ entity.name.function.node.rig
+;              ^^^^^^^^^ string.quoted.double.rig
+    do "read the notes"
+;   ^^ keyword.control.flow.rig
+    next -> notes
+;   ^^^^ keyword.control.flow.rig
+;        ^^ keyword.operator.arrow.rig
+;           ^^^^^ variable.function.target.rig
+  gate notes hard "Notes long enough"
+; ^^^^ storage.type.node.rig
+;      ^^^^^ entity.name.function.node.rig
+;            ^^^^ storage.modifier.gate.rig
+    reads notes.min_words tests.required  ; two rules
+;   ^^^^^ keyword.control.flow.rig
+;         ^^^^^^^^^^^^^^^ variable.other.constant.rule.rig
+;                         ^^^^^^^^^^^^^^ variable.other.constant.rule.rig
+;                                         ^^^^^^^^^^^ comment.line.semicolon.rig
+    by checks.notes_ok
+;   ^^ keyword.control.flow.rig
+;      ^^^^^^^^^^^^^^^ support.function.rig
+    pass -> publish
+;   ^^^^ keyword.control.flow.rig
+;           ^^^^^^^ variable.function.target.rig
+    fail -> stop "too short"
+;   ^^^^ keyword.control.flow.rig
+;           ^^^^ variable.function.target.rig
+;                ^^^^^^^^^^^ string.quoted.double.rig
+  gate tone judge
+;           ^^^^^ storage.modifier.gate.rig
+    brief "read it as a user"
+;   ^^^^^ keyword.control.flow.rig
+  end stop "Stopped"
+; ^^^ storage.type.node.rig
+;     ^^^^ entity.name.function.node.rig
+  custom word 3 off #abc
+;        ^^^^ - entity
+;             ^ constant.numeric.rig
+;               ^^^ constant.language.rig
+;                   ^^^^ constant.other.hash.rig
