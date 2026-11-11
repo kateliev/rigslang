@@ -1,14 +1,13 @@
 # Rig
 
-**Rig** is a small language for writing down *why* code exists, *what* it must do, and *how that is checked*. It works at three scales with one syntax: agents, tools and code snippets.
+**Rig** is a small language for writing down *what* code must do and *how that is checked*. It works at three scales with one syntax: agents, tools and code snippets.
 
-The name comes from its three main words: **R**eason, **I**ntent, **G**ate.
+The name comes from the three parts of the work: **R**eason, **I**ntent, **G**ate. The model reasons: it writes the code and makes the judgment calls. The human states the intent. Gates prove the result in a real runtime.
 
 An LLM is the main writer of Rig files. A person is the main reader. A real runtime, not the model, decides whether code is correct.
 
 ```
 unit slugify snippet
-  reason "URLs must be stable and readable"
   intent "lowercase, ASCII only, words joined by hyphens"
   in text str
   out str
@@ -27,7 +26,7 @@ unit slugify snippet
         return re.sub(r"[^a-z0-9]+", "-", t).strip("-")
 ```
 
-- **reason / intent / in / out / example / ensure** make the *matrix*: the spec of the unit.
+- **intent / in / out / example / ensure** make the *matrix*: the spec of the unit.
 - **cast** is code that was proved against the matrix in a real runtime. Two hashes pin it: the first to the matrix, the second to the code.
 - If you change the matrix, the hash does not match any more. The cast *remelts*, and the unit becomes a *hole* again.
 - In an agent, **gate** nodes are checkpoints. A `hard` or `soft` gate is decided by code; a `judge` gate is decided by the model and is marked as a guess.

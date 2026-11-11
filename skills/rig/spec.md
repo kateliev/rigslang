@@ -1,5 +1,7 @@
 # Rig language specification, version 0
 
+Rig stands for **Reason, Intent, Gate**. The model reasons: it writes code and decides `judge` gates. The human states the intent. Gates prove the result in a real runtime.
+
 Rig files use the extension `.rig`. They are UTF-8 text. This page is the one definition of the language.
 
 ## 1. Syntax
@@ -46,12 +48,11 @@ A file holds one or more `unit` nodes. Every other word goes inside a unit.
 
 | Node | Meaning |
 |---|---|
-| `reason "text"` | Why the unit or rule exists. Write `reason ?` if nobody knows yet. |
-| ↳ `evidence <path or url>` | Optional child: a note, test or report that supports the reason. |
-| `note "text"` | A remark that must stay with the unit. |
+| `note "text"` | A remark that must stay with its parent. Use it when the code looks wrong but is right, or when a value must not change. |
+| ↳ `evidence <path or url>` | Optional child: a test or report that supports the note. |
 | `uses <unit>` | This unit depends on another unit. |
 | `rule <id> <value>` | A parameter. The value is a number, `on`/`off`, a word or a string. |
-| ↳ `min`, `max`, `options`, `unit`, `label`, `reason`, `evidence` | Optional children of `rule`. |
+| ↳ `min`, `max`, `options`, `unit`, `label`, `note` | Optional children of `rule`. |
 
 ### Cast (verified code)
 
@@ -128,4 +129,4 @@ Both hashes are written with a `#` prefix. `rig.py hash` prints them.
 4. **Stale**: prove the code again. If the intent no longer describes it, propose a new intent to the human.
 5. Never imagine what code returns. A proof comes from a run.
 6. A `judge` gate is decided by the model. Its result is labelled **guessed**.
-7. Never invent a reason. Unknown reasons are `reason ?`.
+7. The human owns the intent. An intent that the model drafts from existing code is a proposal until the human confirms it.

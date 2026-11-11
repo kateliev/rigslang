@@ -1,7 +1,6 @@
 ; A snippet: a matrix (the spec) and one proved cast.
 
 unit slugify snippet
-  reason "URLs must be stable and readable"
   intent "lowercase, ASCII only, words joined by hyphens"
   in text str
   out str

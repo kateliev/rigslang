@@ -295,7 +295,7 @@
 			}
 		},
 		{
-			"match": "^\\s*(reason|note|label|options|min|max|unit)(?=[\\s;]|$)",
+			"match": "^\\s*(note|label|options|min|max|unit)(?=[\\s;]|$)",
 			"captures": {
 				"1": {
 					"name": "keyword.other.context.rig"

@@ -1,14 +1,13 @@
 ; An agent: rules (parameters), steps, and gates of all three kinds.
 
 unit release-check agent
-  reason "releases without notes or with red tests caused support work"
   intent "publish a release only when the notes, the version and the tests are ready"
 
   rule notes.min_words 50
     min 10
     max 500
     label "Shortest release notes"
-    reason "shorter notes did not answer the usual questions"
+    note "shorter notes did not answer the usual questions"
   rule version.pattern /^\d+\.\d+\.\d+$/
     label "Version format"
   rule tests.required on

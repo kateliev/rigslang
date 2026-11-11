@@ -26,12 +26,12 @@ FLOW = ('step', 'gate', 'end')
 GATE_KINDS = ('hard', 'soft', 'judge')
 SCOPES = ('snippet', 'tool', 'agent')
 CHILDREN = {
-	'unit': {'in', 'out', 'intent', 'example', 'ensure', 'reason', 'note', 'uses', 'rule', 'cast', 'step', 'gate', 'end'},
+	'unit': {'in', 'out', 'intent', 'example', 'ensure', 'note', 'uses', 'rule', 'cast', 'step', 'gate', 'end'},
 	'ensure': {'check', 'note'},
-	'reason': {'evidence'},
-	'rule': {'min', 'max', 'options', 'unit', 'label', 'reason', 'evidence', 'note'},
-	'step': {'do', 'by', 'reads', 'next', 'note', 'reason'},
-	'gate': {'when', 'reads', 'ensure', 'by', 'brief', 'pass', 'fail', 'note', 'reason'},
+	'note': {'evidence'},
+	'rule': {'min', 'max', 'options', 'unit', 'label', 'note'},
+	'step': {'do', 'by', 'reads', 'next', 'note'},
+	'gate': {'when', 'reads', 'ensure', 'by', 'brief', 'pass', 'fail', 'note'},
 	'end': {'note'},
 }
 NUMBER = re.compile(r'^-?\d+(\.\d+)?$')
@@ -262,9 +262,6 @@ def check(root):
 		for e in u.kids('example'):
 			if '=>' not in [ser(a) for a in e.args]:
 				err.append((e.line, 'an example needs "=>"'))
-		for r in u.kids('reason'):
-			if r.word(0) == '?':
-				warn.append((r.line, 'the reason is unknown: ask the human'))
 		langs = [cast_info(c)['lang'] for c in u.kids('cast')]
 		for lang in set(langs):
 			if langs.count(lang) > 1:

@@ -115,7 +115,7 @@ contexts:
       captures:
         1: storage.type.rule.rig
         2: entity.name.constant.rule.rig
-    - match: '^\s*(reason|note|label|options|min|max|unit)(?=[\s;]|$)'
+    - match: '^\s*(note|label|options|min|max|unit)(?=[\s;]|$)'
       captures:
         1: keyword.other.context.rig
     - match: '^\s*(step|end)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?'

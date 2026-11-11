@@ -37,7 +37,7 @@ HEADS = [
 	(rf'^\s*(evidence){E}(?:\s+({W}))?', [CONTEXT, 'markup.underline.link.rig'], False),
 	(rf'^\s*(uses){E}(?:\s+({W}))?', [CONTEXT, 'entity.other.inherited-class.rig'], False),
 	(rf'^\s*(rule){E}(?:\s+({W}))?', ['storage.type.rule.rig', 'entity.name.constant.rule.rig'], False),
-	(rf'^\s*(reason|note|label|options|min|max|unit){E}', [CONTEXT], False),
+	(rf'^\s*(note|label|options|min|max|unit){E}', [CONTEXT], False),
 	(rf'^\s*(step|end){E}(?:\s+({W}))?', [NODE, ID], False),
 	(rf'^\s*(gate){E}(?:\s+({W}))?(?:\s+(hard|soft|judge){E})?', [NODE, ID, 'storage.modifier.gate.rig'], False),
 	(rf'^\s*(by){E}(?:\s+({W}))?', [FLOW, 'support.function.rig'], False),

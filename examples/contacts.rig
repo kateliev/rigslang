@@ -1,7 +1,6 @@
 ; A tool that uses a snippet. The snippet is still a hole: it has a matrix, no cast.
 
 unit normalize-email snippet
-  reason "the same person signs up twice with two spellings of one address"
   intent "remove spaces at both ends and make the address lowercase; change nothing else"
   in address str
   out str
@@ -11,7 +10,6 @@ unit normalize-email snippet
     check py "result == result.strip()"
 
 unit dedupe-contacts tool
-  reason ?
   intent "read a CSV of contacts; keep the first row of each email; write a new CSV"
   uses normalize-email
   in source path

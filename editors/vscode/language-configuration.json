@@ -18,7 +18,7 @@
 	},
 	"wordPattern": "[^\s();\"]+",
 	"indentationRules": {
-		"increaseIndentPattern": "^\s*(unit|rule|step|gate|ensure|reason|cast)\b.*$",
+		"increaseIndentPattern": "^\s*(unit|rule|step|gate|ensure|note|cast)\b.*$",
 		"decreaseIndentPattern": "^\s*$"
 	}
 }

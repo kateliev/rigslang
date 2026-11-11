@@ -1,7 +1,7 @@
 {
 	"name": "rig-language",
 	"displayName": "Rig",
-	"description": "Syntax highlighting for Rig (.rig) files: reason, intent and gates.",
+	"description": "Syntax highlighting for Rig (.rig) files: intent, checks and gates.",
 	"version": "0.1.0",
 	"publisher": "riglang",
 	"license": "Apache-2.0",

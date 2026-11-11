@@ -205,11 +205,11 @@ const FLOW = ["step", "gate", "end"];
 const KINDS = ["hard", "soft", "judge"];
 const SCOPES = ["snippet", "tool", "agent"];
 const CHILDREN = {
-  unit: ["in", "out", "intent", "example", "ensure", "reason", "note", "uses", "rule", "cast", "step", "gate", "end"],
-  ensure: ["check", "note"], reason: ["evidence"],
-  rule: ["min", "max", "options", "unit", "label", "reason", "evidence", "note"],
-  step: ["do", "by", "reads", "next", "note", "reason"],
-  gate: ["when", "reads", "ensure", "by", "brief", "pass", "fail", "note", "reason"],
+  unit: ["in", "out", "intent", "example", "ensure", "note", "uses", "rule", "cast", "step", "gate", "end"],
+  ensure: ["check", "note"], note: ["evidence"],
+  rule: ["min", "max", "options", "unit", "label", "note"],
+  step: ["do", "by", "reads", "next", "note"],
+  gate: ["when", "reads", "ensure", "by", "brief", "pass", "fail", "note"],
   end: ["note"],
 };
 class RigError extends Error { constructor(line, text) { super("line " + line + ": " + text); this.line = line; } }
@@ -342,7 +342,6 @@ function check(root) {
     const walk = n => { const ok = CHILDREN[n.head]; n.children.forEach(c => { if (ok && !ok.includes(c.head)) warn.push([c.line, `"${c.head}" is not a known word inside "${n.head}"`]); walk(c); }); };
     walk(u);
     kids(u, "example").forEach(e => { if (!e.args.map(ser).includes("=>")) err.push([e.line, 'an example needs "=>"']); });
-    kids(u, "reason").forEach(r => { if (word(r, 0) === "?") warn.push([r.line, "the reason is unknown: ask the human"]); });
     const langs = kids(u, "cast").map(c => castInfo(c).lang);
     new Set(langs).forEach(l => { if (langs.filter(x => x === l).length > 1) err.push([u.line, `two casts in "${l}"`]); });
     const rules = new Set(kids(u, "rule").map(r => word(r, 0)));
@@ -417,7 +416,7 @@ function render() {
 
 function emptyView() {
   const ta = el("textarea", { placeholder: "…or paste Rig text here", spellcheck: "false", "aria-label": "Rig text" });
-  const examples = ["slugify.rig", "contacts.rig", "release-check.rig"];
+  const examples = ["slugify.rig", "contacts.rig", "release-check.rig", "translate-ui.rig"];
   const http = location.protocol.startsWith("http");
   return el("div", { class: "empty" },
     el("p", {}, "Drop a ", el("code", {}, ".rig"), " file here, or ", el("button", { onclick: () => $("#file").click() }, "open one"), "."),
@@ -452,15 +451,18 @@ function tableView() {
   return wrap;
 }
 
+function noteText(n) {
+  return [text1(n), ...kids(n, "evidence").map(e => el("span", { class: "dim" }, "  (evidence: " + text1(e) + ")"))];
+}
+
 function unitCard(u) {
-  const reason = kids(u, "reason")[0], intent = kids(u, "intent")[0];
+  const intent = kids(u, "intent")[0];
   const card = el("section", { class: "card" },
     el("h2", {}, word(u, 0), el("span", { class: "scope" }, word(u, 1, "snippet"))),
     el("div", { class: "chips" }, unitStatus(u).map(s => el("span", { class: "chip " + s.cls }, s.t)),
       kids(u, "uses").map(x => el("span", { class: "chip" }, "uses " + word(x, 0)))),
-    reason ? el("p", { class: "lead" }, el("b", {}, "reason"), word(reason, 0) === "?" ? el("span", { class: "unknown" }, "unknown — ask the human") : text1(reason),
-      kids(reason, "evidence").map(e => el("span", { class: "dim" }, "  (evidence: " + text1(e) + ")"))) : null,
-    intent ? el("p", { class: "lead" }, el("b", {}, "intent"), text1(intent)) : null);
+    intent ? el("p", { class: "lead" }, el("b", {}, "intent"), text1(intent)) : null,
+    kids(u, "note").map(n => el("p", { class: "lead" }, el("b", {}, "note"), noteText(n))));
 
   const ins = kids(u, "in"), out = kids(u, "out")[0];
   if (ins.length || out) card.append(el("p", { class: "lead" }, el("b", {}, "signature"),
@@ -479,9 +481,9 @@ function unitCard(u) {
   if (rules.length) {
     const flow = u.children.filter(c => FLOW.includes(c.head));
     card.append(el("h3", {}, "Rules"), el("div", { class: "tw" }, el("table", {},
-      el("tr", {}, el("th", {}, "rule"), el("th", {}, "value"), el("th", {}, "limits"), el("th", {}, "read by"), el("th", {}, "reason")),
+      el("tr", {}, el("th", {}, "rule"), el("th", {}, "value"), el("th", {}, "limits"), el("th", {}, "read by"), el("th", {}, "note")),
       rules.map(r => {
-        const id = word(r, 0), lab = kids(r, "label")[0], rs = kids(r, "reason")[0];
+        const id = word(r, 0), lab = kids(r, "label")[0], nt = kids(r, "note");
         const readers = flow.filter(f => kids(f, "reads").some(x => x.args.some(a => a.t === id))).map(f => word(f, 0));
         const lim = [kids(r, "min")[0] && "min " + word(kids(r, "min")[0], 0), kids(r, "max")[0] && "max " + word(kids(r, "max")[0], 0),
           kids(r, "options")[0] && "options: " + kids(r, "options")[0].args.map(ser).join(", ")].filter(Boolean).join(" · ");
@@ -489,7 +491,7 @@ function unitCard(u) {
           el("td", {}, el("div", {}, lab ? text1(lab) : id), lab ? el("div", { class: "mono dim" }, id) : null),
           el("td", {}, ruleEditor(r)), el("td", { class: "dim" }, lim || "—"),
           el("td", { class: "mono" }, readers.join(", ") || el("span", { class: "unknown" }, "unused")),
-          el("td", { class: "dim" }, rs ? (word(rs, 0) === "?" ? "unknown" : text1(rs)) : "—"));
+          el("td", { class: "dim" }, nt.length ? nt.map(n => el("div", {}, noteText(n))) : "—"));
       }))));
   }
 

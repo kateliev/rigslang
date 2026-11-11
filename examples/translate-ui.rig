@@ -1,0 +1,154 @@
+; One agent at three scales. Read from the top down:
+;   agent    translate-ui       the procedure: what happens, in what order, and who decides
+;   tool     check-translation  one hard gate of the agent, opened up into its own gates
+;   snippet  placeholders-match, length-ratio   the code that decides those gates (proved)
+;   snippet  display-width      a hole: a matrix, no code yet
+; The words are the same at every scale. Only the amount you write changes.
+
+unit translate-ui agent
+  intent "translate each UI string of a batch; save the strings that pass the checks; send the others to a human"
+  uses check-translation
+  in strings path
+  in language word
+  out path
+
+  rule retries.max 2
+    min 0
+    max 5
+    label "New drafts after a failed check"
+  rule review.sample 0.1
+    min 0
+    max 1
+    label "Share of passed strings that a human reviews anyway"
+    note "a judge pass is a guess; a random sample measures how good the guesses are"
+
+  step load "Load"
+    do "read the source strings and the glossary of the target language"
+    next -> pick
+  step pick "Next string"
+    do "take the next string that has no saved translation"
+    by queue.next
+    next -> draft
+  step draft "Draft"
+    do "translate the string; keep every placeholder as written; use the glossary terms; if a gate failed, fix what it reported"
+    next -> check
+  gate check hard "Mechanical checks"
+    ensure "check-translation ends at ok"
+    by check-translation
+    pass -> tone
+    fail -> retry "a check failed"
+  gate tone judge "Reads as native UI text"
+    brief "read the draft as a user who speaks the target language; flag word-for-word order, the wrong level of formality, and words that a UI does not use; give one reason"
+    pass -> sample
+    fail -> retry "sounds wrong"
+  gate retry hard "Drafts left"
+    reads retries.max
+    ensure "fewer than retries.max new drafts were made for this string"
+    by queue.retries_left
+    pass -> draft
+    fail -> flag "no drafts left"
+  gate sample hard "Not picked for review"
+    reads review.sample
+    ensure "a random number from 0 to 1 is at least review.sample"
+    by review.draw
+    pass -> save
+    fail -> flag "picked for review"
+  step save "Save"
+    do "save the draft with the label 'checked', not 'approved': the tone gate is a guess"
+    by store.save
+    next -> more
+  step flag "Flag"
+    do "save the best draft with the label 'needs review', and the reasons from the gates"
+    by store.flag
+    next -> more
+  gate more hard "Strings left"
+    ensure "the batch has a string with no saved translation"
+    by queue.has_next
+    pass -> pick
+    fail -> done
+  end done "Batch finished"
+
+unit check-translation tool
+  intent "check one translated UI string against its source: placeholders, length and glossary terms"
+  uses placeholders-match
+  uses length-ratio
+  in source str
+  in target str
+  out word
+
+  rule length.max_ratio 1.6
+    min 1.0
+    max 3.0
+    unit "x source length"
+    label "Longest translation"
+    note "longer strings did not fit the buttons in the layout tests"
+  rule glossary.required on
+    label "Glossary terms must be used"
+
+  gate same-placeholders hard "Placeholders kept"
+    ensure "placeholders-match of the source and the target is true"
+    by placeholders-match
+    pass -> length
+    fail -> reject "a placeholder is lost or changed"
+  gate length hard "Fits the space"
+    reads length.max_ratio
+    ensure "length-ratio of the source and the target is at most length.max_ratio"
+    by length-ratio
+    note "counts characters, not display width; when display-width is proved, use it for wide scripts"
+    pass -> terms
+    fail -> reject "too long"
+  gate terms soft "Glossary terms used"
+    reads glossary.required
+    ensure "each glossary term in the source has its glossary translation in the target"
+    by glossary.misses
+    pass -> ok
+    fail -> ok "report the missing terms and continue"
+  end ok "Usable"
+  end reject "Rejected"
+
+unit placeholders-match snippet
+  intent "true when the target has the same placeholders as the source, the same number of times, in any order; a placeholder is {word}, %s or %d"
+  in source str
+  in target str
+  out bool
+  example "Hello, {name}!" "Hallo, {name}!" => true
+  example "{done} of {total}" "{total} : {done}" => true
+  example "Delete {count} files?" "Dateien löschen?" => false
+  example "Saved %d items" "%s Elemente gespeichert" => false
+  ensure "the result is true or false"
+    check py "isinstance(result, bool)"
+  cast py #22ae1315 #9d2e8dda proved 2026-11-11
+    import re
+    from collections import Counter
+
+    PLACEHOLDER = re.compile(r"\{[A-Za-z_][A-Za-z0-9_]*\}|%[sd]")
+
+    def placeholders_match(source, target):
+        return Counter(PLACEHOLDER.findall(source)) == Counter(PLACEHOLDER.findall(target))
+
+unit length-ratio snippet
+  intent "the length of the target divided by the length of the source, in characters, rounded to 2 places; 0 when the source is empty"
+  in source str
+  in target str
+  out float
+  example "Save" "Speichern" => 2.25
+  example "Cancel" "Annuler" => 1.17
+  example "" "x" => 0
+  ensure "the result is 0 or more"
+    check py "result >= 0"
+  cast py #20aca2a3 #ef20934f proved 2026-11-11
+    def length_ratio(source, target):
+        if not source:
+            return 0.0
+        return round(len(target) / len(source), 2)
+
+unit display-width snippet
+  note "a character count is too low for wide scripts: two CJK characters take the space of about four Latin letters"
+  intent "the width of the text in columns: wide and full-width characters count 2; all other characters count 1"
+  in text str
+  out int
+  example "Save" => 4
+  example "保存" => 4
+  example "ｾｰﾌﾞ" => 4
+  ensure "the result is at least the number of characters"
+    check py "result >= len(text)"

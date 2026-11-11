@@ -7,9 +7,9 @@ unit slugify snippet  ; a comment
 ;    ^^^^^^^ entity.name.type.unit.rig
 ;            ^^^^^^^ storage.modifier.scale.rig
 ;                     ^^^^^^^^^^^ comment.line.semicolon.rig
-  reason ?
-; ^^^^^^ keyword.other.context.rig
-;        ^ constant.language.unknown.rig
+  note "keep the hyphens"
+; ^^^^ keyword.other.context.rig
+;      ^^^^^^^^^^^^^^^^^^ string.quoted.double.rig
     evidence docs/why.md
 ;   ^^^^^^^^ keyword.other.context.rig
 ;            ^^^^^^^^^^^ markup.underline.link.rig
@@ -122,8 +122,9 @@ unit release-check agent
   end stop "Stopped"
 ; ^^^ storage.type.node.rig
 ;     ^^^^ entity.name.function.node.rig
-  custom word 3 off #abc
+  custom word 3 off #abc ?
 ;        ^^^^ - entity
 ;             ^ constant.numeric.rig
 ;               ^^^ constant.language.rig
 ;                   ^^^^ constant.other.hash.rig
+;                        ^ constant.language.unknown.rig

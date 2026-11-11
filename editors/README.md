@@ -10,9 +10,9 @@ python editors/build.py
 
 ## What is highlighted
 
-- The head word of each line, by group: the matrix (`in`, `out`, `intent`, `example`, `ensure`, `check`), the context (`reason`, `note`, `rule`, `uses`, …) and the flow (`step`, `gate`, `end`, `next`, `pass`, `fail`, …).
+- The head word of each line, by group: the matrix (`in`, `out`, `intent`, `example`, `ensure`, `check`), the context (`note`, `evidence`, `rule`, `uses`, …) and the flow (`step`, `gate`, `end`, `next`, `pass`, `fail`, …).
 - Names: units, rules, steps, gates and ends where they are defined. Rule names after `reads`, and node names after `->`.
-- Strings, `/regex/`, numbers, `on`/`off`, hashes, dates, `?` (an unknown reason) and `;` comments.
+- Strings, `/regex/`, numbers, `on`/`off`, hashes, dates, `?` (an unknown value) and `;` comments.
 - **Cast bodies use the highlighting of their language** for `py`, `js`, `ts`, `sh` and `rust`. Other languages show as raw text. A cast body ends at the first line that is not indented more than `cast`.
 - Gate kinds (`hard`, `soft`, `judge`) and unit scales (`snippet`, `tool`, `agent`).
 

@@ -8,7 +8,7 @@ When an LLM writes code, three things go wrong:
 
 1. **It forgets.** It solves the same problem again in each session, a little differently each time.
 2. **Nobody checks it.** Generated code often looks right and is not.
-3. **The reason gets lost.** Code shows *what* it does. It does not show *why*, so the next agent cannot know what it may change.
+3. **Nobody knows what was guessed.** Code does not show which parts a model decided by judgment and which parts a test proved.
 
 Agent instructions have the same problems. A paragraph in a prompt is easy to read loosely. Numbers get copied into three files and drift apart.
 
@@ -16,11 +16,13 @@ Agent instructions have the same problems. A paragraph in a prompt is easy to re
 
 | Word | Question | Who writes it | Who checks it |
 |---|---|---|---|
-| **reason** | Why does this exist? | the human (the agent can draft it, then asks) | the human |
-| **intent** | What must it do? | the agent, in plain controlled language | the human |
-| **gate** | How do we know it did? | the agent | **a real runtime** |
+| **reason** | How do we get there? | the model: it writes the code and decides `judge` gates | a gate; until then, it is a **guess** |
+| **intent** | What must it do? | the human (the model can draft it in plain controlled language, then asks) | the human |
+| **gate** | How do we know it did? | the model | **a real runtime** |
 
-The reason and the intent are for people. The gate is for machines. Rig keeps the three together in one small file. People read that file, and tools run it.
+Each word has its own actor. The model reasons, the human states the intent, and the runtime decides. A gate turns the model's guess into a fact, measured against the human's intent. Rig keeps the three together in one small file. People read that file, and tools run it.
+
+Rig does not ask *why* a unit exists. The intent says what it must do, and that is enough. When code looks wrong but is right, or a value must not change, write a `note`.
 
 ## 3. One syntax, three scales
 
@@ -71,7 +73,7 @@ An agent unit is a small state machine. **Steps** do work. **Gates** decide. **E
 
 A Rig file is pseudo-code that the agent writes and the human reads. It is also a good format for persistent memory:
 
-- The **reason** and its **evidence** survive between sessions and between models.
+- The **intent**, the **notes** and their **evidence** survive between sessions and between models.
 - The **status** of each unit (proved, stale, remelted, hole, coverage) shows at a glance what is known and what is guessed.
 - Version control keeps every old cast. Nothing is lost when a cast remelts.
 

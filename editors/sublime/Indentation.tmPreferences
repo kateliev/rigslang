@@ -6,7 +6,7 @@
 	<key>settings</key>
 	<dict>
 		<key>increaseIndentPattern</key>
-		<string>^\s*(unit|rule|step|gate|ensure|reason|cast)\b.*$</string>
+		<string>^\s*(unit|rule|step|gate|ensure|note|cast)\b.*$</string>
 	</dict>
 </dict>
 </plist>
