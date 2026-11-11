@@ -115,6 +115,14 @@ contexts:
       captures:
         1: storage.type.rule.rig
         2: entity.name.constant.rule.rig
+    - match: '^\s*(preset)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?'
+      captures:
+        1: storage.type.rule.rig
+        2: entity.name.constant.preset.rig
+    - match: '^\s*(set)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?'
+      captures:
+        1: keyword.other.context.rig
+        2: variable.other.constant.rule.rig
     - match: '^\s*(note|label|options|min|max|unit)(?=[\s;]|$)'
       captures:
         1: keyword.other.context.rig
@@ -207,6 +215,8 @@ contexts:
         - meta_scope: string.quoted.double.rig
         - match: '\\.'
           scope: constant.character.escape.rig
+        - match: '\{[A-Za-z_][\w-]*(?:\.[\w-]+)+\}'
+          scope: variable.other.constant.rule.rig
         - match: '"'
           scope: punctuation.definition.string.end.rig
           pop: true

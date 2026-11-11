@@ -19,6 +19,7 @@ W = r'[^\s();"][^\s();]*'          # a word that can be a name
 E = r'(?=[\s;]|$)'                 # the end of a word
 B = r'(?<![^\s(])'                 # the start of an argument
 A = r'(?=[\s();]|$)'               # the end of an argument
+PH = r'\{[A-Za-z_][\w-]*(?:\.[\w-]+)+\}'  # a rule named in a string: {group.name}
 
 # - Scopes
 MATRIX = 'keyword.other.matrix.rig'
@@ -37,6 +38,8 @@ HEADS = [
 	(rf'^\s*(evidence){E}(?:\s+({W}))?', [CONTEXT, 'markup.underline.link.rig'], False),
 	(rf'^\s*(uses){E}(?:\s+({W}))?', [CONTEXT, 'entity.other.inherited-class.rig'], False),
 	(rf'^\s*(rule){E}(?:\s+({W}))?', ['storage.type.rule.rig', 'entity.name.constant.rule.rig'], False),
+	(rf'^\s*(preset){E}(?:\s+({W}))?', ['storage.type.rule.rig', 'entity.name.constant.preset.rig'], False),
+	(rf'^\s*(set){E}(?:\s+({W}))?', [CONTEXT, 'variable.other.constant.rule.rig'], False),
 	(rf'^\s*(note|label|options|min|max|unit){E}', [CONTEXT], False),
 	(rf'^\s*(step|end){E}(?:\s+({W}))?', [NODE, ID], False),
 	(rf'^\s*(gate){E}(?:\s+({W}))?(?:\s+(hard|soft|judge){E})?', [NODE, ID, 'storage.modifier.gate.rig'], False),
@@ -113,7 +116,7 @@ def vscode():
 	repo = {
 		'string': {
 			'begin': '"', 'end': '"|$', 'name': STRING,
-			'patterns': [{'match': r'\\.', 'name': ESCAPE}],
+			'patterns': [{'match': r'\\.', 'name': ESCAPE}, {'match': PH, 'name': RULE_REF}],
 		},
 	}
 	items = []
@@ -186,6 +189,7 @@ def sublime():
 	out += ['  string:', "    - match: '\"'", f'      scope: punctuation.definition.string.begin.rig',
 	        '      push:', f'        - meta_scope: {STRING}',
 	        r"        - match: '\\.'", f'          scope: {ESCAPE}',
+	        f'        - match: {q(PH)}', f'          scope: {RULE_REF}',
 	        "        - match: '\"'", '          scope: punctuation.definition.string.end.rig', '          pop: true',
 	        r"        - match: '$\n?'", '          pop: true', '']
 	out += ['  rule-refs:', "    - match: '$\\n?'", '      pop: true', '    - include: comment',

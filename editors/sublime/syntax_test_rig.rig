@@ -86,12 +86,21 @@ unit release-check agent
 ;                      ^^^^^^^^^^^^ string.regexp.rig
   rule tests.required on
 ;                     ^^ constant.language.rig
+  preset hotfix
+; ^^^^^^ storage.type.rule.rig
+;        ^^^^^^ entity.name.constant.preset.rig
+    set notes.min_words 10
+;   ^^^ keyword.other.context.rig
+;       ^^^^^^^^^^^^^^^ variable.other.constant.rule.rig
+;                       ^^ constant.numeric.rig
   step collect "Collect"
 ; ^^^^ storage.type.node.rig
 ;      ^^^^^^^ entity.name.function.node.rig
 ;              ^^^^^^^^^ string.quoted.double.rig
-    do "read the notes"
+    do "read at least {notes.min_words} words, keep {name}"
 ;   ^^ keyword.control.flow.rig
+;                     ^^^^^^^^^^^^^^^^^ variable.other.constant.rule.rig
+;                                             ^^^^^^ - variable
     next -> notes
 ;   ^^^^ keyword.control.flow.rig
 ;        ^^ keyword.operator.arrow.rig

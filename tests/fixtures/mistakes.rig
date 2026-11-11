@@ -1,0 +1,25 @@
+; Every line marked "error" must be refused by rig.py and by the viewer (see test_rig.py).
+
+unit broken agent
+  intent "uses {nope.missing} and {plain} text"
+  rule limits 3
+  rule size.max 12
+    min 1
+    max 10
+  rule mode.kind fast
+    options fast slow
+  rule flag.on maybe
+    options on off
+  preset quick
+    set size.max 99
+    set mode.kind medium
+    set ghost.rule 1
+  preset quick
+  step a "A"
+    do "make 3 drafts, then {size.max} more"
+    next -> b
+  gate b hard "B"
+    ensure "at most {size.max} and {mode.kind}"
+    by checks.b
+    pass -> done
+  end done "Done"

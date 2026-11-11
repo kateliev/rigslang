@@ -2,7 +2,7 @@
 
 **Rig** is a small language for writing down *what* code must do and *how that is checked*. It works at three scales with one syntax: agents, tools and code snippets.
 
-The name comes from the three parts of the work: **R**eason, **I**ntent, **G**ate. The model reasons: it writes the code and makes the judgment calls. The human states the intent. Gates prove the result in a real runtime.
+The name comes from the three parts of the work: **R**eason, **I**ntent, **G**ate. The model reasons: it writes the code and makes the judgment calls. The human or the model states the intent. Gates prove the result in a real runtime.
 
 An LLM is the main writer of Rig files. A person is the main reader. A real runtime, not the model, decides whether code is correct.
 
@@ -30,6 +30,20 @@ unit slugify snippet
 - **cast** is code that was proved against the matrix in a real runtime. Two hashes pin it: the first to the matrix, the second to the code.
 - If you change the matrix, the hash does not match any more. The cast *remelts*, and the unit becomes a *hole* again.
 - In an agent, **gate** nodes are checkpoints. A `hard` or `soft` gate is decided by code; a `judge` gate is decided by the model and is marked as a guess.
+- An agent's numbers and switches are **rules**, named as `{group.name}` in its text. A **preset** is a named set of values.
+
+## Agents: one source, two compiled sheets
+
+An agent unit compiles to the forms that agents read:
+
+```bash
+python skills/rig/rig.py compile json examples/release-check.rig -o release-check.json
+python skills/rig/rig.py compile skill examples/release-check.rig --rules release-check.json -o SKILL.md
+```
+
+- The **JSON catalogue** is for a code runner: it reads the rule values and walks the flow.
+- The **skill** is for an agent that follows instructions. With `--rules`, it reads the values from the JSON file, so each value has one place.
+- Change the `.rig` file, then compile again. `rig.py serve FILE --json OUT --skill OUT` shows the file in the viewer, and Save compiles it again.
 
 ## What is in the repository
 
@@ -37,11 +51,11 @@ unit slugify snippet
 |---|---|
 | [skills/rig/](skills/rig/) | The skill for an AI agent: convert code into Rig and Rig into code. Portable: copy the folder. |
 | [skills/rig/spec.md](skills/rig/spec.md) | The language specification (one page of grammar, a short list of words). |
-| [skills/rig/rig.py](skills/rig/rig.py) | Reference tool, Python standard library only: `check`, `hash`, `prove`, `json`. |
-| [viewer/index.html](viewer/index.html) | Viewer for `.rig` files: a table tab and a graph tab. One file, no install. |
+| [skills/rig/rig.py](skills/rig/rig.py) | Reference tool, Python standard library only: `check`, `hash`, `prove`, `compile`, `from-json`, `serve`. |
+| [viewer/index.html](viewer/index.html) | Viewer for `.rig` files: units as tables, the flow as a node graph, and the compiled skill and JSON. Rule values can be edited. One file, no install. |
 | [editors/](editors/) | Syntax highlighting for VS Code and Sublime Text, built from one table. |
 | [examples/](examples/) | Example units: a snippet, a tool and an agent. |
-| [tests/](tests/) | Tests for `rig.py`, and a test that the viewer computes the same hashes and errors. |
+| [tests/](tests/) | Tests for `rig.py`, and a test that the viewer computes the same hashes, errors, catalogues and skills. |
 | [docs/logic.md](docs/logic.md) | How the language works, and why. |
 | [docs/](docs/) | Research notes and the first design memos. |
 
@@ -58,7 +72,7 @@ Open `viewer/index.html` in a browser, then drop a `.rig` file on the page. To l
 python -m http.server 8000 --bind 127.0.0.1
 ```
 
-Then open `http://127.0.0.1:8000/viewer/?src=../examples/release-check.rig`.
+Then open `http://127.0.0.1:8000/viewer/?src=../examples/release-check.rig`. To edit one file in place, use `python skills/rig/rig.py serve FILE` instead.
 
 Run the tests (the viewer parity test needs Node.js):
 

@@ -1,4 +1,5 @@
-; An agent: rules (parameters), steps, and gates of all three kinds.
+; An agent: rules (parameters), presets, steps, and gates of all three kinds.
+; A {group.name} in a text names a rule: the compilers write its value there.
 
 unit release-check agent
   intent "publish a release only when the notes, the version and the tests are ready"
@@ -12,24 +13,26 @@ unit release-check agent
     label "Version format"
   rule tests.required on
     label "Tests must pass"
+  preset hotfix
+    set notes.min_words 10
 
   step collect "Collect"
     do "read the notes, the version tag and the last test run"
     next -> notes
   gate notes hard "Notes long enough"
     when "always"
-    reads notes.min_words
-    ensure "the notes have at least notes.min_words words"
+    ensure "the notes have at least {notes.min_words} words"
     by checks.notes_ok
     pass -> version
     fail -> stop "notes too short"
   gate version hard "Version format"
-    reads version.pattern
+    ensure "the version tag matches {version.pattern}"
     by checks.version_ok
     pass -> tests
     fail -> stop "bad version"
   gate tests soft "Tests green"
     reads tests.required
+    ensure "the last test run passed"
     by checks.tests_green
     pass -> tone
     fail -> tone "report and continue"

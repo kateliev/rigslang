@@ -21,6 +21,12 @@ unit translate-ui agent
     max 1
     label "Share of passed strings that a human reviews anyway"
     note "a judge pass is a guess; a random sample measures how good the guesses are"
+  preset careful
+    set retries.max 1
+    set review.sample 0.25
+  preset bulk
+    set retries.max 3
+    set review.sample 0.02
 
   step load "Load"
     do "read the source strings and the glossary of the target language"
@@ -42,14 +48,12 @@ unit translate-ui agent
     pass -> sample
     fail -> retry "sounds wrong"
   gate retry hard "Drafts left"
-    reads retries.max
-    ensure "fewer than retries.max new drafts were made for this string"
+    ensure "fewer than {retries.max} new drafts were made for this string"
     by queue.retries_left
     pass -> draft
     fail -> flag "no drafts left"
   gate sample hard "Not picked for review"
-    reads review.sample
-    ensure "a random number from 0 to 1 is at least review.sample"
+    ensure "a random fraction is at least {review.sample}"
     by review.draw
     pass -> save
     fail -> flag "picked for review"
@@ -91,8 +95,7 @@ unit check-translation tool
     pass -> length
     fail -> reject "a placeholder is lost or changed"
   gate length hard "Fits the space"
-    reads length.max_ratio
-    ensure "length-ratio of the source and the target is at most length.max_ratio"
+    ensure "length-ratio of the source and the target is at most {length.max_ratio}"
     by length-ratio
     note "counts characters, not display width; when display-width is proved, use it for wide scripts"
     pass -> terms

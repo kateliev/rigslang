@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.join(ROOT, 'skills', 'rig'))
 import rig  # noqa: E402
 
 EXAMPLES = sorted(glob.glob(os.path.join(ROOT, 'examples', '*.rig')))
+MISTAKES = os.path.join(ROOT, 'tests', 'fixtures', 'mistakes.rig')
 
 
 def load(path):
@@ -46,15 +47,74 @@ class Examples(unittest.TestCase):
 		self.assertEqual(len(err), 2)
 
 
+class RulesAndPresets(unittest.TestCase):
+	def test_mistakes_are_refused(self):
+		lines = sorted(set(line for line, _ in rig.check(load(MISTAKES))[0]))
+		self.assertEqual(lines, [4, 5, 6, 11, 14, 15, 16, 17])
+
+	def test_a_number_in_prose_warns(self):
+		_, warn = rig.check(load(MISTAKES))
+		self.assertTrue(any(line == 19 and 'number' in t for line, t in warn))
+
+	def test_plain_braces_are_text(self):
+		err, _ = rig.check(rig.parse('unit x snippet\n  intent "keep {name} as written"\n'))
+		self.assertEqual(err, [])
+
+	def test_placeholder_counts_as_read(self):
+		_, warn = rig.check(rig.parse('unit x agent\n  rule a.b 1\n  gate g hard\n    ensure "at most {a.b}"\n    by c.d\n    pass -> e\n  end e\n'))
+		self.assertFalse(any('not read' in t for _, t in warn))
+
+
+class Compile(unittest.TestCase):
+	def unit(self, name, path='release-check.rig'):
+		return rig.find(load(os.path.join(ROOT, 'examples', path)), name)
+
+	def test_skill_writes_values_in(self):
+		text = rig.skill(self.unit('release-check'))
+		self.assertIn('at least 50 words', text)
+		self.assertNotIn('{notes.min_words}', text)
+
+	def test_skill_can_refer_to_the_catalogue(self):
+		text = rig.skill(self.unit('release-check'), 'release-check.json')
+		self.assertIn('`release-check.json`', text)
+		self.assertIn('at least `{notes.min_words}` words', text)
+
+	def test_preset_changes_value_not_default(self):
+		c = rig.catalog(self.unit('release-check'), 'hotfix')
+		r = [x for x in c['rules'] if x['id'] == 'notes.min_words'][0]
+		self.assertEqual((r['value'], r['default']), (10, 50))
+		self.assertIn('at least 10 words', rig.skill(self.unit('release-check'), None, 'hotfix'))
+
+	def test_catalogue_round_trip(self):
+		for path in EXAMPLES:
+			for u in rig.units(load(path)):
+				c = rig.catalog(u)
+				back = rig.units(rig.parse(rig.from_catalog(c)))[0]
+				self.assertEqual(rig.catalog(back), c, u.word(0))
+				self.assertEqual(rig.check(rig.parse(rig.from_catalog(c)))[0], [], u.word(0))
+
+	def test_command_line(self):
+		tool = os.path.join(ROOT, 'skills', 'rig', 'rig.py')
+		path = os.path.join(ROOT, 'examples', 'translate-ui.rig')
+		out = subprocess.check_output([sys.executable, tool, 'compile', 'json', path, '--preset', 'careful']).decode('utf-8')
+		c = json.loads(out)
+		self.assertEqual((c['unit'], c['preset']), ('translate-ui', 'careful'))
+		out = subprocess.check_output([sys.executable, tool, 'compile', 'skill', path, 'check-translation']).decode('utf-8')
+		self.assertTrue(out.replace('\r\n', '\n').startswith('---\nname: check-translation\n'))
+
+
 @unittest.skipUnless(shutil.which('node'), 'node is not installed')
 class ViewerParity(unittest.TestCase):
 	def test_viewer_matches_rig_py(self):
-		got = json.loads(subprocess.check_output(['node', os.path.join(ROOT, 'tests', 'parity.js')] + EXAMPLES).decode('utf-8'))
+		self.maxDiff = 4000
+		got = json.loads(subprocess.check_output(['node', os.path.join(ROOT, 'tests', 'parity.js')] + EXAMPLES + [MISTAKES]).decode('utf-8'))
 		want = []
-		for path in EXAMPLES:
+		for path in EXAMPLES + [MISTAKES]:
 			root = load(path)
 			for u in rig.units(root):
-				want.append([u.word(0), rig.matrix_hash(u), [rig.body_hash(c) for c in u.kids('cast')]])
+				want.append([u.word(0), rig.matrix_hash(u), [rig.body_hash(c) for c in u.kids('cast')],
+					rig.catalog(u), rig.skill(u), rig.skill(u, 'rules.json'),
+					[[p.word(0), rig.catalog(u, p.word(0)), rig.skill(u, None, p.word(0))] for p in u.kids('preset')]])
 			want.append(['errors', sorted(line for line, _ in rig.check(root)[0])])
 		self.assertEqual(got, want)
 

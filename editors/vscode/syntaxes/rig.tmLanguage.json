@@ -295,6 +295,28 @@
 			}
 		},
 		{
+			"match": "^\\s*(preset)(?=[\\s;]|$)(?:\\s+([^\\s();\"][^\\s();]*))?",
+			"captures": {
+				"1": {
+					"name": "storage.type.rule.rig"
+				},
+				"2": {
+					"name": "entity.name.constant.preset.rig"
+				}
+			}
+		},
+		{
+			"match": "^\\s*(set)(?=[\\s;]|$)(?:\\s+([^\\s();\"][^\\s();]*))?",
+			"captures": {
+				"1": {
+					"name": "keyword.other.context.rig"
+				},
+				"2": {
+					"name": "variable.other.constant.rule.rig"
+				}
+			}
+		},
+		{
 			"match": "^\\s*(note|label|options|min|max|unit)(?=[\\s;]|$)",
 			"captures": {
 				"1": {
@@ -377,6 +399,10 @@
 				{
 					"match": "\\\\.",
 					"name": "constant.character.escape.rig"
+				},
+				{
+					"match": "\\{[A-Za-z_][\\w-]*(?:\\.[\\w-]+)+\\}",
+					"name": "variable.other.constant.rule.rig"
 				}
 			]
 		},

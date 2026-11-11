@@ -1,6 +1,6 @@
 # Rig language specification, version 0
 
-Rig stands for **Reason, Intent, Gate**. The model reasons: it writes code and decides `judge` gates. The human states the intent. Gates prove the result in a real runtime.
+Rig stands for **Reason, Intent, Gate**. The model reasons: it writes code and decides `judge` gates. The human or the model states the intent. Gates prove the result in a real runtime.
 
 Rig files use the extension `.rig`. They are UTF-8 text. This page is the one definition of the language.
 
@@ -51,8 +51,12 @@ A file holds one or more `unit` nodes. Every other word goes inside a unit.
 | `note "text"` | A remark that must stay with its parent. Use it when the code looks wrong but is right, or when a value must not change. |
 | ↳ `evidence <path or url>` | Optional child: a test or report that supports the note. |
 | `uses <unit>` | This unit depends on another unit. |
-| `rule <id> <value>` | A parameter. The value is a number, `on`/`off`, a word or a string. |
-| ↳ `min`, `max`, `options`, `unit`, `label`, `note` | Optional children of `rule`. |
+| `rule <group.name> <value>` | A parameter. The id has a group and a name, joined by a dot. The value is a number, `on`/`off`, a word, a string, a `/regex/` or a `( list )`. |
+| ↳ `min`, `max`, `options`, `unit`, `label`, `note` | Optional children of `rule`. The value must be inside `min` and `max`, and one of `options`. |
+| `preset <name>` | A named set of rule values, for example a fast mode and a careful mode. |
+| ↳ `set <rule-id> <value>` | Child of `preset`: one rule and its value in this preset. The same limits apply. |
+
+**Rule names in text.** In any string of a unit, `{group.name}` names a rule of the unit. The checker refuses a name that is not a rule. The compilers write the value of the rule in its place (Section 6). Text in braces without a dot, for example `{word}`, is plain text.
 
 ### Cast (verified code)
 
@@ -79,7 +83,7 @@ Children of `step` and `gate`:
 |---|---|
 | `when "text"` | (gate) What triggers the check. |
 | `do "text"` | (step) What the step does. |
-| `reads <rule-id>*` | The rules that this node uses. |
+| `reads <rule-id>*` | The rules that this node uses. A rule named as `{group.name}` in the text of the node is read too, so `reads` is needed only for rules that the text does not name. |
 | `ensure "condition"` | (gate) The condition, in plain words. |
 | `by <code-ref>` | The code that does the step or decides the gate, for example `checks.notes_ok`. |
 | `brief "text"` | (judge gate) What the model must judge, and how. |
@@ -98,6 +102,8 @@ The flow starts at the first `step` or `gate` of the unit.
 | `judge` | the model, using `brief` | the result is labelled **guessed** |
 
 **Coverage** of a flow = (hard and soft gates that have `by`) ÷ (all gates).
+
+**Numbers in the text.** A number in the `when`, `do`, `ensure` or `brief` text of a step or gate gets a warning. Make it a rule and write `{group.name}`: then the value has one place.
 
 ## 3. Status of a unit
 
@@ -129,4 +135,18 @@ Both hashes are written with a `#` prefix. `rig.py hash` prints them.
 4. **Stale**: prove the code again. If the intent no longer describes it, propose a new intent to the human.
 5. Never imagine what code returns. A proof comes from a run.
 6. A `judge` gate is decided by the model. Its result is labelled **guessed**.
-7. The human owns the intent. An intent that the model drafts from existing code is a proposal until the human confirms it.
+7. Never falsify an intent. When you describe existing code, the intent states what the code does, and real runs prove it. Anyone may write or change an intent; a gate decides.
+
+## 6. Compiled forms
+
+One unit compiles to the forms that agents read. The `.rig` file stays the one source: change it, then compile again. `rig.py compile` does this, and the viewer shows the same output.
+
+| Form | For | Command |
+|---|---|---|
+| **Catalogue** (JSON) | a code runner: it reads the rule values and walks the flow | `rig.py compile json FILE [UNIT]` |
+| **Skill** (Markdown) | an agent that follows instructions, for example a `SKILL.md` | `rig.py compile skill FILE [UNIT]` |
+
+- **Catalogue.** The keys are the words of Rig: `intent`, `in`, `out`, `uses`, `notes`, `presets`, `rules` and `flow`. Each rule has `id`, `group`, `label`, `type` (`number`, `switch`, `choice`, `text`, `pattern` or `list`), `value` and `default`, and when they exist `min`, `max`, `options`, `unit`, `note` and `evidence`. Each flow node has `id`, `kind` (`step`, `hard`, `soft`, `judge` or `end`), `name`, its texts, `by`, `reads`, and `next`, `pass` and `fail` as lists of `{"to", "when"}`. `rig.py from-json` turns a catalogue back into Rig with the same meaning.
+- **Skill.** The rules as a table, then each node of the flow in order: what to do, what to check, the code to run and obey, and where to go next. A `judge` gate tells the agent to label its result as a guess.
+- **Values.** By default, the compilers write each value in place of `{group.name}`. With `--rules PATH`, the skill refers to the catalogue at PATH instead, so the values have one place at run time too. With `--preset NAME`, the values of that preset are used.
+- **Serve.** `rig.py serve FILE --json OUT --skill OUT` shows the file in the viewer. Save writes the `.rig` file and compiles it again.
