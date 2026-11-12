@@ -1,0 +1,144 @@
+{
+ "rig": 0,
+ "unit": "search",
+ "scope": "tool",
+ "preset": null,
+ "intent": "search the web with DuckDuckGo; give back the first {results.max} results as title and URL",
+ "notes": [],
+ "uses": [
+  {
+   "unit": "ddg-results"
+  }
+ ],
+ "external": [],
+ "in": [
+  {
+   "name": "query",
+   "type": "str",
+   "text": "the words to search for"
+  }
+ ],
+ "out": {
+  "type": "(record end (one-of done error) reason (maybe str) results (list (tuple str str)))",
+  "text": "end is done or error; results as [title, url]"
+ },
+ "start": "fetch",
+ "coverage": {
+  "gates": 2,
+  "proved": 0,
+  "observed": 2,
+  "code": 0,
+  "judge": 0,
+  "none": 0
+ },
+ "presets": {},
+ "rules": [
+  {
+   "id": "results.max",
+   "group": "results",
+   "label": "Most results",
+   "type": "number",
+   "value": 5,
+   "default": 5,
+   "min": 1,
+   "max": 20
+  },
+  {
+   "id": "http.timeout",
+   "group": "http",
+   "label": "Time to wait for the page",
+   "type": "number",
+   "value": 10,
+   "default": 10,
+   "min": 1,
+   "max": 60,
+   "unit": "seconds"
+  }
+ ],
+ "flow": [
+  {
+   "id": "fetch",
+   "kind": "step",
+   "name": "Fetch",
+   "do": "GET html.duckduckgo.com/html/ with the query as q; stop after {http.timeout} seconds",
+   "by": [
+    "search"
+   ],
+   "reads": [
+    "http.timeout"
+   ],
+   "next": [
+    {
+     "to": "ok"
+    }
+   ]
+  },
+  {
+   "id": "ok",
+   "kind": "hard",
+   "name": "Page received",
+   "ensure": "the status is OK and the body is HTML",
+   "by": [
+    "search"
+   ],
+   "pass": [
+    {
+     "to": "parse"
+    }
+   ],
+   "fail": [
+    {
+     "to": "error",
+     "when": "blocked or offline"
+    }
+   ]
+  },
+  {
+   "id": "parse",
+   "kind": "step",
+   "name": "Read the results",
+   "do": "take the first {results.max} results with ddg-results",
+   "by": [
+    "ddg-results"
+   ],
+   "reads": [
+    "results.max"
+   ],
+   "next": [
+    {
+     "to": "any"
+    }
+   ]
+  },
+  {
+   "id": "any",
+   "kind": "soft",
+   "name": "Results found",
+   "ensure": "the list is not empty",
+   "by": [
+    "search"
+   ],
+   "pass": [
+    {
+     "to": "done"
+    }
+   ],
+   "fail": [
+    {
+     "to": "done",
+     "when": "give back an empty list"
+    }
+   ]
+  },
+  {
+   "id": "done",
+   "kind": "end",
+   "name": "Results"
+  },
+  {
+   "id": "error",
+   "kind": "end",
+   "name": "Search failed"
+  }
+ ]
+}

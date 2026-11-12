@@ -10,7 +10,7 @@ file_extensions: [rig]
 contexts:
   main:
     - include: comment
-    - match: '^(\s*)(cast)\s+(py)(?=[\s;]|$)(?:\s+(#[^\s;]*))?(?:\s+(#[^\s;]*))?(?:\s+(proved)(?:\s+(\d{4}-\d{2}-\d{2}))?)?\s*(;.*)?$'
+    - match: '^(\s*)(cast)\s+(py)(?=[\s;]|$)(?:\s+(#[^\s;]*))?(?:\s+(#[^\s;]*))?(?:\s+(proved|observed)(?:\s+(\d{4}-\d{2}-\d{2}))?)?\s*(;.*)?$'
       captures:
         2: storage.type.cast.rig
         3: storage.type.language.rig
@@ -22,7 +22,7 @@ contexts:
       embed: scope:source.python
       embed_scope: meta.embedded.block.py.rig source.python
       escape: '^(?!\1[ \t]+\S|[ \t]*$)'
-    - match: '^(\s*)(cast)\s+(js)(?=[\s;]|$)(?:\s+(#[^\s;]*))?(?:\s+(#[^\s;]*))?(?:\s+(proved)(?:\s+(\d{4}-\d{2}-\d{2}))?)?\s*(;.*)?$'
+    - match: '^(\s*)(cast)\s+(js)(?=[\s;]|$)(?:\s+(#[^\s;]*))?(?:\s+(#[^\s;]*))?(?:\s+(proved|observed)(?:\s+(\d{4}-\d{2}-\d{2}))?)?\s*(;.*)?$'
       captures:
         2: storage.type.cast.rig
         3: storage.type.language.rig
@@ -34,7 +34,7 @@ contexts:
       embed: scope:source.js
       embed_scope: meta.embedded.block.js.rig source.js
       escape: '^(?!\1[ \t]+\S|[ \t]*$)'
-    - match: '^(\s*)(cast)\s+(ts)(?=[\s;]|$)(?:\s+(#[^\s;]*))?(?:\s+(#[^\s;]*))?(?:\s+(proved)(?:\s+(\d{4}-\d{2}-\d{2}))?)?\s*(;.*)?$'
+    - match: '^(\s*)(cast)\s+(ts)(?=[\s;]|$)(?:\s+(#[^\s;]*))?(?:\s+(#[^\s;]*))?(?:\s+(proved|observed)(?:\s+(\d{4}-\d{2}-\d{2}))?)?\s*(;.*)?$'
       captures:
         2: storage.type.cast.rig
         3: storage.type.language.rig
@@ -46,7 +46,7 @@ contexts:
       embed: scope:source.ts
       embed_scope: meta.embedded.block.ts.rig source.ts
       escape: '^(?!\1[ \t]+\S|[ \t]*$)'
-    - match: '^(\s*)(cast)\s+(sh)(?=[\s;]|$)(?:\s+(#[^\s;]*))?(?:\s+(#[^\s;]*))?(?:\s+(proved)(?:\s+(\d{4}-\d{2}-\d{2}))?)?\s*(;.*)?$'
+    - match: '^(\s*)(cast)\s+(sh)(?=[\s;]|$)(?:\s+(#[^\s;]*))?(?:\s+(#[^\s;]*))?(?:\s+(proved|observed)(?:\s+(\d{4}-\d{2}-\d{2}))?)?\s*(;.*)?$'
       captures:
         2: storage.type.cast.rig
         3: storage.type.language.rig
@@ -58,7 +58,7 @@ contexts:
       embed: scope:source.shell.bash
       embed_scope: meta.embedded.block.sh.rig source.shell.bash
       escape: '^(?!\1[ \t]+\S|[ \t]*$)'
-    - match: '^(\s*)(cast)\s+(rust)(?=[\s;]|$)(?:\s+(#[^\s;]*))?(?:\s+(#[^\s;]*))?(?:\s+(proved)(?:\s+(\d{4}-\d{2}-\d{2}))?)?\s*(;.*)?$'
+    - match: '^(\s*)(cast)\s+(rust)(?=[\s;]|$)(?:\s+(#[^\s;]*))?(?:\s+(#[^\s;]*))?(?:\s+(proved|observed)(?:\s+(\d{4}-\d{2}-\d{2}))?)?\s*(;.*)?$'
       captures:
         2: storage.type.cast.rig
         3: storage.type.language.rig
@@ -70,7 +70,7 @@ contexts:
       embed: scope:source.rust
       embed_scope: meta.embedded.block.rust.rig source.rust
       escape: '^(?!\1[ \t]+\S|[ \t]*$)'
-    - match: '^(\s*)(cast)\s+([^\s();"][^\s();]*)(?=[\s;]|$)(?:\s+(#[^\s;]*))?(?:\s+(#[^\s;]*))?(?:\s+(proved)(?:\s+(\d{4}-\d{2}-\d{2}))?)?\s*(;.*)?$'
+    - match: '^(\s*)(cast)\s+([^\s();"][^\s();]*)(?=[\s;]|$)(?:\s+(#[^\s;]*))?(?:\s+(#[^\s;]*))?(?:\s+(proved|observed)(?:\s+(\d{4}-\d{2}-\d{2}))?)?\s*(;.*)?$'
       captures:
         2: storage.type.cast.rig
         3: storage.type.language.rig
@@ -99,6 +99,9 @@ contexts:
     - match: '^\s*(intent|example|ensure)(?=[\s;]|$)'
       captures:
         1: keyword.other.matrix.rig
+    - match: '^\s*(probe)(?=[\s;]|$)'
+      captures:
+        1: keyword.other.context.rig
     - match: '^\s*(check)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?'
       captures:
         1: keyword.other.matrix.rig
@@ -111,6 +114,10 @@ contexts:
       captures:
         1: keyword.other.context.rig
         2: entity.other.inherited-class.rig
+    - match: '^\s*(external)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?'
+      captures:
+        1: keyword.other.context.rig
+        2: support.function.rig
     - match: '^\s*(rule)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?'
       captures:
         1: storage.type.rule.rig

@@ -1,0 +1,94 @@
+{
+ "name": "wiki",
+ "description": "for the URL of an English Wikipedia article, give back its title, its summary paragraph and the albums in its Discography section",
+ "parameters": {
+  "type": "object",
+  "properties": {
+   "url": {
+    "type": "string",
+    "description": "the URL of an English Wikipedia article"
+   }
+  },
+  "required": [
+   "url"
+  ]
+ },
+ "returns": {
+  "type": "object",
+  "properties": {
+   "end": {
+    "enum": [
+     "done",
+     "error"
+    ]
+   },
+   "reason": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ]
+   },
+   "title": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ]
+   },
+   "url": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ]
+   },
+   "summary": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ]
+   },
+   "albums": {
+    "anyOf": [
+     {
+      "type": "array",
+      "items": {
+       "type": "array",
+       "prefixItems": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        }
+       ],
+       "minItems": 2,
+       "maxItems": 2
+      }
+     },
+     {
+      "type": "null"
+     }
+    ]
+   }
+  },
+  "required": [
+   "end"
+  ],
+  "description": "end is done or error; on done, the title, url, summary and albums as [title, year]"
+ }
+}

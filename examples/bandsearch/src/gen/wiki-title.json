@@ -1,0 +1,33 @@
+{
+ "rig": 0,
+ "unit": "wiki-title",
+ "scope": "snippet",
+ "preset": null,
+ "intent": "the article title from an English Wikipedia URL, desktop or mobile, with percent-codes decoded and without the #part; an empty text when the URL is not an English Wikipedia article",
+ "notes": [],
+ "uses": [],
+ "external": [],
+ "in": [
+  {
+   "name": "url",
+   "type": "str",
+   "text": ""
+  }
+ ],
+ "out": {
+  "type": "str",
+  "text": ""
+ },
+ "start": null,
+ "coverage": {
+  "gates": 0,
+  "proved": 0,
+  "observed": 0,
+  "code": 0,
+  "judge": 0,
+  "none": 0
+ },
+ "presets": {},
+ "rules": [],
+ "flow": []
+}

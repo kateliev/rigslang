@@ -1,0 +1,152 @@
+; Tool: read an English Wikipedia article through the public API. It needs no API key.
+; The cast needs the network, so it has probes and no examples: its stamp is "observed".
+; It imports wiki-title and album-list (both proved) and its own rule values from wiki.json.
+
+unit wiki tool
+  intent "for the URL of an English Wikipedia article, give back its title, its summary paragraph and the albums in its Discography section"
+  uses wiki-title
+  uses album-list
+  in url str "the URL of an English Wikipedia article"
+  out (record end (one-of done error) reason (maybe str) title (maybe str) url (maybe str) summary (maybe str) albums (maybe (list (tuple str int)))) "end is done or error; on done, the title, url, summary and albums as [title, year]"
+
+  rule http.timeout 10
+    min 1
+    max 60
+    unit "seconds"
+    label "Time to wait for each request"
+
+  gate title hard "Wikipedia URL"
+    ensure "wiki-title of the URL is not empty"
+    by wiki-title
+    pass -> summary
+    fail -> error "not an English Wikipedia article"
+  step summary "Summary"
+    do "GET the REST summary of the title; keep the extract; stop after {http.timeout} seconds"
+    by wiki
+    next -> has-summary
+  gate has-summary hard "Summary received"
+    ensure "the status is OK and the extract is not empty"
+    by wiki
+    pass -> section
+    fail -> error "no such article"
+  step section "Discography"
+    do "GET the wikitext of the section named Discography; if the article has no such section, use an empty text"
+    by wiki
+    next -> albums
+  step albums "Albums"
+    do "read the albums from the wikitext with album-list"
+    by album-list
+    next -> done
+  end done "Article read"
+  end error "Failed"
+
+  probe "https://en.wikipedia.org/wiki/Pink_Floyd"
+    check py "result['end'] == 'done' and ['The Wall', 1979] in result['albums']"
+  probe "https://example.org/wiki/Pink_Floyd"
+    check py "result['end'] == 'error' and result['reason'] == 'not an English Wikipedia article'"
+  cast ts #bae431ff #9363fa83 observed 2026-11-12
+    import catalogue from "./wiki.json" with { type: "json" };
+    import { wiki_title } from "./wiki-title.ts";
+    import { album_list } from "./album-list.ts";
+
+    const rule: Record<string, any> = Object.fromEntries(catalogue.rules.map((r) => [r.id, r.value]));
+    const API = "https://en.wikipedia.org/w/api.php?format=json&formatversion=2&redirects=1&action=parse";
+
+    type Out = {
+      end: "done" | "error";
+      reason?: string;
+      title?: string;
+      url?: string;
+      summary?: string;
+      albums?: [string, number][];
+    };
+
+    async function get(url: string): Promise<Response> {
+      return fetch(url, {
+        signal: AbortSignal.timeout(rule["http.timeout"] * 1000),
+        headers: { "User-Agent": "bandsearch-example/0.1" },
+      });
+    }
+
+    export async function wiki(url: string): Promise<Out> {
+      // gate title (hard)
+      const title = wiki_title(url);
+      if (!title) return { end: "error", reason: "not an English Wikipedia article" };
+      try {
+        // step summary
+        const res = await get("https://en.wikipedia.org/api/rest_v1/page/summary/" + encodeURIComponent(title));
+        const page = res.ok ? await res.json() : null;
+        // gate has-summary (hard)
+        if (!page?.extract) return { end: "error", reason: "no such article" };
+        // step section
+        const q = "&page=" + encodeURIComponent(page.title);
+        const sections = (await (await get(API + "&prop=sections" + q)).json()).parse?.sections ?? [];
+        const found = sections.find((s: { line: string }) => s.line.trim().toLowerCase() === "discography");
+        let wikitext = "";
+        if (found) {
+          wikitext = (await (await get(API + "&prop=wikitext&section=" + found.index + q)).json()).parse?.wikitext ?? "";
+        }
+        // step albums
+        return {
+          end: "done",
+          title: page.title,
+          url: page.content_urls?.desktop?.page,
+          summary: page.extract,
+          albums: album_list(wikitext),
+        };
+      } catch {
+        return { end: "error", reason: "no such article" };
+      }
+    }
+
+unit wiki-title snippet
+  intent "the article title from an English Wikipedia URL, desktop or mobile, with percent-codes decoded and without the #part; an empty text when the URL is not an English Wikipedia article"
+  in url str
+  out str
+  example "https://en.wikipedia.org/wiki/Pink_Floyd" => "Pink_Floyd"
+  example "https://en.m.wikipedia.org/wiki/Mot%C3%B6rhead#Discography" => "Motörhead"
+  example "https://de.wikipedia.org/wiki/Pink_Floyd" => ""
+  example "https://example.org/wiki/Pink_Floyd" => ""
+  ensure "the result has no #"
+    check py "'#' not in result"
+  cast ts #7b86a869 #1a08cb93 proved 2026-11-12
+    export function wiki_title(url: string): string {
+      let u: URL;
+      try {
+        u = new URL(url);
+      } catch {
+        return "";
+      }
+      if (!/^en\.(m\.)?wikipedia\.org$/.test(u.hostname)) return "";
+      if (!u.pathname.startsWith("/wiki/")) return "";
+      const title = u.pathname.slice("/wiki/".length);
+      try {
+        return decodeURIComponent(title);
+      } catch {
+        return title;
+      }
+    }
+
+unit album-list snippet
+  intent "read the albums from the wikitext of a discography section; each list line with a title in italics gives (title year); a link gives its label; the year is the first four-digit number after the title, or 0"
+  in wikitext str
+  out list
+  example "* ''[[The Wall]]'' (1979)\n* ''[[Animals (Pink Floyd album)|Animals]]'' (1977)" => (("The Wall" 1979) ("Animals" 1977))
+  example "* ''Demo Tape''" => (("Demo Tape" 0))
+  example "{{Main|Pink Floyd discography}}" => ()
+  ensure "each year is 0 or a plausible year"
+    check py "all(y == 0 or 1900 <= y <= 2100 for t, y in result)"
+  note "many large bands keep only a link to a separate discography article here; then the list is empty"
+  cast ts #321187b4 #3d25c78b proved 2026-11-12
+    export function album_list(wikitext: string): [string, number][] {
+      const out: [string, number][] = [];
+      for (const line of wikitext.split("\n")) {
+        if (!line.startsWith("*")) continue;
+        const m = line.match(/''(.+?)''/);
+        if (!m || m.index === undefined) continue;
+        const title = m[1].replace(/\[\[(?:[^\]|]*\|)?([^\]]*)\]\]/g, "$1").trim();
+        const year = line.slice(m.index + m[0].length).match(/\b(\d{4})\b/);
+        out.push([title, year ? Number(year[1]) : 0]);
+      }
+      return out;
+    }

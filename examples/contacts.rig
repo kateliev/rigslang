@@ -11,6 +11,7 @@ unit normalize-email snippet
 
 unit dedupe-contacts tool
   intent "read a CSV of contacts; keep the first row of each email; write a new CSV"
+  external contacts.has_email "look for a column named email in the header row"
   uses normalize-email
   in source path
   out path

@@ -1,0 +1,43 @@
+{
+ "rig": 0,
+ "unit": "ddg-results",
+ "scope": "snippet",
+ "preset": null,
+ "intent": "read a DuckDuckGo HTML results page; give back each result as (title url), in page order, at most limit results; change a redirect link to the URL it points to; remove HTML tags and entities from the title",
+ "notes": [
+  {
+   "text": "the results page is not a public API; if DuckDuckGo changes its markup, these examples still pass but real searches give nothing",
+   "evidence": []
+  }
+ ],
+ "uses": [],
+ "external": [],
+ "in": [
+  {
+   "name": "html",
+   "type": "str",
+   "text": ""
+  },
+  {
+   "name": "limit",
+   "type": "int",
+   "text": ""
+  }
+ ],
+ "out": {
+  "type": "list",
+  "text": ""
+ },
+ "start": null,
+ "coverage": {
+  "gates": 0,
+  "proved": 0,
+  "observed": 0,
+  "code": 0,
+  "judge": 0,
+  "none": 0
+ },
+ "presets": {},
+ "rules": [],
+ "flow": []
+}

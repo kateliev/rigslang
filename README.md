@@ -29,10 +29,12 @@ unit slugify snippet
 - **intent / in / out / example / ensure** make the *matrix*: the spec of the unit.
 - **cast** is code that was proved against the matrix in a real runtime. Two hashes pin it: the first to the matrix, the second to the code.
 - If you change the matrix, the hash does not match any more. The cast *remelts*, and the unit becomes a *hole* again.
-- In an agent, **gate** nodes are checkpoints. A `hard` or `soft` gate is decided by code; a `judge` gate is decided by the model and is marked as a guess.
+- In an agent, **gate** nodes are checkpoints. A `hard` or `soft` gate is decided by code; a `judge` gate is decided by the model and is marked as a guess. The answer of the agent names its guesses in a `Guessed:` line.
+- **Coverage** counts only gates whose code is proved. A `by` line names a unit or an `external` (code that Rig does not prove).
+- A **probe** runs code live, against the network or a service. Its result is **observed**, not proved.
 - An agent's numbers and switches are **rules**, named as `{group.name}` in its text. A **preset** is a named set of values.
 
-## Agents: one source, two compiled sheets
+## Agents: one source, compiled sheets
 
 An agent unit compiles to the forms that agents read:
 
@@ -43,6 +45,8 @@ python skills/rig/rig.py compile skill examples/release-check.rig --rules releas
 
 - The **JSON catalogue** is for a code runner: it reads the rule values and walks the flow.
 - The **skill** is for an agent that follows instructions. With `--rules`, it reads the values from the JSON file, so each value has one place.
+- The **tool definition** (`compile tool`) is for a model that calls tools: the name, the intent as description, and the JSON Schema of the inputs.
+- `emit` writes the proved and observed casts as modules, for a program to import. [examples/bandsearch/](examples/bandsearch/) builds an LM Studio plugin this way.
 - Change the `.rig` file, then compile again. `rig.py serve FILE --json OUT --skill OUT` shows the file in the viewer, and Save compiles it again.
 
 ## What is in the repository
@@ -51,10 +55,11 @@ python skills/rig/rig.py compile skill examples/release-check.rig --rules releas
 |---|---|
 | [skills/rig/](skills/rig/) | The skill for an AI agent: convert code into Rig and Rig into code. Portable: copy the folder. |
 | [skills/rig/spec.md](skills/rig/spec.md) | The language specification (one page of grammar, a short list of words). |
-| [skills/rig/rig.py](skills/rig/rig.py) | Reference tool, Python standard library only: `check`, `hash`, `prove`, `compile`, `from-json`, `serve`. |
+| [skills/rig/rig.py](skills/rig/rig.py) | Reference tool, Python standard library only: `check`, `hash`, `prove` and `probe` (in Python and Node.js), `stamp`, `emit`, `compile` (catalogue, skill, tool definition), `from-json`, `serve`. |
 | [viewer/index.html](viewer/index.html) | Viewer for `.rig` files: units as tables, the flow as a node graph, and the compiled skill and JSON. Rule values can be edited. One file, no install. |
 | [editors/](editors/) | Syntax highlighting for VS Code and Sublime Text, built from one table. |
 | [examples/](examples/) | Example units: a snippet, a tool and an agent. |
+| [examples/bandsearch/](examples/bandsearch/) | A larger example: an LM Studio plugin built from Rig units, with TypeScript casts proved in Node. |
 | [tests/](tests/) | Tests for `rig.py`, and a test that the viewer computes the same hashes, errors, catalogues and skills. |
 | [docs/logic.md](docs/logic.md) | How the language works, and why. |
 | [docs/](docs/) | Research notes and the first design memos. |

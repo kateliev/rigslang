@@ -23,3 +23,7 @@ unit broken agent
     by checks.b
     pass -> done
   end done "Done"
+
+unit more snippet
+  external
+  probe "x" => "y"

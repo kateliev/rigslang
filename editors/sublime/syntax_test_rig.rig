@@ -58,6 +58,10 @@ unit slugify snippet  ; a comment
     anything (goes) "here
 ;   ^^^^^^^^^^^^^^^^^^^^^ markup.raw.block.rig
 ;                   ^^^^^ - string
+  cast ts #1a80d208 #9fe3f5f5 observed 2026-11-12
+; ^^^^ storage.type.cast.rig
+;                             ^^^^^^^^ keyword.other.proved.rig
+;                                      ^^^^^^^^^^ constant.numeric.date.rig
   cast js
 ; ^^^^ storage.type.cast.rig
   note "the cast above is empty"
@@ -71,6 +75,15 @@ unit release-check agent
   uses slugify
 ; ^^^^ keyword.other.context.rig
 ;      ^^^^^^^ entity.other.inherited-class.rig
+  external checks.notes_ok "count the words"
+; ^^^^^^^^ keyword.other.context.rig
+;          ^^^^^^^^^^^^^^^ support.function.rig
+;                          ^^^^^^^^^^^^^^^^^ string.quoted.double.rig
+  probe "Hello World"
+; ^^^^^ keyword.other.context.rig
+;       ^^^^^^^^^^^^^ string.quoted.double.rig
+    check py "result != ''"
+;   ^^^^^ keyword.other.matrix.rig
   rule notes.min_words 50
 ; ^^^^ storage.type.rule.rig
 ;      ^^^^^^^^^^^^^^^ entity.name.constant.rule.rig

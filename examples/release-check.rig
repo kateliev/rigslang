@@ -3,6 +3,10 @@
 
 unit release-check agent
   intent "publish a release only when the notes, the version and the tests are ready"
+  external checks.notes_ok "count the words of the release notes"
+  external checks.version_ok "match the version tag against the pattern"
+  external checks.tests_green "read the result of the last test run"
+  external release.publish "tag and publish the release"
 
   rule notes.min_words 50
     min 10

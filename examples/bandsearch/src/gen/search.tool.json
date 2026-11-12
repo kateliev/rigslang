@@ -1,0 +1,58 @@
+{
+ "name": "search",
+ "description": "search the web with DuckDuckGo; give back the first 5 results as title and URL",
+ "parameters": {
+  "type": "object",
+  "properties": {
+   "query": {
+    "type": "string",
+    "description": "the words to search for"
+   }
+  },
+  "required": [
+   "query"
+  ]
+ },
+ "returns": {
+  "type": "object",
+  "properties": {
+   "end": {
+    "enum": [
+     "done",
+     "error"
+    ]
+   },
+   "reason": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "null"
+     }
+    ]
+   },
+   "results": {
+    "type": "array",
+    "items": {
+     "type": "array",
+     "prefixItems": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "string"
+      }
+     ],
+     "minItems": 2,
+     "maxItems": 2
+    }
+   }
+  },
+  "required": [
+   "end",
+   "results"
+  ],
+  "description": "end is done or error; results as [title, url]"
+ }
+}

@@ -34,9 +34,11 @@ HEADS = [
 	(rf'^\s*(in){E}(?:\s+({W}))?(?:\s+({W}))?', [MATRIX, 'variable.parameter.input.rig', 'support.type.rig'], False),
 	(rf'^\s*(out){E}(?:\s+({W}))?', [MATRIX, 'support.type.rig'], False),
 	(rf'^\s*(intent|example|ensure){E}', [MATRIX], False),
+	(rf'^\s*(probe){E}', [CONTEXT], False),
 	(rf'^\s*(check){E}(?:\s+({W}))?', [MATRIX, 'storage.type.language.rig'], False),
 	(rf'^\s*(evidence){E}(?:\s+({W}))?', [CONTEXT, 'markup.underline.link.rig'], False),
 	(rf'^\s*(uses){E}(?:\s+({W}))?', [CONTEXT, 'entity.other.inherited-class.rig'], False),
+	(rf'^\s*(external){E}(?:\s+({W}))?', [CONTEXT, 'support.function.rig'], False),
 	(rf'^\s*(rule){E}(?:\s+({W}))?', ['storage.type.rule.rig', 'entity.name.constant.rule.rig'], False),
 	(rf'^\s*(preset){E}(?:\s+({W}))?', ['storage.type.rule.rig', 'entity.name.constant.preset.rig'], False),
 	(rf'^\s*(set){E}(?:\s+({W}))?', [CONTEXT, 'variable.other.constant.rule.rig'], False),
@@ -60,7 +62,7 @@ CASTS = [
 
 def cast_head(lang):
 	return (rf'^(\s*)(cast)\s+({lang}){E}(?:\s+(#[^\s;]*))?(?:\s+(#[^\s;]*))?'
-	        rf'(?:\s+(proved)(?:\s+(\d{{4}}-\d{{2}}-\d{{2}}))?)?\s*(;.*)?$')
+	        rf'(?:\s+(proved|observed)(?:\s+(\d{{4}}-\d{{2}}-\d{{2}}))?)?\s*(;.*)?$')
 
 
 CAST_SCOPES = ['storage.type.cast.rig', 'storage.type.language.rig', 'constant.other.hash.rig',

@@ -7,6 +7,12 @@
 
 unit translate-ui agent
   intent "translate each UI string of a batch; save the strings that pass the checks; send the others to a human"
+  external queue.next "the next string of the batch that has no saved translation"
+  external queue.retries_left "the count of new drafts for this string is below the limit"
+  external queue.has_next "the batch has a string with no saved translation"
+  external review.draw "draw a random fraction for the review sample"
+  external store.save "save a translation with a label"
+  external store.flag "save a translation for human review, with the reasons"
   uses check-translation
   in strings path
   in language word
@@ -74,6 +80,7 @@ unit translate-ui agent
 
 unit check-translation tool
   intent "check one translated UI string against its source: placeholders, length and glossary terms"
+  external glossary.misses "the glossary terms of the source whose translation is not in the target"
   uses placeholders-match
   uses length-ratio
   in source str

@@ -52,6 +52,7 @@ The words come from hot-metal typefounding.
 - A **cast** is code that passed the proof. It carries two hashes: one of the matrix and one of the code.
 - If the matrix changes, the first hash does not match. The cast **remelts**, and the unit is a hole again.
 - If someone edits the code by hand, the second hash does not match. The cast is **stale**: prove it again, and check that the intent still describes it.
+- Some code needs the real world: the network, files, a service. Its result changes from day to day, so it has no fixed examples. A **probe** runs it live and checks conditions on the result. A pass is **observed**, not proved: true on that day, against that world. Version control keeps the date.
 
 The two-way check stops drift between the documentation and the code. Neither can change without the other noticing.
 
@@ -65,11 +66,13 @@ An agent unit is a small state machine. **Steps** do work. **Gates** decide. **E
 | `soft` | code (`by`) | a fact; a fail is reported |
 | `judge` | the model (`brief`) | a **guess**, and labelled so |
 
-**Coverage** is the share of gates that code decides. Over time, move gates from `judge` to `hard` or `soft` when you can write the check. The model stays where it is good: inside the judge gates and inside the steps, for decisions that no rule can hold.
+**Coverage** is the share of gates that **proved** code decides. A `by` line must name a unit or an `external`, and the gate takes the level of that code: proved, observed, code (Rig does not prove it), or none (the name points at nothing). A gate that names code is not yet a fact: only proved code makes it one. Over time, move gates from `judge` to `hard` or `soft` when you can write the check, and prove the check. The model stays where it is good: inside the judge gates and inside the steps, for decisions that no rule can hold.
+
+A `judge` result is a guess, and the person must see that. The compiled skill tells the agent to end its answer with a `Guessed:` line that names the gates it decided itself.
 
 **Rules** are the numbers and switches of the agent. They live in one place. The text of a step or gate names a rule as `{group.name}`, never as a number, so the viewer and the checker can see unused rules and missing ones. A **preset** is a named set of rule values, for example a careful mode and a fast mode.
 
-**One source, compiled.** The `.rig` file is the source. It compiles to a JSON catalogue for a code runner and to a skill for an agent that follows instructions. Both come from the same file, so the numbers cannot drift apart between them. The skill can also read its values from the catalogue, so each value has one place at run time too. A person checks the agent in the viewer, as a graph and as tables, and changes values there.
+**One source, compiled.** The `.rig` file is the source. It compiles to a JSON catalogue for a code runner, to a skill for an agent that follows instructions, and to a tool definition for a model that calls tools. `emit` writes the proved and observed casts as modules for a program to import. Both come from the same file, so the numbers cannot drift apart between them. The skill can also read its values from the catalogue, so each value has one place at run time too. A person checks the agent in the viewer, as a graph and as tables, and changes values there.
 
 ## 6. Documentation and memory
 

@@ -1,0 +1,148 @@
+{
+ "rig": 0,
+ "unit": "wiki",
+ "scope": "tool",
+ "preset": null,
+ "intent": "for the URL of an English Wikipedia article, give back its title, its summary paragraph and the albums in its Discography section",
+ "notes": [],
+ "uses": [
+  {
+   "unit": "wiki-title"
+  },
+  {
+   "unit": "album-list"
+  }
+ ],
+ "external": [],
+ "in": [
+  {
+   "name": "url",
+   "type": "str",
+   "text": "the URL of an English Wikipedia article"
+  }
+ ],
+ "out": {
+  "type": "(record end (one-of done error) reason (maybe str) title (maybe str) url (maybe str) summary (maybe str) albums (maybe (list (tuple str int))))",
+  "text": "end is done or error; on done, the title, url, summary and albums as [title, year]"
+ },
+ "start": "title",
+ "coverage": {
+  "gates": 2,
+  "proved": 1,
+  "observed": 1,
+  "code": 0,
+  "judge": 0,
+  "none": 0
+ },
+ "presets": {},
+ "rules": [
+  {
+   "id": "http.timeout",
+   "group": "http",
+   "label": "Time to wait for each request",
+   "type": "number",
+   "value": 10,
+   "default": 10,
+   "min": 1,
+   "max": 60,
+   "unit": "seconds"
+  }
+ ],
+ "flow": [
+  {
+   "id": "title",
+   "kind": "hard",
+   "name": "Wikipedia URL",
+   "ensure": "wiki-title of the URL is not empty",
+   "by": [
+    "wiki-title"
+   ],
+   "pass": [
+    {
+     "to": "summary"
+    }
+   ],
+   "fail": [
+    {
+     "to": "error",
+     "when": "not an English Wikipedia article"
+    }
+   ]
+  },
+  {
+   "id": "summary",
+   "kind": "step",
+   "name": "Summary",
+   "do": "GET the REST summary of the title; keep the extract; stop after {http.timeout} seconds",
+   "by": [
+    "wiki"
+   ],
+   "reads": [
+    "http.timeout"
+   ],
+   "next": [
+    {
+     "to": "has-summary"
+    }
+   ]
+  },
+  {
+   "id": "has-summary",
+   "kind": "hard",
+   "name": "Summary received",
+   "ensure": "the status is OK and the extract is not empty",
+   "by": [
+    "wiki"
+   ],
+   "pass": [
+    {
+     "to": "section"
+    }
+   ],
+   "fail": [
+    {
+     "to": "error",
+     "when": "no such article"
+    }
+   ]
+  },
+  {
+   "id": "section",
+   "kind": "step",
+   "name": "Discography",
+   "do": "GET the wikitext of the section named Discography; if the article has no such section, use an empty text",
+   "by": [
+    "wiki"
+   ],
+   "next": [
+    {
+     "to": "albums"
+    }
+   ]
+  },
+  {
+   "id": "albums",
+   "kind": "step",
+   "name": "Albums",
+   "do": "read the albums from the wikitext with album-list",
+   "by": [
+    "album-list"
+   ],
+   "next": [
+    {
+     "to": "done"
+    }
+   ]
+  },
+  {
+   "id": "done",
+   "kind": "end",
+   "name": "Article read"
+  },
+  {
+   "id": "error",
+   "kind": "end",
+   "name": "Failed"
+  }
+ ]
+}
