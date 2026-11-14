@@ -26,7 +26,7 @@
                                               --driver CMD (skill: a runner walks the flow)
     python rig.py from-json FILE.json         a catalogue back to Rig (the same meaning)
     python rig.py serve FILE [UNIT]           the viewer for FILE on 127.0.0.1; Save writes FILE
-        [--port 8765] [--json OUT] [--skill OUT] [--rules-ref]
+        [--port 8765] [--json OUT] [--skill OUT] [--rules-ref] [--runs DIR]
                                               and compiles it again to OUT; --rules-ref makes
                                               the skill read its values from the JSON
 
@@ -1551,7 +1551,6 @@ def outputs(path, unit=None, json_out=None, skill_out=None, rules_ref=False, pre
 	if skill_out:
 		ref = None
 		if rules_ref and json_out:
-			import os
 			ref = os.path.relpath(os.path.abspath(json_out), os.path.dirname(os.path.abspath(skill_out))).replace(os.sep, '/')
 		write(skill_out, compile_to('skill', u, preset, ref))
 		done.append(skill_out)
@@ -1573,10 +1572,29 @@ def bound_levels(path):
 	return out
 
 
-def serve(path, port, **outs):
-	'''Serve the viewer for one file on 127.0.0.1. Save writes the file and compiles it again.'''
+def run_list(folder):
+	'''The runs of a tool (the files that rigkit writes), newest first, for the viewer.'''
+	out = []
+	if not os.path.isdir(folder):
+		return out
+	for n in sorted(os.listdir(folder), reverse=True)[:200]:
+		if not n.endswith('.json'):
+			continue
+		try:
+			with open(os.path.join(folder, n), encoding='utf-8') as f:
+				r = json.load(f)
+			state = 'ended at {}'.format(r['outcome'].get('end') or 'a stop') if r.get('outcome') else 'error at ' + r['error']['node'] if r.get('error') else 'waits at ' + r['at']
+			out.append({'id': r['id'], 'state': state})
+		except (OSError, ValueError, KeyError, TypeError):
+			pass
+	return out
+
+
+def serve(path, port, runs=None, **outs):
+	'''Serve the viewer for one file on 127.0.0.1. Save writes the file and compiles it again.
+	runs: the folder of the run files of the tool (default: "runs" next to the file); the graph shows the path of a run.'''
+	runs = runs or os.path.join(os.path.dirname(os.path.abspath(path)), 'runs')
 	import http.server
-	import os
 	here = os.path.dirname(os.path.abspath(__file__))
 	pages = [os.path.join(here, 'viewer.html'), os.path.join(here, '..', '..', 'viewer', 'index.html')]
 	page = next((p for p in pages if os.path.exists(p)), None)
@@ -1608,6 +1626,11 @@ def serve(path, port, **outs):
 					self.reply(200, f.read(), 'text/plain; charset=utf-8')
 			elif self.path == '/levels':
 				self.reply(200, json.dumps(bound_levels(path)))
+			elif self.path == '/runs':
+				self.reply(200, json.dumps(run_list(runs)))
+			elif self.path.startswith('/runs/') and re.match(r'^[\w.-]+$', self.path[6:]) and os.path.exists(os.path.join(runs, self.path[6:] + '.json')):
+				with open(os.path.join(runs, self.path[6:] + '.json'), encoding='utf-8') as f:
+					self.reply(200, f.read())
 			else:
 				self.reply(404, json.dumps({'error': 'not found'}))
 
@@ -1632,8 +1655,15 @@ def serve(path, port, **outs):
 		def log_message(self, *a):
 			pass
 
-	srv = http.server.HTTPServer(('127.0.0.1', port), Handler)
-	print('serving {} at http://127.0.0.1:{}/  (Ctrl+C stops)'.format(path, port))
+	class Server(http.server.HTTPServer):
+		def server_bind(self):
+			# HTTPServer asks the name service for the full host name here; that can hang for a long time.
+			import socketserver
+			socketserver.TCPServer.server_bind(self)
+			self.server_name, self.server_port = '127.0.0.1', port
+
+	srv = Server(('127.0.0.1', port), Handler)
+	print('serving {} at http://127.0.0.1:{}/  (Ctrl+C stops)'.format(path, port), flush=True)
 	try:
 		srv.serve_forever()
 	except KeyboardInterrupt:
@@ -1678,7 +1708,7 @@ def main(argv):
 		return 0
 	if cmd == 'serve':
 		port = int(option(rest, '--port') or 8765)
-		outs = {'json_out': option(rest, '--json'), 'skill_out': option(rest, '--skill'), 'rules_ref': option(rest, '--rules-ref', True),
+		outs = {'runs': option(rest, '--runs'), 'json_out': option(rest, '--json'), 'skill_out': option(rest, '--skill'), 'rules_ref': option(rest, '--rules-ref', True),
 			'unit': rest[1] if len(rest) > 1 else None}
 		serve(rest[0], port, **outs)
 		return 0

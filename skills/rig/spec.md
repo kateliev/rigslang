@@ -207,7 +207,7 @@ One unit compiles to the forms that agents read. The `.rig` file stays the one s
 - **Report.** When a flow has gates that the agent decides itself (`judge` gates, and `hard` or `soft` gates with no `by`), the skill ends with a Report section. It tells the agent to end its answer with one line, `Guessed:` and the ids of those gates that it decided. A person must see which results are guesses.
 - **Tool.** `name` is the unit name. `description` is the intent, with the rule values written in. `parameters` is a JSON Schema object: one property for each `in`, with the text as its description. An input whose type is `(maybe T)` is not required. `returns` is the JSON Schema of the `out` type.
 - **Values.** By default, the compilers write each value in place of `{group.name}`. With `--rules PATH`, the skill refers to the catalogue at PATH instead, so the values have one place at run time too. With `--preset NAME`, the values of that preset are used.
-- **Serve.** `rig.py serve FILE --json OUT --skill OUT` shows the file in the viewer. Save writes the `.rig` file and compiles it again.
+- **Serve.** `rig.py serve FILE --json OUT --skill OUT` shows the file in the viewer. Save writes the `.rig` file and compiles it again. The server also gives the viewer the levels of the code in `code` lines, and the runs of the tool (`--runs DIR`; default: the folder `runs` next to FILE), so that the graph can show the path of one run.
 
 ## 7. Projects: a unit with its code, its runner and its fronts
 

@@ -325,6 +325,38 @@ class Projects(unittest.TestCase):
 		code, out = self.quiet(rig_project.doctor, RELEASE)
 		self.assertEqual(code, 0, out)
 
+	def test_serve_gives_the_levels_and_the_runs(self):
+		import socket
+		import time
+		import urllib.request
+		tmp = tempfile.mkdtemp()
+		with socket.socket() as sock:
+			sock.bind(('127.0.0.1', 0))
+			port = sock.getsockname()[1]
+		try:
+			folder = os.path.join(tmp, 'p')
+			self.quiet(rig_project.new, folder, 'demo-tool', 3)
+			subprocess.run([sys.executable, 'tool.py', 'run', '{"item": "a longer item"}'], cwd=folder, capture_output=True)
+			srv = subprocess.Popen([sys.executable, os.path.join(ROOT, 'skills', 'rig', 'rig.py'), 'serve', 'demo-tool.rig', '--port', str(port)], cwd=folder, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+			try:
+				def get(path):
+					for _ in range(50):
+						try:
+							with urllib.request.urlopen('http://127.0.0.1:{}{}'.format(port, path), timeout=2) as r:
+								return json.loads(r.read().decode('utf-8'))
+						except OSError:
+							time.sleep(0.1)
+					self.fail('the server did not answer')
+				self.assertEqual(get('/levels')['demo-tool']['gates.long_enough'], 'tested')
+				runs = get('/runs')
+				self.assertEqual(runs[0]['state'], 'waits at sensible')
+				self.assertEqual([t['node'] for t in get('/runs/' + runs[0]['id'])['trace']], ['look', 'long-enough'])
+			finally:
+				srv.terminate()
+				srv.wait(timeout=5)
+		finally:
+			shutil.rmtree(tmp)
+
 	def test_release_example_from_the_command_line(self):
 		r = subprocess.run([sys.executable, os.path.join(RELEASE, 'tool.py'), 'rules'], capture_output=True, text=True)
 		self.assertIn('"notes.min_words": 50', r.stdout)

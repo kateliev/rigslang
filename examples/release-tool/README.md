@@ -58,4 +58,4 @@ python3 tool.py regress tests/regression-set.json
 python3 ../../skills/rig/rig.py serve release.rig --json gen/release.json
 ```
 
-The last command shows the flow as a graph. Values can be changed there; the wires are changed in `release.rig`.
+The last command shows the flow as a graph. Values can be changed there; the wires are changed in `release.rig`. After some runs, choose one in the list **run…** above the graph: the page lights up the path that the run took, and a click on a node shows what happened there.

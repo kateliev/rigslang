@@ -103,6 +103,7 @@ Test with the model that will do the work. A text that a large model reads right
 
 - The command line, as above. A person answers human gates with `approve`.
 - The pages: `python3 RIG serve NAME.rig --json gen/NAME.json` shows the source as tables and as a graph. Values can be changed on the page, and Save builds the catalogue again. The wires are read-only: change the flow in the source file, and review it in version control.
+- **The path of a run.** The graph page has a list of the runs of the tool (the folder `runs/` next to the source; `--runs DIR` for another). Choose one: the graph lights up the path that the run took. A number on a node is the order of the visit, a red frame is a gate that failed, and a dashed frame is where the run waits. Click a node to read what happened there: pass or fail, the problems, the facts, and who decided.
 - The reports and the queues of a production tool ([patterns.md](patterns.md)).
 
 ## 5. A tool inside a host application

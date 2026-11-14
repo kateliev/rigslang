@@ -153,6 +153,18 @@ body.focus .wl.on{opacity:1}
 .node{position:absolute;width:260px;background:var(--card);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);user-select:none;transition:opacity .15s;font-size:13px}
 body.focus .node{opacity:.35}
 body.focus .node.on{opacity:1}
+/* The trace of one run: the path it took through the flow */
+body.tracing .w,body.tracing .wl{opacity:.08}
+body.tracing .w.tr{opacity:1;stroke-width:3}
+body.tracing .wl.tr{opacity:1}
+body.tracing .node{opacity:.3}
+body.tracing .node.tr{opacity:1}
+.node.tr-fail{outline:2px solid var(--fail);outline-offset:2px}
+.node.tr-wait{outline:2px dashed var(--accent);outline-offset:2px}
+.node[data-trace]::after{content:attr(data-trace);position:absolute;top:-11px;right:-9px;min-width:20px;padding:0 6px;border-radius:10px;font:600 11px/20px var(--mono);text-align:center;color:var(--accent-fg);background:var(--accent)}
+.trow{font-size:12px;margin:6px 0;padding:6px 8px;border:1px solid var(--line);border-radius:6px}
+.trow .ok{color:var(--pass)}.trow .no{color:var(--fail)}
+#run{max-width:240px}
 .node.sel{outline:2px solid var(--accent);outline-offset:2px}
 .node .hd{display:flex;gap:7px;align-items:center;padding:6px 10px;border-radius:9px 9px 0 0;cursor:move;position:relative;background:var(--step-bg)}
 .node.hard .hd{background:var(--hard-bg)}.node.soft .hd{background:var(--soft-bg)}.node.judge .hd{background:var(--judge-bg)}.node.human .hd{background:var(--human-bg)}
@@ -227,6 +239,7 @@ aside p{margin:0}
   </div>
   <div class="bar sub" id="gbar" hidden>
     <span class="pill" id="cov"></span>
+    <select id="run" hidden title="Show the path of one run on the graph"><option value="">run…</option></select>
     <span class="spacer"></span>
     <label><input type="checkbox" id="t-param" checked> rule wires</label>
     <label><input type="checkbox" id="t-fail" checked> fail paths</label>
@@ -935,7 +948,7 @@ async function fetchFile(url) {
     const r = await fetch(url, { cache: "no-store" }); if (!r.ok) throw new Error(r.status);
     const text = await r.text();
     BOUND = {};
-    if (r.headers.get("X-Rig-File")) { try { const b = await fetch("/levels", { cache: "no-store" }); if (b.ok) BOUND = await b.json(); } catch (e) { /* a plain file server has no levels */ } }
+    if (r.headers.get("X-Rig-File")) { try { const b = await fetch("/levels", { cache: "no-store" }); if (b.ok) BOUND = await b.json(); } catch (e) { /* a plain file server has no levels */ } loadRuns(); }
     load(text, r.headers.get("X-Rig-File") || url.split("/").pop());
   }
   catch (e) { msg("Could not load " + url + ": " + e.message, false); }
@@ -1256,10 +1269,72 @@ function drawWires() {
   applyFocus();
 }
 let hov = null;
+let TRACE = null;  // one run of rigkit (from rig.py serve): its trace is shown as a path on the graph
+function traceEdges() {  // the wires that the run followed
+  const t = TRACE.trace || [], out = new Set();
+  t.forEach((a, i) => {
+    const b = t[i + 1] ? t[i + 1].node : (TRACE.outcome ? null : TRACE.at);
+    if (!b) return;
+    const flow = G.edges.filter(e => e.cls !== "param" && e.src === a.node && e.dst === b);
+    const same = flow.filter(e => e.cls === (a.pass === false ? "fail" : "pass"));
+    const e = same.find(e => a.when && e.label === a.when) || same[0] || flow[0];
+    if (e) out.add(e);
+  });
+  return out;
+}
+function applyTrace(on) {
+  document.body.classList.toggle("tracing", on);
+  for (const n of G.nodes) if (n.el) { n.el.classList.remove("tr", "tr-fail", "tr-wait"); n.el.removeAttribute("data-trace"); }
+  for (const e of G.edges) { e.path && e.path.classList.remove("tr"); e.text && e.text.classList.remove("tr"); }
+  if (!TRACE) return;
+  const seen = {};
+  (TRACE.trace || []).forEach((t, i) => { (seen[t.node] = seen[t.node] || []).push(i + 1); });
+  for (const n of G.nodes) {
+    if (!n.el || !seen[n.id]) continue;
+    n.el.classList.add("tr"); n.el.setAttribute("data-trace", seen[n.id].join(" · "));
+    if ((TRACE.trace || []).some(t => t.node === n.id && t.pass === false)) n.el.classList.add("tr-fail");
+  }
+  if (!TRACE.outcome) { const n = G.nodes.find(n => n.id === TRACE.at); if (n && n.el) n.el.classList.add("tr", "tr-wait"); }
+  for (const e of traceEdges()) { e.path && e.path.classList.add("tr"); e.text && e.text.classList.add("tr"); }
+}
+function traceInfo(f) {  // for the inspector: the run as a whole, or what happened at one node
+  const T = TRACE, j = v => JSON.stringify(v);
+  if (!f) {
+    const state = T.outcome ? "ended at " + (T.outcome.end || T.outcome.label) : T.error ? "error at " + T.error.node + ": " + T.error.error : "waits at " + T.at;
+    return el("div", {}, el("div", { class: "k" }, "Run " + T.id), el("p", {}, state),
+      el("p", { class: "hint" }, "inputs: " + j(T.inputs)),
+      (T.problems || []).length ? [el("div", { class: "k" }, "Problems"), T.problems.map(x => el("p", { class: "hint" }, x))] : null,
+      (T.guessed || []).length ? el("p", { class: "hint" }, "Guessed by the model: " + T.guessed.join(", ")) : null,
+      el("p", { class: "hint" }, "The numbers on the nodes are the order of the path. Click a node to see what happened there."));
+  }
+  const rows = (T.trace || []).map((t, i) => [t, i + 1]).filter(([t]) => t.node === f.id);
+  if (!rows.length) return el("div", {}, el("div", { class: "k" }, "In run " + T.id), el("p", { class: "hint" }, !T.outcome && T.at === f.id ? "The run waits here." : "The run did not come here."));
+  return el("div", {}, el("div", { class: "k" }, "In run " + T.id), rows.map(([t, n]) => el("div", { class: "trow" },
+    el("b", {}, "#" + n + " "), t.kind === "step" || t.kind === "end" ? t.kind : el("span", { class: t.pass ? "ok" : "no" }, t.pass ? "pass" : "fail"),
+    t.by ? " · by the " + t.by : "", t.guessed ? " · a guess" : "", t.when ? el("div", {}, "→ " + t.when) : null, t.why ? el("div", {}, "why: " + t.why) : null,
+    (t.problems || []).map(x => el("div", { class: "no" }, x)), t.facts ? el("div", { class: "dim" }, j(t.facts)) : null)));
+}
+async function loadRuns() {  // only rig.py serve has runs
+  const sel = $("#run");
+  try {
+    const r = await fetch("/runs", { cache: "no-store" });
+    const runs = r.ok ? await r.json() : [];
+    sel.hidden = !runs.length;
+    const keep = sel.value;
+    sel.replaceChildren(el("option", { value: "" }, "run…"), ...runs.map(x => el("option", { value: x.id }, x.id + " · " + x.state)));
+    sel.value = runs.some(x => x.id === keep) ? keep : "";
+  } catch (e) { sel.hidden = true; }
+}
+async function pickRun(id) {
+  TRACE = null;
+  if (id) { try { const r = await fetch("/runs/" + encodeURIComponent(id), { cache: "no-store" }); if (r.ok) TRACE = await r.json(); } catch (e) { /* no run */ } }
+  if (G.u) { inspector(); applyFocus(); }
+}
 function hover(h) { hov = h; applyFocus(); }
 function applyFocus() {
   const f = hov || (S.sel ? { node: S.sel } : null);
   document.body.classList.toggle("focus", !!f);
+  applyTrace(!!TRACE && !f);
   for (const n of G.nodes) n.el && n.el.classList.remove("on", "sel");
   for (const e of G.edges) { e.path && e.path.classList.remove("on"); e.text && e.text.classList.remove("on"); }
   if (S.sel) { const n = G.nodes.find(n => n.id === S.sel); n && n.el.classList.add("sel"); }
@@ -1294,6 +1369,7 @@ function inspector() {
       el("p", { class: "hint" }, "Click a node to read it here. Hover a rule to see where it goes. Change a value in a rule box; Save writes it into the file. Drag a node by its header, drag the background to pan, wheel to zoom. ", el("kbd", {}, "F"), " fits, ", el("kbd", {}, "Esc"), " clears."),
       el("div", { class: "k" }, "Wiring"),
       el("p", { class: "hint" }, "The wires are read-only: change them in the .rig file."));
+    if (TRACE) a.prepend(traceInfo(null));
     return;
   }
   const from = G.edges.filter(e => e.dst === f.id && e.cls !== "param").map(e => e.src);
@@ -1311,6 +1387,7 @@ function inspector() {
     (f.fail || []).map(l => el("div", { class: "lk fail" }, el("span", { class: "sym" }, "✕"), link(l.to), l.when ? el("span", { class: "when" }, fillText(l.when)) : null)),
     f.kind === "end" ? el("p", { class: "hint" }, "The flow stops here.") : null,
     from.length ? [el("div", { class: "k" }, "Reached from"), [...new Set(from)].map(id => el("div", { class: "lk" }, link(id)))] : null));
+  if (TRACE) a.append(traceInfo(f));
 }
 function select(id) { S.sel = id; inspector(); applyFocus(); }
 function applyView() {
@@ -1388,6 +1465,8 @@ $("#t-fail").onchange = e => { document.body.classList.toggle("no-fail", !e.targ
 $("#t-anim").onchange = e => document.body.classList.toggle("anim", e.target.checked);
 $("#relayout").onclick = () => { G.pos = {}; savePos(); for (const n of G.nodes) place(n); drawWires(); fit(); };
 $("#fit").onclick = fit;
+$("#run").onchange = e => pickRun(e.target.value);
+$("#run").onpointerdown = () => { loadRuns(); };
 addEventListener("keydown", e => {
   if (S.tab !== "graph" || (e.target.closest && e.target.closest("input,select,textarea"))) return;
   if (e.key === "f" || e.key === "F") fit();
