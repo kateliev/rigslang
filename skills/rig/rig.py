@@ -22,7 +22,8 @@
                                               in that JSON file instead of writing them in
     python rig.py compile tool FILE [UNIT]    the unit as a tool definition: name, description
                                               and the JSON Schema of its inputs
-        compile options: --preset NAME (use the values of a preset), -o OUT (write a file)
+        compile options: --preset NAME (use the values of a preset), -o OUT (write a file),
+                                              --driver CMD (skill: a runner walks the flow)
     python rig.py from-json FILE.json         a catalogue back to Rig (the same meaning)
     python rig.py serve FILE [UNIT]           the viewer for FILE on 127.0.0.1; Save writes FILE
         [--port 8765] [--json OUT] [--skill OUT] [--rules-ref]
@@ -46,17 +47,19 @@ import unicodedata
 
 MATRIX = ('in', 'out', 'intent', 'example', 'ensure')
 FLOW = ('step', 'gate', 'end')
-GATE_KINDS = ('hard', 'soft', 'judge')
+GATE_KINDS = ('hard', 'soft', 'judge', 'human')
 SCOPES = ('snippet', 'tool', 'agent')
-LEVELS = ('none', 'code', 'observed', 'proved')  # low to high; "judge" is apart
+LEVELS = ('none', 'code', 'tested', 'observed', 'proved')  # low to high; "judge" and "human" are apart
+CHECKED = ('proved', 'tested')  # the levels that count for coverage
 STAMPS = ('proved', 'observed')
 BASE_TYPES = ('str', 'text', 'word', 'path', 'int', 'float', 'bool', 'list', 'dict', 'any')
 TYPE_LISTS = ('list', 'tuple', 'record', 'maybe', 'one-of')
 CHILDREN = {
-	'unit': {'in', 'out', 'intent', 'example', 'ensure', 'note', 'uses', 'external', 'probe', 'rule', 'preset', 'cast', 'step', 'gate', 'end'},
+	'unit': {'in', 'out', 'intent', 'example', 'ensure', 'note', 'uses', 'external', 'probe', 'rule', 'preset', 'cast', 'code', 'step', 'gate', 'end'},
 	'ensure': {'check', 'note'},
 	'probe': {'check', 'note'},
 	'external': {'note'},
+	'code': {'test', 'note'},
 	'preset': {'set'},
 	'note': {'evidence'},
 	'rule': {'min', 'max', 'options', 'unit', 'label', 'note'},
@@ -376,15 +379,17 @@ class Ctx(object):
 	'''The units that "by" can reach: the units of the file, and of the files in "uses" lines.'''
 
 	def __init__(self, root, path=None):
-		self.units, self.files = {}, set()
+		self.units, self.files, self.base = {}, set(), {}
 		self.add(root, path)
 
 	def add(self, root, path):
+		base = os.path.dirname(os.path.abspath(path)) if path else None
 		for u in units(root):
-			self.units.setdefault(u.word(0), u)
+			if u.word(0) not in self.units:
+				self.units[u.word(0)] = u
+				self.base[u.word(0)] = base
 		if not path:
 			return
-		base = os.path.dirname(os.path.abspath(path))
 		for u in units(root):
 			for x in u.kids('uses'):
 				f = x.word(1)
@@ -406,8 +411,56 @@ def lowest(levels):
 	return min(levels, key=LEVELS.index) if levels else 'none'
 
 
+# - Code outside the .rig file: "code [prefix] path", with an optional "test path" child ---
+DEFINES = r'(?:\bdef|\bfunction|\bconst|\blet|\bvar)\s+{}\b'
+
+
+def code_lines(u):
+	'''The "code" lines of a unit -> list of {"prefix" (None: the unit's own function), "file", "test", "line"}.'''
+	out = []
+	for c in u.kids('code'):
+		own = len(c.args) < 2
+		t = c.kids('test')
+		out.append({'prefix': None if own else c.word(0), 'file': c.word(0 if own else 1), 'test': t[0].word(0) if t else None, 'line': c.line})
+	return out
+
+
+def code_for(b, u):
+	'''The "code" line that holds the name b -> (line, function name), or None.
+	b is "prefix.function", or the name of the unit (its own function).'''
+	for c in code_lines(u):
+		if c['prefix'] is None and b == u.word(0):
+			return c, b.replace('-', '_')
+		if c['prefix'] and b.startswith(c['prefix'] + '.') and len(b) > len(c['prefix']) + 1:
+			return c, b[len(c['prefix']) + 1:].replace('-', '_')
+	return None
+
+
+def read_text(path):
+	try:
+		with open(path, encoding='utf-8') as f:
+			return f.read()
+	except (OSError, UnicodeDecodeError):
+		return None
+
+
+def bound_level(b, u, ctx):
+	'''The level of a name that a "code" line holds: none (the file or the function is missing),
+	code (the function exists), tested (a test file names it). Without the folder of the file
+	(the viewer, a catalogue with no path): code.'''
+	c, fn = code_for(b, u)
+	base = ctx.base.get(u.word(0)) if ctx else None
+	if not base:
+		return 'code'
+	text = read_text(os.path.join(base, c['file'])) if c['file'] else None
+	if text is None or not re.search(DEFINES.format(re.escape(fn)), text):
+		return 'none'
+	test = read_text(os.path.join(base, c['test'])) if c['test'] else None
+	return 'tested' if test and re.search(r'\b{}\b'.format(re.escape(fn)), test) else 'code'
+
+
 def unit_level(name, ctx, seen=()):
-	'''How much is known about the code of a unit: proved, observed or code.'''
+	'''How much is known about the code of a unit: proved, observed, tested or code.'''
 	u = ctx.units.get(name)
 	if u is None or name in seen:
 		return 'code'
@@ -415,15 +468,19 @@ def unit_level(name, ctx, seen=()):
 	for s in ('proved', 'observed'):
 		if s in states:
 			return s
+	if code_for(name, u):
+		return bound_level(name, u, ctx)
 	gates = u.kids('gate')
 	if not gates:
 		return 'code'
 	got = [gate_level(g, u, ctx, tuple(seen) + (name,)) for g in gates]
-	return lowest(['code' if x in ('judge', 'none') else x for x in got])
+	return lowest(['code' if x in ('judge', 'human', 'none') else x for x in got])
 
 
 def by_target(b, u):
-	'''What a "by" name reaches: "self", "external", "unit" or None.'''
+	'''What a "by" name reaches: "bound" (a "code" line), "self", "external", "unit" or None.'''
+	if b and code_for(b, u):
+		return 'bound'
 	if b == u.word(0):
 		return 'self'
 	if b in [x.word(0) for x in u.kids('external')]:
@@ -435,12 +492,14 @@ def by_target(b, u):
 
 def gate_level(g, u, ctx, seen=()):
 	'''proved, observed, code, judge or none (spec, Section 2: the level of a gate).'''
-	if g.word(1) == 'judge':
-		return 'judge'
+	if g.word(1) in ('judge', 'human'):
+		return g.word(1)
 	got = []
 	for x in g.kids('by'):
 		b, kind = x.word(0), by_target(x.word(0), u)
-		if kind == 'self':
+		if kind == 'bound':
+			got.append(bound_level(b, u, ctx))
+		elif kind == 'self':
 			states = [cast_state(u, c) for c in u.kids('cast')]
 			got.append('proved' if 'proved' in states else 'observed' if 'observed' in states else 'code')
 		elif kind == 'external':
@@ -454,7 +513,7 @@ def gate_level(g, u, ctx, seen=()):
 
 def coverage(u, ctx=None):
 	ctx = ctx_of(u, ctx)
-	d = {'gates': 0, 'proved': 0, 'observed': 0, 'code': 0, 'judge': 0, 'none': 0}
+	d = {'gates': 0, 'proved': 0, 'tested': 0, 'observed': 0, 'code': 0, 'judge': 0, 'human': 0, 'none': 0}
 	for g in u.kids('gate'):
 		d['gates'] += 1
 		d[gate_level(g, u, ctx, (u.word(0),))] += 1
@@ -470,11 +529,14 @@ def unit_status(unit, ctx=None):
 			'stale': 'stale {} (the code changed: prove it again)'}.get(s, s + ' {}' + (' ' + info['date'] if info['date'] else '')).format(info['lang']))
 	cv = coverage(unit, ctx)
 	if cv['gates']:
-		parts = ['{} {}'.format(cv[k], k) for k in ('proved', 'observed', 'code', 'judge', 'none') if cv[k] or k in ('proved', 'judge')]
-		out.append('flow: {} gates, coverage {:.0%} ({})'.format(cv['gates'], float(cv['proved']) / cv['gates'], ', '.join(parts)))
+		parts = ['{} {}'.format(cv[k], k) for k in ('proved', 'tested', 'observed', 'code', 'judge', 'human', 'none') if cv[k] or k in ('proved', 'judge')]
+		out.append('flow: {} gates, coverage {:.0%} ({})'.format(cv['gates'], float(cv['proved'] + cv['tested']) / cv['gates'], ', '.join(parts)))
 	elif unit.kids('step'):
 		out.append('flow: {} steps, no gates'.format(len(unit.kids('step'))))
-	if not unit.kids('cast') and any(c.head in MATRIX for c in unit.children) and not (cv['gates'] or unit.kids('step')):
+	own = code_for(unit.word(0) or '', unit)
+	if own:
+		out.append('code {} ({})'.format(own[0]['file'], bound_level(unit.word(0), unit, ctx_of(unit, ctx))))
+	if not unit.kids('cast') and not own and any(c.head in MATRIX for c in unit.children) and not (cv['gates'] or unit.kids('step')):
 		out.append('hole')
 	return out or ['empty']
 
@@ -599,11 +661,32 @@ def check(root, path=None):
 			elif exts.count(x.word(0)) > 1:
 				err.append((x.line, 'external "{}" is defined twice'.format(x.word(0))))
 		used_by = set()
+		base = os.path.dirname(os.path.abspath(path)) if path else None
+		cctx = Ctx(root, path) if path else None
+		prefixes = [c['prefix'] for c in code_lines(u)]
+		for c in code_lines(u):
+			if not c['file']:
+				err.append((c['line'], 'write "code <path>" or "code <prefix> <path>"'))
+			elif prefixes.count(c['prefix']) > 1:
+				err.append((c['line'], 'two "code" lines for {}'.format('"' + c['prefix'] + '"' if c['prefix'] else 'the unit')))
+			elif base:
+				for k in ('file', 'test'):
+					if c[k] and not os.path.exists(os.path.join(base, c[k])):
+						err.append((c['line'], 'the {} file "{}" does not exist'.format('code' if k == 'file' else 'test', c[k])))
+				if c['prefix'] is None and os.path.exists(os.path.join(base, c['file'])) and bound_level(name, u, cctx) == 'none':
+					err.append((c['line'], '"{}" has no function "{}"'.format(c['file'], name.replace('-', '_'))))
 		for f in [c for c in u.children if c.head in ('step', 'gate')]:
 			for b in f.kids('by'):
 				used_by.add(b.word(0))
 				if b.word(0) and not by_target(b.word(0), u):
-					warn.append((b.line, '"by {}" names no unit, used unit or external: add "external {}" if the code is outside Rig'.format(b.word(0), b.word(0))))
+					warn.append((b.line, '"by {}" names no unit, used unit, external or "code" line: add "code <prefix> <path>" for code in a file'.format(b.word(0))))
+				elif base and by_target(b.word(0), u) == 'bound':
+					c, fn = code_for(b.word(0), u)
+					level = bound_level(b.word(0), u, cctx)
+					if level == 'none' and c['file'] and os.path.exists(os.path.join(base, c['file'])):
+						err.append((b.line, '"{}" has no function "{}"'.format(c['file'], fn)))
+					elif level == 'code' and f.head == 'gate':
+						warn.append((b.line, 'no test names "{}": {}'.format(fn, 'add a test to "{}"'.format(c['test']) if c['test'] else 'add a "test <path>" line under its "code" line')))
 		for x in u.kids('external'):
 			if x.word(0) and x.word(0) not in used_by:
 				warn.append((x.line, 'external "{}" is not named by any "by"'.format(x.word(0))))
@@ -694,11 +777,11 @@ def check(root, path=None):
 			if f.head == 'gate':
 				kind = f.word(1)
 				if kind not in GATE_KINDS:
-					err.append((f.line, 'gate "{}": the kind must be hard, soft or judge'.format(fid)))
+					err.append((f.line, 'gate "{}": the kind must be hard, soft, judge or human'.format(fid)))
 				elif kind in ('hard', 'soft') and not f.kids('by'):
 					warn.append((f.line, 'gate "{}" is {} but no code decides it: add "by", or make it judge'.format(fid, kind)))
-				elif kind == 'judge' and not f.kids('brief'):
-					warn.append((f.line, 'judge gate "{}" has no brief'.format(fid)))
+				elif kind in ('judge', 'human') and not f.kids('brief'):
+					warn.append((f.line, '{} gate "{}" has no brief'.format(kind, fid)))
 				if not f.kids('pass'):
 					warn.append((f.line, 'gate "{}" has no "pass"'.format(fid)))
 		if flow:
@@ -1124,6 +1207,7 @@ def catalog(u, preset=None, ctx=None):
 		'intent': ' '.join(text_of(x) for x in u.kids('intent')),
 		'notes': notes_of(u), 'uses': uses,
 		'external': [{'name': x.word(0), 'text': ' '.join(value(a) for a in x.args[1:] if a[0] == 'str')} for x in u.kids('external')],
+		'code': [dict((k, c[k]) for k in ('prefix', 'file', 'test')) for c in code_lines(u)],
 		'in': [port_info(x) for x in u.kids('in')],
 		'out': port_info(u.kids('out')[0]) if u.kids('out') else None,
 		'start': starts[0].word(0) if starts else None,
@@ -1171,9 +1255,11 @@ def fill_values(u, t, preset=None):
 		if m.group(1) in byrule else m.group(0), t)
 
 
-def skill(u, rules_path=None, preset=None):
+def skill(u, rules_path=None, preset=None, driver=None):
 	'''A unit as a SKILL.md for an agent that follows instructions.
-	rules_path: refer to that JSON file for the values, instead of writing them in.'''
+	rules_path: refer to that JSON file for the values, instead of writing them in.
+	driver: the command of a runner that walks the flow (rigkit); the agent then only
+	starts runs and answers what waits.'''
 	toks = preset_tokens(u, preset)
 	byrule = dict((r.word(0), r) for r in u.kids('rule'))
 
@@ -1220,7 +1306,23 @@ def skill(u, rules_path=None, preset=None):
 			else:
 				out.append('| `{}` | `{}` | {} |'.format(info['id'], cell(val(info['id'])), cell(mean)))
 		out.append('')
-	if c['flow']:
+	if c['flow'] and driver:
+		args = ' '.join("{}=<{}>".format(x['name'], x['type'] or 'value') for x in c['in'])
+		out += ['## How to run', '',
+			'Code walks this flow. You do not walk it yourself: you start a run and answer what waits.', '',
+			'1. Start a run: `{} run \'<inputs as JSON>\'`{}.'.format(driver, ' (inputs: ' + args + ')' if args else ''),
+			'2. Read the result. It is one JSON object.',
+			'   - `outcome`: the run ended at that end node. Report it, with `problems` first.',
+			'   - `waiting`: the run stopped at a node that code cannot do. Read `kind`, `do` and `brief`.',
+			'     - `judge`: decide as `brief` says. Answer: `{} answer <run> \'{{"pass": true}}\'` (or false, with `"why"`).'.format(driver),
+			'     - `step`: do what `do` says. Answer: `{} answer <run> \'{{"result": ...}}\'`.'.format(driver),
+			'     - `human`: ask the person and wait. Answer with the decision of the person, never with your own.',
+			'   - `refused`: the call was out of order. It is final: do not repeat it. Read `at` and continue from there.',
+			'3. Repeat step 2 until the result has `outcome`.', '',
+			'Never decide a hard or soft gate: code decides them. Use only values from a result or from the rules.',
+			'`{} status <run>` shows a run again; `{} rules` shows the rules.'.format(driver, driver), '',
+			'## Flow (the map of the run)', '']
+	elif c['flow']:
 		out += ['## Flow', '', 'Start at `{}`. Go from node to node as written. Do not skip a gate.'.format(c['start']), '']
 
 		def go(l):
@@ -1244,6 +1346,8 @@ def skill(u, rules_path=None, preset=None):
 				out.append('- Decided by code: run {}. If it fails, report it and go on as written below.'.format(by) if by else guess)
 			elif k == 'judge':
 				out.append('- Judge: {}. Label the result as a guess.'.format(fill(f['brief'])) if 'brief' in f else '- Judge: decide it yourself. Label the result as a guess.')
+			elif k == 'human':
+				out.append('- A person decides: {}. Stop and ask the person. Do not decide this gate yourself.'.format(fill(f['brief'])) if 'brief' in f else '- A person decides. Stop and ask the person. Do not decide this gate yourself.')
 			for n in f.get('notes', []):
 				out.append('- Note: ' + fill(n['text']))
 			for key, title in (('next', 'Next'), ('pass', 'Pass'), ('fail', 'Fail')):
@@ -1291,6 +1395,10 @@ def from_catalog(c):
 		out.append('  uses ' + x['unit'] + (' ' + x['file'] if x.get('file') else ''))
 	for x in c.get('external', []):
 		out.append('  external ' + x['name'] + (' ' + quote(x['text']) if x.get('text') else ''))
+	for x in c.get('code', []):
+		out.append('  code ' + (x['prefix'] + ' ' if x.get('prefix') else '') + x['file'])
+		if x.get('test'):
+			out.append('    test ' + x['test'])
 	for x in c.get('in', []):
 		out.append('  in ' + x['name'] + (' ' + x['type'] if x.get('type') else '') + (' ' + quote(x['text']) if x.get('text') else ''))
 	o = c.get('out')
@@ -1402,11 +1510,11 @@ def write(path, text):
 		f.write(text)
 
 
-def compile_to(kind, u, preset=None, rules_path=None, ctx=None):
+def compile_to(kind, u, preset=None, rules_path=None, ctx=None, driver=None):
 	if kind == 'json':
 		return json.dumps(catalog(u, preset, ctx), ensure_ascii=False, indent=1) + '\n'
 	if kind == 'skill':
-		return skill(u, rules_path, preset)
+		return skill(u, rules_path, preset, driver)
 	if kind == 'tool':
 		return json.dumps(tool_def(u, preset), ensure_ascii=False, indent=1) + '\n'
 	raise SystemExit('compile json, compile skill or compile tool')
@@ -1431,6 +1539,21 @@ def outputs(path, unit=None, json_out=None, skill_out=None, rules_ref=False, pre
 		write(skill_out, compile_to('skill', u, preset, ref))
 		done.append(skill_out)
 	return done
+
+
+def bound_levels(path):
+	'''For the viewer, which cannot read the code files: unit -> {"by" name -> level}.'''
+	try:
+		text, root = load(path)
+	except SystemExit:
+		return {}
+	ctx, out = Ctx(root, path), {}
+	for u in units(root):
+		names = [b.word(0) for f in u.children if f.head in ('step', 'gate') for b in f.kids('by')] + [u.word(0)]
+		got = dict((b, bound_level(b, u, ctx)) for b in names if b and code_for(b, u))
+		if got:
+			out[u.word(0)] = got
+	return out
 
 
 def serve(path, port, **outs):
@@ -1466,6 +1589,8 @@ def serve(path, port, **outs):
 			elif self.path == '/file':
 				with open(path, encoding='utf-8', newline='') as f:
 					self.reply(200, f.read(), 'text/plain; charset=utf-8')
+			elif self.path == '/levels':
+				self.reply(200, json.dumps(bound_levels(path)))
 			else:
 				self.reply(404, json.dumps({'error': 'not found'}))
 
@@ -1509,14 +1634,14 @@ def main(argv):
 	cmd, rest = argv[0], list(argv[1:])
 	if cmd == 'compile':
 		kind = rest.pop(0)
-		preset, out, rules = option(rest, '--preset'), option(rest, '-o'), option(rest, '--rules')
+		preset, out, rules, driver = option(rest, '--preset'), option(rest, '-o'), option(rest, '--rules'), option(rest, '--driver')
 		if not rest:
 			raise SystemExit('compile {} FILE [UNIT]'.format(kind))
 		text, root = load(rest[0])
 		err, _ = check(root)
 		if err:
 			raise SystemExit('{}: line {}: {}'.format(rest[0], err[0][0], err[0][1]))
-		result = compile_to(kind, pick(root, rest[1] if len(rest) > 1 else None), preset, rules, Ctx(root, rest[0]))
+		result = compile_to(kind, pick(root, rest[1] if len(rest) > 1 else None), preset, rules, Ctx(root, rest[0]), driver)
 		if out:
 			write(out, result)
 		else:

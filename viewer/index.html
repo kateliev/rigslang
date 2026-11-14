@@ -10,7 +10,7 @@
 :root{
   --bg:#f7f6f2;--fg:#1d1d1b;--muted:#6b6a65;--faint:#9a988f;--line:#e2dfd6;--card:#fff;--head:#f1efe8;
   --accent:#b8492a;--accent-fg:#fff;--changed:#fff1cc;--changed-line:#e6c25a;--ok:#2f7d4f;--bad:#b3261e;--warn:#9a6a12;
-  --hard:#2b5c8a;--hard-bg:#e6eef7;--soft:#8a6212;--soft-bg:#f6eedb;--judge:#7a4f9a;--judge-bg:#f0e8f6;--step:#55534d;--step-bg:#efede6;
+  --hard:#2b5c8a;--hard-bg:#e6eef7;--soft:#8a6212;--soft-bg:#f6eedb;--judge:#7a4f9a;--judge-bg:#f0e8f6;--human:#1f7a72;--human-bg:#dff1ee;--step:#55534d;--step-bg:#efede6;
   --param:#6a6f2a;--param-bg:#eef0dc;--fail:#a2381f;--fail-bg:#fbe9e4;--pass:#2f6f48;--pass-bg:#e5f2ea;
   --grid:#e9e6dd;--wire-p:#b9b49f;--term:#5b5953;--term-bg:#ecebe6;--hit:#fff8e1;--hit-line:#c4532c;--chip:#efede6;--code:#f3f1ea;
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;--shadow:0 1px 2px rgba(0,0,0,.06),0 4px 14px rgba(0,0,0,.06);
@@ -19,7 +19,7 @@
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#141311;--fg:#ecebe6;--muted:#a3a19a;--faint:#7b7972;--line:#34322d;--card:#211f1c;--head:#26241f;
   --accent:#e2774f;--accent-fg:#1a1a18;--changed:#3a3120;--changed-line:#8a6e2a;--ok:#6cc08f;--bad:#f2817a;--warn:#e0b25a;
-  --hard:#8db8e3;--hard-bg:#1f2c3a;--soft:#e3be78;--soft-bg:#33291a;--judge:#c9a2e6;--judge-bg:#2c2236;--step:#c9c6bd;--step-bg:#2a2824;
+  --hard:#8db8e3;--hard-bg:#1f2c3a;--soft:#e3be78;--soft-bg:#33291a;--judge:#c9a2e6;--judge-bg:#2c2236;--human:#7fd1c7;--human-bg:#17302d;--step:#c9c6bd;--step-bg:#2a2824;
   --param:#c8cc8a;--param-bg:#2a2c1d;--fail:#f0a08a;--fail-bg:#3a231d;--pass:#8fd0a8;--pass-bg:#1d3326;
   --grid:#1f1d1a;--wire-p:#57544b;--term:#c9c6bd;--term-bg:#2a2824;--hit:#33291c;--hit-line:#e2774f;--chip:#2c2a26;--code:#1a1917;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.35);color-scheme:dark;
@@ -27,7 +27,7 @@
 :root[data-theme="dark"]{
   --bg:#141311;--fg:#ecebe6;--muted:#a3a19a;--faint:#7b7972;--line:#34322d;--card:#211f1c;--head:#26241f;
   --accent:#e2774f;--accent-fg:#1a1a18;--changed:#3a3120;--changed-line:#8a6e2a;--ok:#6cc08f;--bad:#f2817a;--warn:#e0b25a;
-  --hard:#8db8e3;--hard-bg:#1f2c3a;--soft:#e3be78;--soft-bg:#33291a;--judge:#c9a2e6;--judge-bg:#2c2236;--step:#c9c6bd;--step-bg:#2a2824;
+  --hard:#8db8e3;--hard-bg:#1f2c3a;--soft:#e3be78;--soft-bg:#33291a;--judge:#c9a2e6;--judge-bg:#2c2236;--human:#7fd1c7;--human-bg:#17302d;--step:#c9c6bd;--step-bg:#2a2824;
   --param:#c8cc8a;--param-bg:#2a2c1d;--fail:#f0a08a;--fail-bg:#3a231d;--pass:#8fd0a8;--pass-bg:#1d3326;
   --grid:#1f1d1a;--wire-p:#57544b;--term:#c9c6bd;--term-bg:#2a2824;--hit:#33291c;--hit-line:#e2774f;--chip:#2c2a26;--code:#1a1917;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.35);color-scheme:dark;
@@ -100,7 +100,7 @@ details summary{cursor:pointer}
 /* Badges, chips, links */
 .gid{display:inline-block;font:600 11px/1.6 var(--mono);padding:0 6px;border-radius:4px;color:var(--step);background:var(--step-bg)}
 .gid.hard{color:var(--hard);background:var(--hard-bg)}.gid.soft{color:var(--soft);background:var(--soft-bg)}
-.gid.judge{color:var(--judge);background:var(--judge-bg)}.gid.end{color:var(--term);background:var(--term-bg)}
+.gid.judge{color:var(--judge);background:var(--judge-bg)}.gid.human{color:var(--human);background:var(--human-bg)}.gid.end{color:var(--term);background:var(--term-bg)}
 .kind{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint)}
 .chip{display:inline-flex;align-items:baseline;gap:4px;padding:0 6px;border-radius:5px;background:var(--chip);border:1px solid transparent;cursor:pointer;white-space:nowrap;font-size:12px;line-height:1.6}
 .chip .rid{font:11px var(--mono);color:var(--muted)}
@@ -155,8 +155,8 @@ body.focus .node{opacity:.35}
 body.focus .node.on{opacity:1}
 .node.sel{outline:2px solid var(--accent);outline-offset:2px}
 .node .hd{display:flex;gap:7px;align-items:center;padding:6px 10px;border-radius:9px 9px 0 0;cursor:move;position:relative;background:var(--step-bg)}
-.node.hard .hd{background:var(--hard-bg)}.node.soft .hd{background:var(--soft-bg)}.node.judge .hd{background:var(--judge-bg)}
-.node.judge{border-style:dashed}
+.node.hard .hd{background:var(--hard-bg)}.node.soft .hd{background:var(--soft-bg)}.node.judge .hd{background:var(--judge-bg)}.node.human .hd{background:var(--human-bg)}
+.node.judge,.node.human{border-style:dashed}
 .node.params .hd{background:var(--param-bg)}
 .node .hd .t{font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .node .hd .gid{background:var(--card)}
@@ -309,15 +309,16 @@ const PROSE_NUMBER = /(?<![\w.#{-])\d+(?:\.\d+)?(?![\w}])/;
 const PROSE = ["when", "do", "ensure", "brief"];
 const MATRIX = ["in", "out", "intent", "example", "ensure"];
 const FLOW = ["step", "gate", "end"];
-const KINDS = ["hard", "soft", "judge"];
+const KINDS = ["hard", "soft", "judge", "human"];
 const SCOPES = ["snippet", "tool", "agent"];
-const LEVELS = ["none", "code", "observed", "proved"];  // low to high; "judge" is apart
+const LEVELS = ["none", "code", "tested", "observed", "proved"];  // low to high; "judge" and "human" are apart
+let BOUND = {};  // unit -> { "by" name -> level }: from rig.py serve, which can read the code files
 const STAMPS = ["proved", "observed"];
 const BASE_TYPES = ["str", "text", "word", "path", "int", "float", "bool", "list", "dict", "any"];
 const TYPE_LISTS = ["list", "tuple", "record", "maybe", "one-of"];
 const CHILDREN = {
-  unit: ["in", "out", "intent", "example", "ensure", "note", "uses", "external", "probe", "rule", "preset", "cast", "step", "gate", "end"],
-  ensure: ["check", "note"], probe: ["check", "note"], external: ["note"], preset: ["set"], note: ["evidence"],
+  unit: ["in", "out", "intent", "example", "ensure", "note", "uses", "external", "probe", "rule", "preset", "cast", "code", "step", "gate", "end"],
+  ensure: ["check", "note"], probe: ["check", "note"], external: ["note"], code: ["test", "note"], preset: ["set"], note: ["evidence"],
   rule: ["min", "max", "options", "unit", "label", "note"],
   step: ["do", "by", "reads", "next", "note"],
   gate: ["when", "reads", "ensure", "by", "brief", "pass", "fail", "note"],
@@ -493,25 +494,41 @@ function fileUnits(u) {  // the viewer reads one file: a unit in another file co
   for (const v of units(u.root || { children: [] })) if (!has(m, word(v, 0))) m[word(v, 0)] = v;
   return m;
 }
+// Code outside the .rig file: "code [prefix] path", with an optional "test path" child (as rig.py).
+function codeLines(u) {
+  return kids(u, "code").map(c => { const own = c.args.length < 2, t = kids(c, "test");
+    return { prefix: own ? null : word(c, 0, null), file: word(c, own ? 0 : 1, null), test: t.length ? word(t[0], 0, null) : null, line: c.line }; });
+}
+function codeFor(b, u) {
+  for (const c of codeLines(u)) {
+    if (c.prefix === null && b === word(u, 0)) return c;
+    if (c.prefix && b.startsWith(c.prefix + ".") && b.length > c.prefix.length + 1) return c;
+  }
+  return null;
+}
+const boundLevel = (b, u) => (BOUND[word(u, 0)] || {})[b] || "code";  // the viewer cannot read the code files
 function unitLevel(name, ctx, seen) {
   const u = ctx[name];
   if (!u || seen.includes(name)) return "code";
   const states = kids(u, "cast").map(c => castState(u, c).s);
   for (const s of ["proved", "observed"]) if (states.includes(s)) return s;
+  if (codeFor(name, u)) return boundLevel(name, u);
   const gates = kids(u, "gate");
   if (!gates.length) return "code";
-  return lowest(gates.map(g => gateLevel(g, u, ctx, [...seen, name])).map(x => x === "judge" || x === "none" ? "code" : x));
+  return lowest(gates.map(g => gateLevel(g, u, ctx, [...seen, name])).map(x => x === "judge" || x === "human" || x === "none" ? "code" : x));
 }
 function byTarget(b, u) {
+  if (b && codeFor(b, u)) return "bound";
   if (b === word(u, 0)) return "self";
   if (kids(u, "external").some(x => word(x, 0) === b)) return "external";
   if (kids(u, "uses").some(x => word(x, 0) === b) || units(u.root || { children: [] }).some(v => word(v, 0) === b)) return "unit";
   return null;
 }
 function gateLevel(g, u, ctx, seen) {
-  if (word(g, 1) === "judge") return "judge";
+  if (word(g, 1) === "judge" || word(g, 1) === "human") return word(g, 1);
   return lowest(kids(g, "by").map(x => {
     const b = word(x, 0), k = byTarget(b, u);
+    if (k === "bound") return boundLevel(b, u);
     if (k === "self") { const st = kids(u, "cast").map(c => castState(u, c).s); return st.includes("proved") ? "proved" : st.includes("observed") ? "observed" : "code"; }
     if (k === "external") return "code";
     if (k === "unit") return unitLevel(b, ctx, seen);
@@ -519,17 +536,19 @@ function gateLevel(g, u, ctx, seen) {
   }));
 }
 function coverage(u) {
-  const ctx = fileUnits(u), d = { gates: 0, proved: 0, observed: 0, code: 0, judge: 0, none: 0 };
+  const ctx = fileUnits(u), d = { gates: 0, proved: 0, tested: 0, observed: 0, code: 0, judge: 0, human: 0, none: 0 };
   for (const g of kids(u, "gate")) { d.gates++; d[gateLevel(g, u, ctx, [word(u, 0)])]++; }
   return d;
 }
 function unitStatus(u) {
   const out = kids(u, "cast").map(c => { const s = castState(u, c); return { t: s.t, cls: s.cls }; });
   const cv = coverage(u);
-  const parts = ["proved", "observed", "code", "judge", "none"].filter(k => cv[k] || k === "proved" || k === "judge").map(k => cv[k] + " " + k);
-  if (cv.gates) out.push({ t: `coverage ${Math.round(100 * cv.proved / cv.gates)}% (${parts.join(", ")})`, cls: cv.proved === cv.gates ? "ok" : cv.none ? "warn" : "" });
+  const parts = ["proved", "tested", "observed", "code", "judge", "human", "none"].filter(k => cv[k] || k === "proved" || k === "judge").map(k => cv[k] + " " + k);
+  if (cv.gates) out.push({ t: `coverage ${Math.round(100 * (cv.proved + cv.tested) / cv.gates)}% (${parts.join(", ")})`, cls: cv.proved + cv.tested === cv.gates ? "ok" : cv.none ? "warn" : "" });
   else if (kids(u, "step").length) out.push({ t: kids(u, "step").length + " steps, no gates", cls: "" });
-  if (!kids(u, "cast").length && u.children.some(c => MATRIX.includes(c.head)) && !cv.gates && !kids(u, "step").length) out.push({ t: "hole", cls: "warn" });
+  const own = codeFor(word(u, 0, ""), u);
+  if (own) out.push({ t: `code ${own.file} (${boundLevel(word(u, 0), u)})`, cls: "" });
+  if (!kids(u, "cast").length && !own && u.children.some(c => MATRIX.includes(c.head)) && !cv.gates && !kids(u, "step").length) out.push({ t: "hole", cls: "warn" });
   return out.length ? out : [{ t: "empty", cls: "" }];
 }
 
@@ -601,9 +620,14 @@ function check(root) {
       else if (exts.filter(e => e === word(x, 0)).length > 1) err.push([x.line, `external "${word(x, 0)}" is defined twice`]);
     });
     const usedBy = new Set();
+    const prefixes = codeLines(u).map(c => c.prefix);
+    for (const c of codeLines(u)) {
+      if (!c.file) err.push([c.line, 'write "code <path>" or "code <prefix> <path>"']);
+      else if (prefixes.filter(x => x === c.prefix).length > 1) err.push([c.line, "two \"code\" lines for " + (c.prefix ? `"${c.prefix}"` : "the unit")]);
+    }
     for (const f of u.children.filter(c => c.head === "step" || c.head === "gate")) for (const b of kids(f, "by")) {
       usedBy.add(word(b, 0));
-      if (word(b, 0) && !byTarget(word(b, 0), u)) warn.push([b.line, `"by ${word(b, 0)}" names no unit, used unit or external: add "external ${word(b, 0)}" if the code is outside Rig`]);
+      if (word(b, 0) && !byTarget(word(b, 0), u)) warn.push([b.line, `"by ${word(b, 0)}" names no unit, used unit, external or "code" line: add "code <prefix> <path>" for code in a file`]);
     }
     kids(u, "external").forEach(x => { if (word(x, 0) && !usedBy.has(word(x, 0))) warn.push([x.line, `external "${word(x, 0)}" is not named by any "by"`]); });
     const langs = kids(u, "cast").map(c => castInfo(c).lang);
@@ -646,9 +670,9 @@ function check(root) {
       }
       if (f.head === "gate") {
         const k = word(f, 1);
-        if (!KINDS.includes(k)) err.push([f.line, `gate "${id}": the kind must be hard, soft or judge`]);
-        else if (k !== "judge" && !kids(f, "by").length) warn.push([f.line, `gate "${id}" is ${k} but no code decides it: add "by", or make it judge`]);
-        else if (k === "judge" && !kids(f, "brief").length) warn.push([f.line, `judge gate "${id}" has no brief`]);
+        if (!KINDS.includes(k)) err.push([f.line, `gate "${id}": the kind must be hard, soft, judge or human`]);
+        else if ((k === "hard" || k === "soft") && !kids(f, "by").length) warn.push([f.line, `gate "${id}" is ${k} but no code decides it: add "by", or make it judge`]);
+        else if ((k === "judge" || k === "human") && !kids(f, "brief").length) warn.push([f.line, `${k} gate "${id}" has no brief`]);
         if (!kids(f, "pass").length) warn.push([f.line, `gate "${id}" has no "pass"`]);
       }
     }
@@ -713,6 +737,7 @@ function catalog(u, preset) {
     intent: kids(u, "intent").map(textOf).join(" "),
     notes: notesOf(u), uses: kids(u, "uses").map(x => { const d = { unit: word(x, 0) }; if (word(x, 1)) d.file = word(x, 1); return d; }),
     external: kids(u, "external").map(x => ({ name: word(x, 0, null), text: x.args.slice(1).filter(a => a.k === "str").map(str).join(" ") })),
+    code: codeLines(u).map(c => ({ prefix: c.prefix, file: c.file, test: c.test })),
     in: kids(u, "in").map(portInfo),
     out: kids(u, "out").length ? portInfo(kids(u, "out")[0]) : null,
     start: starts.length ? word(starts[0], 0) : null,
@@ -777,6 +802,7 @@ function skill(u, rulesPath, preset) {
       else if (k === "hard") out.push(by ? `- Decided by code: run ${by} and obey its result. Do not decide this gate yourself.` : guess);
       else if (k === "soft") out.push(by ? `- Decided by code: run ${by}. If it fails, report it and go on as written below.` : guess);
       else if (k === "judge") out.push(has(f, "brief") ? `- Judge: ${fill(f.brief)}. Label the result as a guess.` : "- Judge: decide it yourself. Label the result as a guess.");
+      else if (k === "human") out.push(has(f, "brief") ? `- A person decides: ${fill(f.brief)}. Stop and ask the person. Do not decide this gate yourself.` : "- A person decides. Stop and ask the person. Do not decide this gate yourself.");
       for (const n of f.notes || []) out.push("- Note: " + fill(n.text));
       for (const [key, title] of [["next", "Next"], ["pass", "Pass"], ["fail", "Fail"]]) for (const l of f[key] || []) out.push(`- ${title}: ${go(l)}.`);
       if (k === "end") out.push("- Stop here.");
@@ -905,7 +931,13 @@ function emptyView() {
       el("p", { class: "dim" }, "Tip: run ", el("code", {}, "python skills/rig/rig.py serve FILE"), " to edit a file in place, or serve the repository over http to open the examples."));
 }
 async function fetchFile(url) {
-  try { const r = await fetch(url, { cache: "no-store" }); if (!r.ok) throw new Error(r.status); load(await r.text(), r.headers.get("X-Rig-File") || url.split("/").pop()); }
+  try {
+    const r = await fetch(url, { cache: "no-store" }); if (!r.ok) throw new Error(r.status);
+    const text = await r.text();
+    BOUND = {};
+    if (r.headers.get("X-Rig-File")) { try { const b = await fetch("/levels", { cache: "no-store" }); if (b.ok) BOUND = await b.json(); } catch (e) { /* a plain file server has no levels */ } }
+    load(text, r.headers.get("X-Rig-File") || url.split("/").pop());
+  }
   catch (e) { msg("Could not load " + url + ": " + e.message, false); }
 }
 
@@ -1001,15 +1033,15 @@ function flowTable(u) {
     }));
     if (!(f.reads || []).length) eds.append(el("span", { class: "none" }, "no rules"));
     const by = (f.by || []).join(", ");
-    const level = node.head === "gate" && f.kind !== "judge" ? gateLevel(node, u, fileUnits(u), [word(u, 0)]) : null;
+    const level = node.head === "gate" && f.kind !== "judge" && f.kind !== "human" ? gateLevel(node, u, fileUnits(u), [word(u, 0)]) : null;
     return el("tr", { id: rowId(f.id), class: (f.reads || []).some(r => isChanged(u, r)) ? "changed" : "" },
       el("td", {}, el("div", {}, el("span", { class: "gid " + f.kind }, f.id), " ", el("span", { class: "kind" }, f.kind === "step" || f.kind === "end" ? f.kind : f.kind + " gate")),
         f.name ? el("div", { style: "font-weight:600;margin-top:2px" }, f.name) : null,
-        el("div", { class: "code" }, by ? "by " + by : f.kind === "judge" ? "decided by the model" : f.kind === "hard" || f.kind === "soft" ? "no code yet" : ""),
-        level && by ? el("div", {}, el("span", { class: "st " + (level === "proved" ? "ok" : level === "none" ? "warn" : "") }, level)) : null,
+        el("div", { class: "code" }, by ? "by " + by : f.kind === "judge" ? "decided by the model" : f.kind === "human" ? "decided by a person" : f.kind === "hard" || f.kind === "soft" ? "no code yet" : ""),
+        level && by ? el("div", {}, el("span", { class: "st " + (level === "proved" || level === "tested" ? "ok" : level === "none" ? "warn" : "") }, level)) : null,
         (f.notes || []).map(n => el("div", { class: "dim", style: "font-size:12px;margin-top:4px" }, "note: ", chips(u, n.text, pick)))),
       el("td", {}, txt("when", "when"), txt("ensure", f.kind === "step" ? "ensure" : "check")),
-      el("td", {}, txt("do"), txt("brief", "judge")),
+      el("td", {}, txt("do"), txt("brief", f.kind === "human" ? "ask" : "judge")),
       el("td", {}, leads), el("td", {}, eds));
   });
   return el("div", {}, el("h3", {}, "Flow"), strip, el("div", { class: "tw" }, el("table", {},
@@ -1125,7 +1157,7 @@ function nodeEl(n) {
       el("div", { class: "foot" }));
   }
   const f = n.f, k = f.kind, txt = f.ensure || f.do || f.brief || f.when;
-  const byLine = (f.by || []).length ? "by " + f.by.join(", ") : k === "judge" ? "decided by the model" : k === "step" ? "" : "no code yet";
+  const byLine = (f.by || []).length ? "by " + f.by.join(", ") : k === "judge" ? "decided by the model" : k === "human" ? "decided by a person" : k === "step" || k === "end" ? "" : "no code yet";
   return el("div", { class: "node " + k, "data-node": n.id, onclick: e => { if (!e.target.closest("input,select")) select(n.id); } },
     el("div", { class: "hd", ...drag }, port("in flow", f.id + ":in"), el("span", { class: "gid " + k }, f.id), el("span", { class: "t", title: f.name || "" }, f.name || ""), el("span", { class: "kind" }, k)),
     byLine ? el("div", { class: "by" }, byLine) : null,
@@ -1151,7 +1183,7 @@ function renderGraph() {
     return;
   }
   const cv = coverage(u);
-  $("#cov").replaceChildren(el("b", {}, word(u, 0)), " · ", ...(cv.gates ? [el("b", {}, Math.round(100 * cv.proved / cv.gates) + "%"), ` coverage · ${cv.proved} of ${cv.gates} gates by proved code` + (cv.observed ? `, ${cv.observed} observed` : "") + (cv.code ? `, ${cv.code} by code that Rig does not prove` : "")] : ["no gates"]));
+  $("#cov").replaceChildren(el("b", {}, word(u, 0)), " · ", ...(cv.gates ? [el("b", {}, Math.round(100 * (cv.proved + cv.tested) / cv.gates) + "%"), ` coverage · ${cv.proved + cv.tested} of ${cv.gates} gates by proved or tested code` + (cv.observed ? `, ${cv.observed} observed` : "") + (cv.code ? `, ${cv.code} by code with no test` : "") + (cv.judge ? `, ${cv.judge} by the model` : "") + (cv.human ? `, ${cv.human} by a person` : "")] : ["no gates"]));
   if (!G.u || word(G.u, 0) !== word(u, 0) || G.name !== S.name) { try { G.pos = JSON.parse(store.get(posKey()) || "{}") || {}; } catch (e) { G.pos = {}; } }
   buildGraph(u); G.name = S.name;
   if (S.sel && !G.nodes.some(n => n.id === S.sel)) S.sel = null;
@@ -1257,7 +1289,7 @@ function inspector() {
     a.replaceChildren(el("h2", {}, word(u, 0)), el("p", { class: "dim" }, chips(u, G.c.intent || "", pickRule)),
       el("div", { class: "legend" }, svgLegend("var(--pass)", ""), "pass / next", svgLegend("var(--fail)", "6 5"), "fail", svgLegend("var(--pass)", "2 5"), "back to an earlier node", svgLegend("var(--wire-p)", ""), "rule → node input"),
       el("div", { class: "k" }, "Kinds"),
-      el("p", { class: "hint" }, el("span", { class: "gid hard" }, "hard"), " code decides; a fail blocks. ", el("span", { class: "gid soft" }, "soft"), " code decides; a fail is reported. ", el("span", { class: "gid judge" }, "judge"), " the model decides; the result is a guess. ", el("span", { class: "gid" }, "step"), " work. ", el("span", { class: "gid end" }, "end"), " the flow stops."),
+      el("p", { class: "hint" }, el("span", { class: "gid hard" }, "hard"), " code decides; a fail blocks. ", el("span", { class: "gid soft" }, "soft"), " code decides; a fail is reported. ", el("span", { class: "gid judge" }, "judge"), " the model decides; the result is a guess. ", el("span", { class: "gid human" }, "human"), " a person decides; the flow waits. ", el("span", { class: "gid" }, "step"), " work. ", el("span", { class: "gid end" }, "end"), " the flow stops."),
       el("div", { class: "k" }, "Use"),
       el("p", { class: "hint" }, "Click a node to read it here. Hover a rule to see where it goes. Change a value in a rule box; Save writes it into the file. Drag a node by its header, drag the background to pan, wheel to zoom. ", el("kbd", {}, "F"), " fits, ", el("kbd", {}, "Esc"), " clears."),
       el("div", { class: "k" }, "Wiring"),
@@ -1269,9 +1301,9 @@ function inspector() {
   a.replaceChildren(el("div", {},
     el("div", {}, el("span", { class: "gid " + f.kind }, f.id), " ", el("span", { class: "kind" }, f.kind === "step" || f.kind === "end" ? f.kind : f.kind + " gate")),
     el("h2", {}, f.name || f.id),
-    (f.by || []).length ? el("p", { class: "code" }, "by " + f.by.join(", ")) : f.kind === "judge" ? el("p", { class: "code" }, "decided by the model: the result is a guess") : null,
+    (f.by || []).length ? el("p", { class: "code" }, "by " + f.by.join(", ")) : f.kind === "judge" ? el("p", { class: "code" }, "decided by the model: the result is a guess") : f.kind === "human" ? el("p", { class: "code" }, "decided by a person: the flow waits for the answer") : null,
     sec("When", f.when && chips(u, f.when, pickRule)), sec("Do", f.do && chips(u, f.do, pickRule)),
-    sec(f.kind === "step" ? "Ensure" : "Check", f.ensure && chips(u, f.ensure, pickRule)), sec("Judge", f.brief && chips(u, f.brief, pickRule)),
+    sec(f.kind === "step" ? "Ensure" : "Check", f.ensure && chips(u, f.ensure, pickRule)), sec(f.kind === "human" ? "Ask the person" : "Judge", f.brief && chips(u, f.brief, pickRule)),
     (f.notes || []).length ? [el("div", { class: "k" }, "Notes"), f.notes.map(n => el("p", { class: "hint" }, chips(u, n.text, pickRule), n.evidence.length ? " (evidence: " + n.evidence.join(", ") + ")" : ""))] : null,
     (f.reads || []).length ? [el("div", { class: "k" }, "Reads"), el("p", {}, f.reads.map(rid => [chips(u, "{" + rid + "}", pickRule), " "]))] : null,
     [...(f.next || []), ...(f.pass || [])].length || (f.fail || []).length ? el("div", { class: "k" }, "Leads to") : null,

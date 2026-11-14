@@ -118,6 +118,9 @@ contexts:
       captures:
         1: keyword.other.context.rig
         2: support.function.rig
+    - match: '^\s*(code|test)(?=[\s;]|$)'
+      captures:
+        1: keyword.other.context.rig
     - match: '^\s*(rule)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?'
       captures:
         1: storage.type.rule.rig
@@ -137,7 +140,7 @@ contexts:
       captures:
         1: storage.type.node.rig
         2: entity.name.function.node.rig
-    - match: '^\s*(gate)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?(?:\s+(hard|soft|judge)(?=[\s;]|$))?'
+    - match: '^\s*(gate)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?(?:\s+(hard|soft|judge|human)(?=[\s;]|$))?'
       captures:
         1: storage.type.node.rig
         2: entity.name.function.node.rig

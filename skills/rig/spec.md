@@ -1,6 +1,6 @@
 # Rig language specification, version 0
 
-Rig stands for **Reason, Intent, Gate**. The model reasons: it writes code and decides `judge` gates. The human or the model states the intent. Gates prove the result in a real runtime.
+Rig stands for **Reason, Intent, Gate**. The model reasons: it writes code and decides `judge` gates. The human or the model states the intent. Gates decide in code, in a real runtime; a `human` gate waits for a person.
 
 Rig files use the extension `.rig`. They are UTF-8 text. This page is the one definition of the language.
 
@@ -68,7 +68,10 @@ The checker warns about a type that it does not know. A proof checks each result
 | `note "text"` | A remark that must stay with its parent. Use it when the code looks wrong but is right, or when a value must not change. |
 | ↳ `evidence <path or url>` | Optional child: a test or report that supports the note. |
 | `uses <unit> [file]` | This unit depends on another unit. Give the file when the other unit is in another `.rig` file; the path is relative to this file. |
-| `external <name> ["text"]` | Code that Rig does not prove: a library function, a service, or code outside the `.rig` files. A `by` line can name it. |
+| `external <name> ["text"]` | Code that Rig cannot see: a library function or a service. A `by` line can name it. |
+| `code <path>` | The function of this unit is in the file at `path` (relative to the `.rig` file). The function has the name of the unit (`-` becomes `_`). |
+| `code <prefix> <path>` | Functions of this unit's steps and gates are in the file at `path`. A `by` line names one as `prefix.function`, for example `by gates.notes_ok`. |
+| ↳ `test <path>` | Optional child of `code`: the test file of that code. A function that the test file names is **tested**. |
 | `probe <arg>*` | A live run: the code runs with these inputs against the real world (the network, files, services). Its result is **observed**, never proved. |
 | ↳ `check <lang> "expression"` | Child of `probe`: a condition on this one result. |
 | `rule <group.name> <value>` | A parameter. The id has a group and a name, joined by a dot. The value is a number, `on`/`off`, a word, a string, a `/regex/` or a `( list )`. |
@@ -96,7 +99,7 @@ cast <lang> #<matrix-hash> #<body-hash> [proved|observed <YYYY-MM-DD>]
 | Node | Meaning |
 |---|---|
 | `step <id> ["name"]` | Something the agent does. |
-| `gate <id> hard\|soft\|judge ["name"]` | A checkpoint. |
+| `gate <id> hard\|soft\|judge\|human ["name"]` | A checkpoint. |
 | `end <id> ["label"]` | An outcome. The flow stops here. |
 
 Children of `step` and `gate`:
@@ -107,8 +110,8 @@ Children of `step` and `gate`:
 | `do "text"` | (step) What the step does. |
 | `reads <rule-id>*` | The rules that this node uses. A rule named as `{group.name}` in the text of the node is read too, so `reads` is needed only for rules that the text does not name. |
 | `ensure "condition"` | (gate) The condition, in plain words. |
-| `by <name>` | The code that does the step or decides the gate. The name must be a unit of this file, a unit in a `uses` line, or an `external` of this unit. A unit can name itself: then its own cast decides. The checker warns about any other name. |
-| `brief "text"` | (judge gate) What the model must judge, and how. |
+| `by <name>` | The code that does the step or decides the gate. The name must be a function of a `code` line (`prefix.function`), a unit of this file, a unit in a `uses` line, or an `external` of this unit. A unit can name itself: then its own cast or its own `code` decides. The checker warns about any other name. |
+| `brief "text"` | (judge gate) What the model must judge, and how. (human gate) What to ask the person. |
 | `next -> <id>` | (step) The next node. |
 | `pass -> <id>` | (gate) Where to go on pass. |
 | `fail -> <id> ["when"]` | (gate) Where to go on fail. Repeat for more than one case. |
@@ -122,6 +125,7 @@ The flow starts at the first `step` or `gate` of the unit.
 | `hard` | code (`by`) | the flow follows `fail`; the work does not continue as if it passed |
 | `soft` | code (`by`) | the result is reported; `fail` may lead on to the same next node |
 | `judge` | the model, using `brief` | the result is labelled **guessed** |
+| `human` | a person, asked as `brief` says | the flow waits for the answer; the model never answers for the person |
 
 **The level of a gate** says how much is known about the code that decides it:
 
@@ -129,13 +133,17 @@ The flow starts at the first `step` or `gate` of the unit.
 |---|---|
 | **proved** | `by` names a unit that is proved (Section 3). |
 | **observed** | `by` names a unit that is observed. |
-| **code** | `by` names an `external`, or a unit that is neither proved nor observed. |
+| **tested** | `by` names a function of a `code` line, the function exists in the file, and the `test` file of that line names it. |
+| **code** | `by` names a function of a `code` line that no test names, an `external`, or a unit that is neither proved nor observed. |
 | **judge** | a `judge` gate: the model decides. |
-| **none** | a `hard` or `soft` gate with no `by`, or with a `by` that names nothing. |
+| **human** | a `human` gate: a person decides. |
+| **none** | a `hard` or `soft` gate with no `by`, or with a `by` that names nothing (also: a function that is not in its file). |
 
-A gate with more than one `by` has the lowest level of them. A unit is **proved** when its cast is proved, or when it has no stamped cast and all of its gates are proved. It is **observed** in the same way, with observed or proved in place of proved. A unit in another file counts only when the tool can read that file; else it counts as code.
+A gate with more than one `by` has the lowest level of them. A unit is **proved** when its cast is proved, or when it has no stamped cast and all of its gates are proved. It is **observed** in the same way, with observed or proved in place of proved. A unit in another file counts only when the tool can read that file; else it counts as code. The same holds for a `code` file: the viewer cannot read it when you drop a `.rig` file on the page, so it shows **code**; `rig.py check` and `rig.py serve` read the files.
 
-**Coverage** of a flow = (proved gates) ÷ (all gates). The status also shows the count at each level.
+**Tested is a weaker word than proved.** Proved means that Rig ran the examples. Tested means only that a test file names the function: run the tests yourself (`rig.py test`, Section 7).
+
+**Coverage** of a flow = (proved gates + tested gates) ÷ (all gates). The status also shows the count at each level.
 
 **Numbers in the text.** A number in the `when`, `do`, `ensure` or `brief` text of a step or gate gets a warning. Make it a rule and write `{group.name}`: then the value has one place.
 
@@ -179,7 +187,7 @@ Both hashes are written with a `#` prefix. `rig.py hash` prints them.
 3. **Remelted**: go to rule 2. The old cast stays only in version control.
 4. **Stale**: prove the code again. If the intent no longer describes it, propose a new intent to the human.
 5. Never imagine what code returns. A proof comes from a run.
-6. A `judge` gate is decided by the model. Its result is labelled **guessed**, and the label must be visible in the answer (Section 6, Report).
+6. A `judge` gate is decided by the model. Its result is labelled **guessed**, and the label must be visible in the answer (Section 6, Report). A `human` gate is decided by a person: stop, ask, and wait. Never answer for the person.
 7. Never falsify an intent. When you describe existing code, the intent states what the code does, and real runs prove it. Anyone may write or change an intent; a gate decides.
 8. A probe never proves. Its result is **observed**: true on that day, against that world.
 
@@ -193,9 +201,23 @@ One unit compiles to the forms that agents read. The `.rig` file stays the one s
 | **Skill** (Markdown) | an agent that follows instructions, for example a `SKILL.md` | `rig.py compile skill FILE [UNIT]` |
 | **Tool** (JSON) | a model that calls tools: name, description and JSON Schema of the inputs | `rig.py compile tool FILE [UNIT]` |
 
-- **Catalogue.** The keys are the words of Rig: `intent`, `in`, `out`, `uses`, `external`, `notes`, `presets`, `rules` and `flow`. Each input has `name`, `type` and `text`; `out` has `type` and `text`. Each `uses` entry has `unit`, and `file` when it is given. Each external has `name` and `text`. `coverage` has the count of `gates` and the count at each level: `proved`, `observed`, `code`, `judge` and `none`. Each rule has `id`, `group`, `label`, `type` (`number`, `switch`, `choice`, `text`, `pattern` or `list`), `value` and `default`, and when they exist `min`, `max`, `options`, `unit`, `note` and `evidence`. Each flow node has `id`, `kind` (`step`, `hard`, `soft`, `judge` or `end`), `name`, its texts, `by`, `reads`, and `next`, `pass` and `fail` as lists of `{"to", "when"}`. `rig.py from-json` turns a catalogue back into Rig with the same meaning.
-- **Skill.** The rules as a table, then each node of the flow in order: what to do, what to check, the code to run and obey, and where to go next. A `judge` gate tells the agent to label its result as a guess.
+- **Catalogue.** The keys are the words of Rig: `intent`, `in`, `out`, `uses`, `external`, `code`, `notes`, `presets`, `rules` and `flow`. Each `code` entry has `prefix` (null for the unit's own function), `file` and `test`. Each input has `name`, `type` and `text`; `out` has `type` and `text`. Each `uses` entry has `unit`, and `file` when it is given. Each external has `name` and `text`. `coverage` has the count of `gates` and the count at each level: `proved`, `tested`, `observed`, `code`, `judge`, `human` and `none`. Each rule has `id`, `group`, `label`, `type` (`number`, `switch`, `choice`, `text`, `pattern` or `list`), `value` and `default`, and when they exist `min`, `max`, `options`, `unit`, `note` and `evidence`. Each flow node has `id`, `kind` (`step`, `hard`, `soft`, `judge`, `human` or `end`), `name`, its texts, `by`, `reads`, and `next`, `pass` and `fail` as lists of `{"to", "when"}`. `rig.py from-json` turns a catalogue back into Rig with the same meaning.
+- **Skill.** The rules as a table, then each node of the flow in order: what to do, what to check, the code to run and obey, and where to go next. A `judge` gate tells the agent to label its result as a guess. A `human` gate tells the agent to stop and ask the person.
+- **Skill with a runner.** With `--driver CMD`, the skill does not ask the agent to walk the flow. A runner (Section 7) walks it in code. The agent starts a run with `CMD run`, and answers only the nodes that code cannot do, with `CMD answer`. Use this form whenever the unit has a runner: a gate that lives only in the text of a skill is a suggestion, and a gate in a runner is a fact. The viewer shows the form without a runner.
 - **Report.** When a flow has gates that the agent decides itself (`judge` gates, and `hard` or `soft` gates with no `by`), the skill ends with a Report section. It tells the agent to end its answer with one line, `Guessed:` and the ids of those gates that it decided. A person must see which results are guesses.
 - **Tool.** `name` is the unit name. `description` is the intent, with the rule values written in. `parameters` is a JSON Schema object: one property for each `in`, with the text as its description. An input whose type is `(maybe T)` is not required. `returns` is the JSON Schema of the `out` type.
 - **Values.** By default, the compilers write each value in place of `{group.name}`. With `--rules PATH`, the skill refers to the catalogue at PATH instead, so the values have one place at run time too. With `--preset NAME`, the values of that preset are used.
 - **Serve.** `rig.py serve FILE --json OUT --skill OUT` shows the file in the viewer. Save writes the `.rig` file and compiles it again.
+
+## 7. Projects: a unit with its code, its runner and its fronts
+
+A **project** is a folder with one `rig.json` file. It names the `.rig` source, the level of the tool, and the files that are compiled from the source. The guide (`guide/`, next to this file) explains the levels and the build order.
+
+| Command | What it does |
+|---|---|
+| `rig.py new DIR NAME [--level N]` | Make a project folder from the templates: the `.rig` source, the code files, the tests, the runner, and the folders for notes and reports. |
+| `rig.py build [DIR]` | Compile the source to every front that `rig.json` lists: the catalogue, the skill, the tool definitions. `--check`: write nothing, and fail if a compiled file is not current. |
+| `rig.py doctor [DIR]` | Check the project against the list of its level. It prints what is missing. |
+| `rig.py test [DIR]` | Run the tests of the project (the `tests` command of `rig.json`). |
+
+**The runner** is `rigkit.py` (folder `kit/`). It reads the catalogue and walks the flow. Code does the steps and decides the `hard` and `soft` gates. At a `judge` gate, a `human` gate, or a step with no code, the run stops and waits for an answer. The runner refuses an answer for another node. Each run is saved as a file, so it survives a restart, and it keeps the path it took (the trace).
