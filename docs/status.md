@@ -22,10 +22,10 @@ The pattern comes from a private production agent. Only the concept and the mach
 | # | Part | State |
 |---|---|---|
 | 1 | Language: `human` gates, `code` and `test` lines, the level `tested`, coverage; viewer, spec and grammars in step | done |
-| 2 | Runtime kit `rigkit.py`: rules, verdicts, runs, guard, command line, regression; tests | in work |
-| 3 | Project commands in `rig.py`: `new`, `build`, `doctor`, `test`; templates | open |
-| 4 | One complete example tool, built with the kit | open |
-| 5 | The guide: method, levels, build order, patterns, fronts | open |
+| 2 | Runtime kit `rigkit.py`: rules, verdicts, runs, guard, command line, regression; tests | done |
+| 3 | Project commands in `rig.py`: `new`, `build`, `doctor`, `test`; templates | done |
+| 4 | One complete example tool, built with the kit (`examples/release-tool`) | done |
+| 5 | The guide: method, levels, build order, patterns, fronts | in work |
 | 6 | The skill, split by task; README and docs refocused | open |
 | 7 | LM Studio plugin front (template and bridge) | open |
 | 8 | `bandsearch` brought up to the kit (enforced gates, a runner, a regression set) | open |
@@ -34,3 +34,4 @@ The pattern comes from a private production agent. Only the concept and the mach
 ## Log
 
 - 2026-11-15, part 1. `rig.py`: gate kind `human`; `code [prefix] path` with a `test` child; `by prefix.function`; level `tested`; coverage counts proved and tested gates; `compile skill --driver CMD` for a skill that starts runs and does not walk the flow; `serve` gives the levels of bound code to the viewer at `/levels`. Viewer, spec (new Section 7) and editor grammars updated. All 37 tests pass.
+- 2026-11-15, parts 2 to 4. `skills/rig/kit/rigkit.py`: `Rules`, `Kit` (bind code, verdicts, runs saved as files, refusals, `resume` after an error, a loop limit), the command line (`run`, `answer`, `approve`, `resume`, `status`, `rules`, `flow`, `call`, `regress`), and the `step` wrapper for code inside a host. `skills/rig/rig_project.py`: `rig.py new | build | doctor | test`, with the project file `rig.json` and the templates in `kit/templates/`. `examples/release-tool`: a level 4 tool with all four gate kinds, 12 regression cases, its notes and its compiled skill. The doctor found a real gap while the example was built (an end node that no regression case reached). 58 tests pass.

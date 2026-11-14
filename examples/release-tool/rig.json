@@ -1,0 +1,12 @@
+{
+ "rig": 0,
+ "name": "release",
+ "level": 4,
+ "source": "release.rig",
+ "unit": "release",
+ "driver": "python3 tool.py",
+ "build": {"gen": "gen", "skill": "skill/SKILL.md"},
+ "kit": "rigkit.py",
+ "tests": "python3 -m unittest discover -s tests",
+ "regression": "tests/regression-set.json"
+}

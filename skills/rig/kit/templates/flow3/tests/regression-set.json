@@ -1,0 +1,5 @@
+[
+ {"name": "too short", "inputs": {"item": "ab"}},
+ {"name": "the model says yes", "inputs": {"item": "a longer item"}, "answers": {"sensible": {"pass": true}}},
+ {"name": "the model says no", "inputs": {"item": "a longer item"}, "answers": {"sensible": {"pass": false, "why": "an example"}}}
+]

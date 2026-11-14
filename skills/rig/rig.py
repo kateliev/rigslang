@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""rig.py: reference tool for the Rig language, version 0. Standard library only.
+"""rig.py: the tool of Rig, version 0. Standard library only.
 
     python rig.py check FILE...               validate; show the status of every unit
     python rig.py hash FILE                   print the matrix and body hashes of every unit
@@ -29,6 +29,13 @@
         [--port 8765] [--json OUT] [--skill OUT] [--rules-ref]
                                               and compiles it again to OUT; --rules-ref makes
                                               the skill read its values from the JSON
+
+    python rig.py new DIR NAME [--level N]    make a project: a tool with its source, code, tests
+                                              and runner (levels 1 to 4: guide/levels.md)
+    python rig.py build [DIR] [--check]       compile the source of a project to its fronts: the
+                                              catalogue, the skill, the tool definitions
+    python rig.py doctor [DIR] [--no-tests]   check a project against the list of its level
+    python rig.py test [DIR]                  run the tests of a project
 
 The language is defined in spec.md (same folder). `prove` and `probe` run the code of the
 file on your machine: use them only on files you trust. On macOS use python3.
@@ -1309,14 +1316,16 @@ def skill(u, rules_path=None, preset=None, driver=None):
 	if c['flow'] and driver:
 		args = ' '.join("{}=<{}>".format(x['name'], x['type'] or 'value') for x in c['in'])
 		out += ['## How to run', '',
-			'Code walks this flow. You do not walk it yourself: you start a run and answer what waits.', '',
+			'Code walks this flow. You do not walk it yourself: you start a run and answer what waits.',
+			'Run every command in the folder of the tool (the folder that holds `rig.json`).', '',
 			'1. Start a run: `{} run \'<inputs as JSON>\'`{}.'.format(driver, ' (inputs: ' + args + ')' if args else ''),
 			'2. Read the result. It is one JSON object.',
 			'   - `outcome`: the run ended at that end node. Report it, with `problems` first.',
 			'   - `waiting`: the run stopped at a node that code cannot do. Read `kind`, `do` and `brief`.',
 			'     - `judge`: decide as `brief` says. Answer: `{} answer <run> \'{{"pass": true}}\'` (or false, with `"why"`).'.format(driver),
 			'     - `step`: do what `do` says. Answer: `{} answer <run> \'{{"result": ...}}\'`.'.format(driver),
-			'     - `human`: ask the person and wait. Answer with the decision of the person, never with your own.',
+			'     - `human`: show the person what `brief` says, ask, and wait. Then give the decision of the person, never your own: `{} approve <run> yes` (or `no`, with a note).'.format(driver),
+			'   - `error`: a step failed. Report the error text. Do not answer the node; after the cause is fixed: `{} resume <run>`.'.format(driver),
 			'   - `refused`: the call was out of order. It is final: do not repeat it. Read `at` and continue from there.',
 			'3. Repeat step 2 until the result has `outcome`.', '',
 			'Never decide a hard or soft gate: code decides them. Use only values from a result or from the rules.',
@@ -1324,6 +1333,7 @@ def skill(u, rules_path=None, preset=None, driver=None):
 			'## Flow (the map of the run)', '']
 	elif c['flow']:
 		out += ['## Flow', '', 'Start at `{}`. Go from node to node as written. Do not skip a gate.'.format(c['start']), '']
+	if c['flow']:
 
 		def go(l):
 			return 'go to `{}`'.format(l['to']) + (' ({})'.format(fill(l['when'])) if 'when' in l else '')
@@ -1338,7 +1348,11 @@ def skill(u, rules_path=None, preset=None, driver=None):
 				out.append('- Rules: ' + ', '.join('`{}`'.format(r) if rules_path or r not in byrule else '`{}` = {}'.format(r, val(r)) for r in f['reads']))
 			by = ', '.join('`{}`'.format(b) for b in f.get('by', []))
 			guess = '- No code decides this gate yet: decide it yourself and label the result as a guess.'
-			if k == 'step' and by:
+			if driver and by and k in ('step', 'hard', 'soft'):
+				out.append('- {} by code: {}. The runner does this.'.format('Done' if k == 'step' else 'Decided', by))
+			elif driver and k == 'step':
+				out.append('- You do this step when the run waits here.')
+			elif k == 'step' and by:
 				out.append('- Code: run {}.'.format(by))
 			elif k == 'hard':
 				out.append('- Decided by code: run {} and obey its result. Do not decide this gate yourself.'.format(by) if by else guess)
@@ -1628,6 +1642,9 @@ def main(argv):
 		sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 	except Exception:
 		pass
+	if argv and argv[0] in ('new', 'build', 'doctor', 'test'):
+		import rig_project
+		return rig_project.main(argv[0], list(argv[1:]))
 	if len(argv) < 2 or argv[0] not in ('check', 'hash', 'prove', 'probe', 'stamp', 'emit', 'json', 'compile', 'from-json', 'serve'):
 		print(__doc__)
 		return 2

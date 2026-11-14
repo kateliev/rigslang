@@ -1,0 +1,7 @@
+[
+ {"name": "too short", "inputs": {"item": "ab"}},
+ {"name": "the model says no", "inputs": {"item": "a longer item"}, "answers": {"sensible": {"pass": false, "why": "an example"}}},
+ {"name": "the person says no", "inputs": {"item": "a longer item"}, "answers": {"sensible": {"pass": true}, "approve": {"person": true, "pass": false}}},
+ {"name": "dry run", "inputs": {"item": "a longer item"}, "answers": {"sensible": {"pass": true}, "approve": {"person": true, "pass": true}}},
+ {"name": "with permission", "inputs": {"item": "a longer item"}, "rules": {"permissions.write": true}, "answers": {"sensible": {"pass": true}, "approve": {"person": true, "pass": true}}}
+]

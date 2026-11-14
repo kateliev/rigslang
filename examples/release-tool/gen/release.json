@@ -1,0 +1,309 @@
+{
+ "rig": 0,
+ "unit": "release",
+ "scope": "agent",
+ "preset": null,
+ "intent": "publish a release folder only when its notes, its version and its tests are ready, and a person agrees",
+ "notes": [],
+ "uses": [],
+ "external": [],
+ "code": [
+  {
+   "prefix": "gates",
+   "file": "gates.py",
+   "test": "tests/test_gates.py"
+  },
+  {
+   "prefix": "steps",
+   "file": "steps.py",
+   "test": "tests/test_steps.py"
+  }
+ ],
+ "in": [
+  {
+   "name": "folder",
+   "type": "path",
+   "text": "the release folder: it holds NOTES.md, VERSION and tests.json"
+  }
+ ],
+ "out": {
+  "type": "text",
+  "text": "the end of the run: published, ready (dry run) or stopped, with the problems"
+ },
+ "start": "collect",
+ "coverage": {
+  "gates": 7,
+  "proved": 0,
+  "tested": 5,
+  "observed": 0,
+  "code": 0,
+  "judge": 1,
+  "human": 1,
+  "none": 0
+ },
+ "presets": {
+  "hotfix": {
+   "notes.min_words": 10,
+   "notes.rounds": 0
+  }
+ },
+ "rules": [
+  {
+   "id": "notes.min_words",
+   "group": "notes",
+   "label": "Shortest release notes",
+   "type": "number",
+   "value": 50,
+   "default": 50,
+   "min": 10,
+   "max": 500,
+   "unit": "words",
+   "note": "shorter notes did not answer the usual questions"
+  },
+  {
+   "id": "notes.rounds",
+   "group": "notes",
+   "label": "Most rewrites of the notes",
+   "type": "number",
+   "value": 2,
+   "default": 2,
+   "min": 0,
+   "max": 5,
+   "note": "a third rewrite did not pass where two had failed; the person then writes the notes"
+  },
+  {
+   "id": "version.pattern",
+   "group": "version",
+   "label": "Version format",
+   "type": "pattern",
+   "value": "^\\d+\\.\\d+\\.\\d+$",
+   "default": "^\\d+\\.\\d+\\.\\d+$"
+  },
+  {
+   "id": "tests.required",
+   "group": "tests",
+   "label": "Tests must pass",
+   "type": "switch",
+   "value": true,
+   "default": true
+  },
+  {
+   "id": "permissions.publish",
+   "group": "permissions",
+   "label": "The tool may publish",
+   "type": "switch",
+   "value": false,
+   "default": false,
+   "note": "off: a dry run. The run ends at ready and changes nothing."
+  }
+ ],
+ "flow": [
+  {
+   "id": "collect",
+   "kind": "step",
+   "name": "Collect",
+   "do": "read NOTES.md, VERSION and tests.json of the folder",
+   "by": [
+    "steps.collect"
+   ],
+   "next": [
+    {
+     "to": "notes"
+    }
+   ]
+  },
+  {
+   "id": "notes",
+   "kind": "hard",
+   "name": "Notes long enough",
+   "ensure": "the notes have at least {notes.min_words} words",
+   "by": [
+    "gates.notes_ok"
+   ],
+   "reads": [
+    "notes.min_words"
+   ],
+   "pass": [
+    {
+     "to": "version"
+    }
+   ],
+   "fail": [
+    {
+     "to": "stop",
+     "when": "notes too short"
+    }
+   ]
+  },
+  {
+   "id": "version",
+   "kind": "hard",
+   "name": "Version format",
+   "ensure": "the version matches {version.pattern}",
+   "by": [
+    "gates.version_ok"
+   ],
+   "reads": [
+    "version.pattern"
+   ],
+   "pass": [
+    {
+     "to": "tests"
+    }
+   ],
+   "fail": [
+    {
+     "to": "stop",
+     "when": "bad version"
+    }
+   ]
+  },
+  {
+   "id": "tests",
+   "kind": "soft",
+   "name": "Tests green",
+   "ensure": "the last test run passed",
+   "by": [
+    "gates.tests_green"
+   ],
+   "reads": [
+    "tests.required"
+   ],
+   "pass": [
+    {
+     "to": "tone"
+    }
+   ],
+   "fail": [
+    {
+     "to": "stop",
+     "when": "tests failed and tests are required"
+    },
+    {
+     "to": "tone",
+     "when": "tests failed; reported"
+    }
+   ]
+  },
+  {
+   "id": "tone",
+   "kind": "judge",
+   "name": "Notes speak to users",
+   "brief": "read the notes as a user would; fail if they use internal words or miss the upgrade steps",
+   "pass": [
+    {
+     "to": "approve"
+    }
+   ],
+   "fail": [
+    {
+     "to": "rounds",
+     "when": "the notes need a rewrite"
+    }
+   ]
+  },
+  {
+   "id": "rounds",
+   "kind": "hard",
+   "name": "A rewrite is left",
+   "ensure": "the notes were rewritten fewer than {notes.rounds} times",
+   "by": [
+    "gates.rounds_left"
+   ],
+   "reads": [
+    "notes.rounds"
+   ],
+   "pass": [
+    {
+     "to": "rewrite"
+    }
+   ],
+   "fail": [
+    {
+     "to": "stop",
+     "when": "no rewrite left"
+    }
+   ]
+  },
+  {
+   "id": "rewrite",
+   "kind": "step",
+   "name": "Rewrite the notes",
+   "do": "rewrite the notes for users: plain words, and the upgrade steps; give the new text as the result",
+   "next": [
+    {
+     "to": "notes"
+    }
+   ]
+  },
+  {
+   "id": "approve",
+   "kind": "human",
+   "name": "A person agrees",
+   "brief": "show the person the version and the notes; ask: may this release be published?",
+   "pass": [
+    {
+     "to": "allowed"
+    }
+   ],
+   "fail": [
+    {
+     "to": "stop",
+     "when": "the person said no"
+    }
+   ]
+  },
+  {
+   "id": "allowed",
+   "kind": "hard",
+   "name": "The tool may publish",
+   "ensure": "the rule permissions.publish is on",
+   "by": [
+    "gates.may_publish"
+   ],
+   "reads": [
+    "permissions.publish"
+   ],
+   "pass": [
+    {
+     "to": "publish"
+    }
+   ],
+   "fail": [
+    {
+     "to": "ready",
+     "when": "dry run"
+    }
+   ]
+  },
+  {
+   "id": "publish",
+   "kind": "step",
+   "name": "Publish",
+   "do": "write published.json into the folder",
+   "by": [
+    "steps.publish"
+   ],
+   "next": [
+    {
+     "to": "done"
+    }
+   ]
+  },
+  {
+   "id": "done",
+   "kind": "end",
+   "name": "Published"
+  },
+  {
+   "id": "ready",
+   "kind": "end",
+   "name": "Ready, not published"
+  },
+  {
+   "id": "stop",
+   "kind": "end",
+   "name": "Stopped"
+  }
+ ]
+}

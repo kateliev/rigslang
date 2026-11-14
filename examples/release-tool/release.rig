@@ -1,0 +1,86 @@
+; A complete small tool, built with the kit. It checks a release folder and publishes it.
+; Code does the steps and decides the hard and soft gates (gates.py, steps.py).
+; The model decides one gate (tone) and does one step (rewrite). A person decides one gate (approve).
+; Build: python3 ../../skills/rig/rig.py build .     Run: python3 tool.py run '{"folder": "tests/cases/good"}'
+
+unit release agent
+  intent "publish a release folder only when its notes, its version and its tests are ready, and a person agrees"
+  in folder path "the release folder: it holds NOTES.md, VERSION and tests.json"
+  out text "the end of the run: published, ready (dry run) or stopped, with the problems"
+  code gates gates.py
+    test tests/test_gates.py
+  code steps steps.py
+    test tests/test_steps.py
+
+  rule notes.min_words 50
+    min 10
+    max 500
+    label "Shortest release notes"
+    unit "words"
+    note "shorter notes did not answer the usual questions"
+  rule notes.rounds 2
+    min 0
+    max 5
+    label "Most rewrites of the notes"
+    note "a third rewrite did not pass where two had failed; the person then writes the notes"
+  rule version.pattern /^\d+\.\d+\.\d+$/
+    label "Version format"
+  rule tests.required on
+    label "Tests must pass"
+  rule permissions.publish off
+    label "The tool may publish"
+    note "off: a dry run. The run ends at ready and changes nothing."
+  preset hotfix
+    set notes.min_words 10
+    set notes.rounds 0
+
+  step collect "Collect"
+    do "read NOTES.md, VERSION and tests.json of the folder"
+    by steps.collect
+    next -> notes
+  gate notes hard "Notes long enough"
+    ensure "the notes have at least {notes.min_words} words"
+    by gates.notes_ok
+    pass -> version
+    fail -> stop "notes too short"
+  gate version hard "Version format"
+    ensure "the version matches {version.pattern}"
+    by gates.version_ok
+    pass -> tests
+    fail -> stop "bad version"
+  gate tests soft "Tests green"
+    reads tests.required
+    ensure "the last test run passed"
+    by gates.tests_green
+    pass -> tone
+    fail -> stop "tests failed and tests are required"
+    fail -> tone "tests failed; reported"
+  gate tone judge "Notes speak to users"
+    brief "read the notes as a user would; fail if they use internal words or miss the upgrade steps"
+    pass -> approve
+    fail -> rounds "the notes need a rewrite"
+  gate rounds hard "A rewrite is left"
+    ensure "the notes were rewritten fewer than {notes.rounds} times"
+    by gates.rounds_left
+    pass -> rewrite
+    fail -> stop "no rewrite left"
+  step rewrite "Rewrite the notes"
+    do "rewrite the notes for users: plain words, and the upgrade steps; give the new text as the result"
+    next -> notes
+  gate approve human "A person agrees"
+    brief "show the person the version and the notes; ask: may this release be published?"
+    pass -> allowed
+    fail -> stop "the person said no"
+  gate allowed hard "The tool may publish"
+    reads permissions.publish
+    ensure "the rule permissions.publish is on"
+    by gates.may_publish
+    pass -> publish
+    fail -> ready "dry run"
+  step publish "Publish"
+    do "write published.json into the folder"
+    by steps.publish
+    next -> done
+  end done "Published"
+  end ready "Ready, not published"
+  end stop "Stopped"
