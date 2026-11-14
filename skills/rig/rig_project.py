@@ -12,7 +12,8 @@ A project is a folder with one rig.json file:
       "build": {"gen": "gen", "skill": "skill/SKILL.md"},
       "kit": "rigkit.py",              the tool's own copy of kit/rigkit.py
       "tests": "python3 -m unittest discover -s tests",
-      "regression": "tests/regression-set.json"
+      "regression": "tests/regression-set.json",
+      "plugin": {"folder": "plugin", "owner": "local", "timeout_s": 120}   made by: rig.py plugin DIR
     }
 
 build compiles the source to the files that the fronts read. doctor checks the project
@@ -94,7 +95,88 @@ def outputs(folder, m):
 		out[skill_path] = rig.skill(main, ref, None, m.get('driver'))
 	if m.get('kit'):
 		out[m['kit']] = read(KIT)
+	if m.get('plugin'):
+		out[os.path.join(m['plugin'].get('folder', 'plugin'), 'src', 'gen', 'front.json')] = json.dumps(front(m, files, main), ensure_ascii=False, indent=1) + '\n'
 	return out
+
+
+# - The front for a model that calls tools (the plugin) ---
+def front(m, files, main):
+	'''What the plugin of a local model needs: the tools, the short rules text, and the driver.
+	The plugin has no knowledge of its own: it reads this file.'''
+	driver = m.get('driver', 'python3 tool.py')
+	tools, rules = [], []
+	flow = main is not None and any(c.head in rig.FLOW for c in main.children)
+	if flow:
+		d = rig.tool_def(main)
+		run = {'type': 'string', 'description': 'The run id: "run" in the result of start_run.'}
+		tools.append({'name': 'start_run', 'kind': 'run', 'parameters': d['parameters'],
+			'description': 'Start a run for one item: {}. Code does the work and stops when it needs you.'.format(d['description'])})
+		tools.append({'name': 'answer_gate', 'kind': 'answer_gate',
+			'description': 'Answer the gate that a run waits at, when "waiting" has kind "judge". Decide as its "brief" says.',
+			'parameters': {'type': 'object', 'properties': {'run': run, 'pass': {'type': 'boolean', 'description': 'true: the gate passes. false: it fails.'},
+				'why': {'type': 'string', 'description': 'The reason, in one sentence.'}}, 'required': ['run', 'pass']}})
+		model_steps = [f.word(0) for f in main.kids('step') if not f.kids('by') or any(rig.by_target(b.word(0), main) != 'bound' for b in f.kids('by'))]
+		if model_steps:
+			tools.append({'name': 'finish_step', 'kind': 'finish_step',
+				'description': 'Give the result of the step that a run waits at, when "waiting" has kind "step". Do what its "do" says first.',
+				'parameters': {'type': 'object', 'properties': {'run': run, 'result': {'description': 'What the step gave: a text, a number or an object.'}}, 'required': ['run', 'result']}})
+		tools.append({'name': 'run_status', 'kind': 'status', 'description': 'Show a run again: where it is and what it waits for.',
+			'parameters': {'type': 'object', 'properties': {'run': run}, 'required': ['run']}})
+		inputs = ', '.join(x.word(0) for x in main.kids('in')) or 'no input'
+		rules = ['To work on one item, call start_run ({}). Work on one item at a time.'.format(inputs),
+			'Read each result. It is JSON.',
+			'"outcome": the run ended. Tell the operator the end and the "problems". Then go to the next item.',
+			'"waiting" with kind "judge": decide what "brief" asks. Call answer_gate with the run id, pass true or false, and why in one sentence.']
+		if model_steps:
+			rules.append('"waiting" with kind "step": do what "do" says. Call finish_step with the run id and the result.')
+		if any(g.word(1) == 'human' for g in main.kids('gate')):
+			rules.append('"waiting" with kind "human": you cannot answer. Tell the operator what "brief" asks, and this command: {} approve <run id> yes (or no). Stop work on this item.'.format(driver))
+		rules += ['"refused": the call was wrong. It is final. Do not repeat it. Call run_status to see where the run is.',
+			'"error": tell the operator the error text. Do not answer the run.',
+			'Do not invent names or numbers. Use only values from a result.',
+			'When a run ends and its "guessed" list is not empty, write one last line: Guessed: and the names in that list.']
+	for _, root, _ in files:
+		for u in rig.units(root):
+			if u.word(1) == 'tool' and u.kids('in'):
+				d = rig.tool_def(u)
+				text = d.get('returns', {}).get('description')
+				tools.append({'name': u.word(0).replace('-', '_'), 'kind': 'call', 'unit': u.word(0), 'parameters': d['parameters'],
+					'description': d['description'] + ('. It gives back: ' + text if text else '')})
+	prompt = ''
+	if rules:
+		intent = ' '.join(rig.text_of(x) for x in main.kids('intent'))
+		prompt = 'Rules for the tool {}{}:\n'.format(m.get('name', main.word(0)), ' (' + rig.fill_values(main, intent) + ')' if intent else '') + '\n'.join('{}. {}'.format(i + 1, r) for i, r in enumerate(rules))
+	return {'name': m.get('name'), 'prompt': prompt, 'driver': shlex.split(driver), 'timeout_s': m['plugin'].get('timeout_s', 120), 'tools': tools}
+
+
+def plugin(folder, owner):
+	'''Add the plugin folder (the front for a local model in LM Studio) to a project.'''
+	m = manifest(folder)
+	sub = (m.get('plugin') or {}).get('folder', 'plugin')
+	target = os.path.join(folder, sub)
+	if os.path.exists(target) and os.listdir(target):
+		raise SystemExit('{} exists and is not empty'.format(target))
+	base = os.path.join(TEMPLATES, 'plugin')
+	words = {'__NAME__': m.get('name', 'tool'), '__OWNER__': owner}
+	for dirpath, _, names in os.walk(base):
+		for n in sorted(names):
+			src = os.path.join(dirpath, n)
+			rel = os.path.relpath(src, base)
+			if rel.endswith('.tmpl'):
+				rel = os.path.join(os.path.dirname(rel), '.' + os.path.basename(rel)[:-5])
+			text = read(src)
+			for k, v in words.items():
+				text = text.replace(k, v)
+			os.makedirs(os.path.dirname(os.path.join(target, rel)), exist_ok=True)
+			rig.write(os.path.join(target, rel), text)
+	with open(os.path.join(folder, 'rig.json'), encoding='utf-8') as f:
+		data = json.load(f)
+	data['plugin'] = {'folder': sub, 'owner': owner, 'timeout_s': 120}
+	rig.write(os.path.join(folder, 'rig.json'), json.dumps(data, ensure_ascii=False, indent=1) + '\n')
+	build(folder)
+	print('\nMade {}. Next: cd {} && npm install && node --no-warnings try.ts'.format(target, target))
+	return 0
 
 
 def build(folder, check=False):
@@ -385,6 +467,9 @@ def main(cmd, rest):
 		if len(rest) < 2:
 			raise SystemExit('new DIR NAME [--level 1|2|3|4]')
 		return new(rest[0], rest[1], level)
+	if cmd == 'plugin':
+		owner = rig.option(rest, '--owner') or 'local'
+		return plugin(rest[0] if rest else '.', owner)
 	folder = next((a for a in rest if not a.startswith('--')), '.')
 	if cmd == 'build':
 		return build(folder, '--check' in rest)

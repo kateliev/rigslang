@@ -25,9 +25,9 @@ The pattern comes from a private production agent. Only the concept and the mach
 | 2 | Runtime kit `rigkit.py`: rules, verdicts, runs, guard, command line, regression; tests | done |
 | 3 | Project commands in `rig.py`: `new`, `build`, `doctor`, `test`; templates | done |
 | 4 | One complete example tool, built with the kit (`examples/release-tool`) | done |
-| 5 | The guide: method, levels, build order, patterns, fronts | in work |
-| 6 | The skill, split by task; README and docs refocused | open |
-| 7 | LM Studio plugin front (template and bridge) | open |
+| 5 | The guide `skills/rig/guide/`: method, levels, build order, patterns, fronts, rules | done |
+| 6 | The skill, split by task; README and docs refocused | done |
+| 7 | LM Studio plugin front (template and bridge) | done, but not yet run inside LM Studio |
 | 8 | `bandsearch` brought up to the kit (enforced gates, a runner, a regression set) | open |
 | 9 | Trace view in the viewer: light up the path of one run | open |
 
@@ -35,3 +35,10 @@ The pattern comes from a private production agent. Only the concept and the mach
 
 - 2026-11-15, part 1. `rig.py`: gate kind `human`; `code [prefix] path` with a `test` child; `by prefix.function`; level `tested`; coverage counts proved and tested gates; `compile skill --driver CMD` for a skill that starts runs and does not walk the flow; `serve` gives the levels of bound code to the viewer at `/levels`. Viewer, spec (new Section 7) and editor grammars updated. All 37 tests pass.
 - 2026-11-15, parts 2 to 4. `skills/rig/kit/rigkit.py`: `Rules`, `Kit` (bind code, verdicts, runs saved as files, refusals, `resume` after an error, a loop limit), the command line (`run`, `answer`, `approve`, `resume`, `status`, `rules`, `flow`, `call`, `regress`), and the `step` wrapper for code inside a host. `skills/rig/rig_project.py`: `rig.py new | build | doctor | test`, with the project file `rig.json` and the templates in `kit/templates/`. `examples/release-tool`: a level 4 tool with all four gate kinds, 12 regression cases, its notes and its compiled skill. The doctor found a real gap while the example was built (an end node that no regression case reached). 58 tests pass.
+- 2026-11-15, parts 5 to 7. The guide: `README.md` (the method), `levels.md`, `build-order.md` (stages 0 to 9, each with a "done when"), `patterns.md` (12 patterns for production tools and a check list), `fronts.md`, `rules.md`. The skill is one entry (`SKILL.md`) and one file for each task (`change.md`, `snippets.md`, the guide pages). `rig.py plugin DIR` adds an LM Studio plugin whose code is the same for every tool: it reads its tools and its rules text from `plugin/src/gen/front.json` (compiled) and calls the driver without a shell. README, `docs/logic.md` and `AGENTS.md` refocused. 59 tests pass.
+
+## Not verified
+
+- The plugin was tested through its bridge with `try.ts` (start a run, answer a gate, the refusal at a human gate). `src/index.ts` was **not** type-checked and **not** run inside LM Studio: `@lmstudio/sdk` is not installed here. It follows the SDK calls of the older `bandsearch` example.
+- No model has used a compiled skill or a plugin of the kit yet. The first real run will find texts to fix.
+- The level `tested` means only that a test file names the function. `rig.py doctor` runs the tests, so a failing test is seen, but a test that names a function and checks nothing is not.

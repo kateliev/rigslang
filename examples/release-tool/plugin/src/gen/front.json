@@ -1,0 +1,92 @@
+{
+ "name": "release",
+ "prompt": "Rules for the tool release (publish a release folder only when its notes, its version and its tests are ready, and a person agrees):\n1. To work on one item, call start_run (folder). Work on one item at a time.\n2. Read each result. It is JSON.\n3. \"outcome\": the run ended. Tell the operator the end and the \"problems\". Then go to the next item.\n4. \"waiting\" with kind \"judge\": decide what \"brief\" asks. Call answer_gate with the run id, pass true or false, and why in one sentence.\n5. \"waiting\" with kind \"step\": do what \"do\" says. Call finish_step with the run id and the result.\n6. \"waiting\" with kind \"human\": you cannot answer. Tell the operator what \"brief\" asks, and this command: python3 tool.py approve <run id> yes (or no). Stop work on this item.\n7. \"refused\": the call was wrong. It is final. Do not repeat it. Call run_status to see where the run is.\n8. \"error\": tell the operator the error text. Do not answer the run.\n9. Do not invent names or numbers. Use only values from a result.\n10. When a run ends and its \"guessed\" list is not empty, write one last line: Guessed: and the names in that list.",
+ "driver": [
+  "python3",
+  "tool.py"
+ ],
+ "timeout_s": 120,
+ "tools": [
+  {
+   "name": "start_run",
+   "kind": "run",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "folder": {
+      "type": "string",
+      "description": "the release folder: it holds NOTES.md, VERSION and tests.json"
+     }
+    },
+    "required": [
+     "folder"
+    ]
+   },
+   "description": "Start a run for one item: publish a release folder only when its notes, its version and its tests are ready, and a person agrees. Code does the work and stops when it needs you."
+  },
+  {
+   "name": "answer_gate",
+   "kind": "answer_gate",
+   "description": "Answer the gate that a run waits at, when \"waiting\" has kind \"judge\". Decide as its \"brief\" says.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "run": {
+      "type": "string",
+      "description": "The run id: \"run\" in the result of start_run."
+     },
+     "pass": {
+      "type": "boolean",
+      "description": "true: the gate passes. false: it fails."
+     },
+     "why": {
+      "type": "string",
+      "description": "The reason, in one sentence."
+     }
+    },
+    "required": [
+     "run",
+     "pass"
+    ]
+   }
+  },
+  {
+   "name": "finish_step",
+   "kind": "finish_step",
+   "description": "Give the result of the step that a run waits at, when \"waiting\" has kind \"step\". Do what its \"do\" says first.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "run": {
+      "type": "string",
+      "description": "The run id: \"run\" in the result of start_run."
+     },
+     "result": {
+      "description": "What the step gave: a text, a number or an object."
+     }
+    },
+    "required": [
+     "run",
+     "result"
+    ]
+   }
+  },
+  {
+   "name": "run_status",
+   "kind": "status",
+   "description": "Show a run again: where it is and what it waits for.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "run": {
+      "type": "string",
+      "description": "The run id: \"run\" in the result of start_run."
+     }
+    },
+    "required": [
+     "run"
+    ]
+   }
+  }
+ ]
+}

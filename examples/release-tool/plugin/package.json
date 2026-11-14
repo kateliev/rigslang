@@ -1,0 +1,19 @@
+{
+  "name": "lms-plugin-release",
+  "version": "0.1.0",
+  "description": "The LM Studio front of the Rig tool release.",
+  "private": true,
+  "scripts": {
+    "dev": "lms dev",
+    "install-plugin": "lms dev --install --yes",
+    "try": "node --no-warnings try.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@lmstudio/sdk": "^1.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.8.2"
+  }
+}

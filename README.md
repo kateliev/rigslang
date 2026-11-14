@@ -1,95 +1,147 @@
 # Rig
 
-**Rig** is a small language for writing down *what* code must do and *how that is checked*. It works at three scales with one syntax: agents, tools and code snippets.
+**Rig** is a kit and a method for building **instrumental agents**: a model that operates tools to do a defined job. You describe a tool one time, and Rig gives you the same tool for Claude (a skill), for a local model (an LM Studio plugin) and for a person (a command line and a graph).
 
-The name comes from the three parts of the work: **R**eason, **I**ntent, **G**ate. The model reasons: it writes the code and makes the judgment calls. The human or the model states the intent. Gates prove the result in a real runtime.
+The name is the three parts of the work: **R**eason, **I**ntent, **G**ate. The model reasons, and only where judgment is needed. The intent says what the tool must do. Gates decide whether it did: in code where code can decide, by the model where it cannot (marked as a guess), and by a person where the call is theirs.
 
-An LLM is the main writer of Rig files. A person is the main reader. A real runtime, not the model, decides whether code is correct.
+## The idea in one picture
 
 ```
-unit slugify snippet
-  intent "lowercase, ASCII only, words joined by hyphens"
-  in text str
-  out str
-  example "Hello World" => "hello-world"
-  example "Ça va?" => "ca-va"
-  example "  many   spaces  " => "many-spaces"
-  ensure "the result has only a-z, 0-9 and -"
-    check py "re.fullmatch(r'[a-z0-9-]*', result)"
-  ensure "the result does not start or end with -"
-    check py "not result.startswith('-') and not result.endswith('-')"
-  cast py #1a80d208 #9fe3f5f5 proved 2026-11-11
-    import re, unicodedata
-
-    def slugify(text):
-        t = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode().lower()
-        return re.sub(r"[^a-z0-9]+", "-", t).strip("-")
+   one source                      one core                         thin fronts
+   release.rig              ┌─  gates.py   decisions     ┌─  skill/SKILL.md    Claude
+   rules, steps,   build    │   steps.py   the work      │   plugin/           a local model
+   gates, ends     ──────►  │   tool.py    the runner  ──┤   tool.py ...       a person
+                            └─  gen/*.json catalogue     └─  the graph page    a person
 ```
 
-- **intent / in / out / example / ensure** make the *matrix*: the spec of the unit.
-- **cast** is code that was proved against the matrix in a real runtime. Two hashes pin it: the first to the matrix, the second to the code.
-- If you change the matrix, the hash does not match any more. The cast *remelts*, and the unit becomes a *hole* again.
-- In an agent, **gate** nodes are checkpoints. A `hard` or `soft` gate is decided by code; a `judge` gate is decided by the model and is marked as a guess. The answer of the agent names its guesses in a `Guessed:` line.
-- **Coverage** counts only gates whose code is proved. A `by` line names a unit or an `external` (code that Rig does not prove).
-- A **probe** runs code live, against the network or a service. Its result is **observed**, not proved.
-- An agent's numbers and switches are **rules**, named as `{group.name}` in its text. A **preset** is a named set of values.
+- **Rules** hold every number and switch, in one place.
+- **Steps** do the work. **Gates** decide. A gate is `hard` or `soft` (code decides), `judge` (the model decides; a guess) or `human` (a person decides; the run waits).
+- **A runner walks the flow.** Code does everything it can. The run stops only where it needs the model or a person, and it refuses a call that is out of order. An item that needs no judgment needs no model.
+- **The fronts are compiled.** No front has a limit of its own, and no front decides a gate. A change of the source reaches all of them at the next build.
 
-## Agents: one source, compiled sheets
+## Build a tool
 
-An agent unit compiles to the forms that agents read:
+Tell an agent that has this repository: *"Build a tool that ..., with the Rig skill."* The skill in [skills/rig/](skills/rig/) takes it from your wish to a checked tool. By hand, it goes like this:
 
 ```bash
-python skills/rig/rig.py compile json examples/release-check.rig -o release-check.json
-python skills/rig/rig.py compile skill examples/release-check.rig --rules release-check.json -o SKILL.md
+python3 skills/rig/rig.py new my-tool my-tool --level 2
 ```
 
-- The **JSON catalogue** is for a code runner: it reads the rule values and walks the flow.
-- The **skill** is for an agent that follows instructions. With `--rules`, it reads the values from the JSON file, so each value has one place.
-- The **tool definition** (`compile tool`) is for a model that calls tools: the name, the intent as description, and the JSON Schema of the inputs.
-- `emit` writes the proved and observed casts as modules, for a program to import. [examples/bandsearch/](examples/bandsearch/) builds an LM Studio plugin this way.
-- Change the `.rig` file, then compile again. `rig.py serve FILE --json OUT --skill OUT` shows the file in the viewer, and Save compiles it again.
+```bash
+python3 skills/rig/rig.py doctor my-tool
+```
+
+The new folder is a small tool that works. You change it into the real one, and `doctor` says what is missing for its level.
+
+| Level | Name | For |
+|---|---|---|
+| 1 | tools | Simple things: look up, convert, measure. Functions with typed inputs. |
+| 2 | checked | A job with limits: rules, and gates in code. |
+| 3 | flow | A procedure with stages: named ends, and a regression set that plays the model. |
+| 4 | production | Many items, real files, a person who judges: permissions, a human gate, a way back, project memory. |
+
+A simple tool does not pay for what a large one needs, and a tool can go up a level later.
+
+## See one
+
+[examples/release-tool/](examples/release-tool/) is a complete level 4 tool, small enough to read in ten minutes. Try it:
+
+```bash
+cd examples/release-tool
+```
+
+```bash
+python3 tool.py run '{"folder": "tests/cases/good"}'
+```
+
+Code walks four nodes, then the run waits for the model at the gate `tone`. Its README goes on from there. To see its flow as a graph:
+
+```bash
+python3 ../../skills/rig/rig.py serve release.rig --json gen/release.json
+```
 
 ## What is in the repository
 
 | Path | What it is |
 |---|---|
-| [skills/rig/](skills/rig/) | The skill for an AI agent: convert code into Rig and Rig into code. Portable: copy the folder. |
-| [skills/rig/spec.md](skills/rig/spec.md) | The language specification (one page of grammar, a short list of words). |
-| [skills/rig/rig.py](skills/rig/rig.py) | Reference tool, Python standard library only: `check`, `hash`, `prove` and `probe` (in Python and Node.js), `stamp`, `emit`, `compile` (catalogue, skill, tool definition), `from-json`, `serve`. |
-| [viewer/index.html](viewer/index.html) | Viewer for `.rig` files: units as tables, the flow as a node graph, and the compiled skill and JSON. Rule values can be edited. One file, no install. |
+| [skills/rig/guide/](skills/rig/guide/) | **The method.** One page of ideas, then the levels, the build order, the patterns for production tools, the fronts, and the rules with no exception. |
+| [skills/rig/SKILL.md](skills/rig/SKILL.md) | The skill for an AI agent: one entry, and one file for each task. Portable: copy the folder `skills/rig`. |
+| [skills/rig/rig.py](skills/rig/rig.py) | The tool, Python standard library only: `new`, `build`, `doctor`, `test`, `plugin` for projects; `check`, `serve`, `compile` for `.rig` files; `prove`, `probe`, `emit` for snippets. |
+| [skills/rig/kit/rigkit.py](skills/rig/kit/rigkit.py) | The runtime: rules, verdicts, runs, the command line of a tool. One file; each tool keeps a copy. |
+| [skills/rig/kit/templates/](skills/rig/kit/templates/) | What `new` and `plugin` copy. |
+| [skills/rig/spec.md](skills/rig/spec.md) | The language of `.rig` files: one page of grammar, a short list of words. |
+| [viewer/index.html](viewer/index.html) | The viewer: units as tables, the flow as a node graph, the compiled skill and JSON. Values can be changed. One file, no install. |
+| [examples/release-tool/](examples/release-tool/) | The pattern example: a level 4 tool with its tests, its plugin and its notes. |
+| [examples/bandsearch/](examples/bandsearch/) | An older example: an LM Studio plugin with TypeScript code inside the `.rig` files. Not yet moved to the runner: see [docs/status.md](docs/status.md). |
+| [examples/](examples/) | Single `.rig` files: a snippet, a tool, an agent. |
 | [editors/](editors/) | Syntax highlighting for VS Code and Sublime Text, built from one table. |
-| [examples/](examples/) | Example units: a snippet, a tool and an agent. |
-| [examples/bandsearch/](examples/bandsearch/) | A larger example: an LM Studio plugin built from Rig units, with TypeScript casts proved in Node. |
-| [tests/](tests/) | Tests for `rig.py`, and a test that the viewer computes the same hashes, errors, catalogues and skills. |
-| [docs/logic.md](docs/logic.md) | How the language works, and why. |
-| [docs/](docs/) | Research notes and the first design memos. |
+| [tests/](tests/) | Tests of `rig.py`, the runtime, the project commands and the templates, and a test that the viewer computes the same results as `rig.py`. |
+| [docs/](docs/) | [status.md](docs/status.md): the state of the work. [logic.md](docs/logic.md): the ideas of the language. The first memos and the research notes. |
 
-## Quick start
+## The source file
 
-```bash
-python skills/rig/rig.py check examples/slugify.rig
-python skills/rig/rig.py prove examples/slugify.rig
+A tool is described in one `.rig` file. People read it, the checker checks it, and everything else is compiled from it.
+
+```
+unit release agent
+  intent "publish a release folder only when its notes, its version and its tests are ready, and a person agrees"
+  in folder path "the release folder"
+  code gates gates.py
+    test tests/test_gates.py
+
+  rule notes.min_words 50
+    min 10
+    max 500
+    label "Shortest release notes"
+
+  gate notes hard "Notes long enough"
+    ensure "the notes have at least {notes.min_words} words"
+    by gates.notes_ok
+    pass -> tone
+    fail -> stop "notes too short"
+  gate tone judge "Notes speak to users"
+    brief "read the notes as a user would; fail if they use internal words"
+    pass -> approve
+    fail -> stop
+  gate approve human "A person agrees"
+    brief "show the person the version and the notes; ask: may this release be published?"
+    pass -> done
+    fail -> stop
+  end done "Published"
+  end stop "Stopped"
 ```
 
-Open `viewer/index.html` in a browser, then drop a `.rig` file on the page. To load the examples with one click, serve the folder first:
+- A `{group.name}` in a text names a rule. A number in a text gets a warning.
+- `by gates.notes_ok` names a function in `gates.py`. The checker refuses a name with no function, and counts the gate as **tested** only when the test file names it.
+- **Coverage** is the share of the gates that checked code decides. The rest are named: this many by the model, this many by a person.
+
+## Snippets: the small end
+
+Rig began as a language for single functions, and that part still works. A unit can hold its code inside the `.rig` file as a **cast**, proved against its examples in a real runtime and pinned by two hashes. If the spec changes, the cast **remelts** and must be proved again.
 
 ```bash
-python -m http.server 8000 --bind 127.0.0.1
+python3 skills/rig/rig.py prove examples/slugify.rig
 ```
 
-Then open `http://127.0.0.1:8000/viewer/?src=../examples/release-check.rig`. To edit one file in place, use `python skills/rig/rig.py serve FILE` instead.
+It is useful for small pure functions. For a tool, keep the code in normal files and bind it with a `code` line. [docs/logic.md](docs/logic.md) explains the snippet scale; [skills/rig/snippets.md](skills/rig/snippets.md) is the task file for it.
 
-Run the tests (the viewer parity test needs Node.js):
+## Tests
 
 ```bash
-python -m unittest discover tests
+python3 -m unittest discover -s tests
 ```
 
-To give the skill to an agent, copy `skills/rig/` into the agent's skills folder (for example `.claude/skills/rig/`).
+The viewer test needs Node.js. The TypeScript runner and the plugin test need Node.js 23.6 or newer.
+
+## Where it comes from
+
+The method was taken from a private production agent, where one procedure runs on a frontier model and on a small local model with the same code, rules and gates. Only the concept and the machinery are here. [skills/rig/guide/README.md](skills/rig/guide/README.md), Section 7, names the findings that shaped it.
 
 ## Status
 
-Early design, version 0. The syntax can still change. Read [docs/logic.md](docs/logic.md) first.
+Version 0, in work. The kit, the guide and the example are new (2026-11-15), and the language can still change. [docs/status.md](docs/status.md) says what is done and what is open.
+
+To give the skill to an agent, copy or link `skills/rig/` into the agent's skills folder (for example `.claude/skills/rig/`).
 
 ## License and privacy
 

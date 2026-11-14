@@ -1,0 +1,6 @@
+{
+  "type": "plugin",
+  "runner": "node",
+  "owner": "__OWNER__",
+  "name": "__NAME__"
+}

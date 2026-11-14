@@ -36,6 +36,8 @@
                                               catalogue, the skill, the tool definitions
     python rig.py doctor [DIR] [--no-tests]   check a project against the list of its level
     python rig.py test [DIR]                  run the tests of a project
+    python rig.py plugin DIR [--owner NAME]   add the front for a local model: an LM Studio plugin
+                                              that reads its tools and its rules from the build
 
 The language is defined in spec.md (same folder). `prove` and `probe` run the code of the
 file on your machine: use them only on files you trust. On macOS use python3.
@@ -1642,7 +1644,7 @@ def main(argv):
 		sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 	except Exception:
 		pass
-	if argv and argv[0] in ('new', 'build', 'doctor', 'test'):
+	if argv and argv[0] in ('new', 'build', 'doctor', 'test', 'plugin'):
 		import rig_project
 		return rig_project.main(argv[0], list(argv[1:]))
 	if len(argv) < 2 or argv[0] not in ('check', 'hash', 'prove', 'probe', 'stamp', 'emit', 'json', 'compile', 'from-json', 'serve'):

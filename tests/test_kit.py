@@ -2,6 +2,7 @@
 (new, build, doctor). Run: python -m unittest discover tests"""
 import contextlib
 import io
+import json
 import os
 import shutil
 import subprocess
@@ -267,20 +268,38 @@ class Projects(unittest.TestCase):
 		finally:
 			shutil.rmtree(tmp)
 
+	@unittest.skipUnless(shutil.which('node'), 'node is not installed')
+	def test_plugin_front_calls_the_driver(self):
+		tmp = tempfile.mkdtemp()
+		try:
+			folder = os.path.join(tmp, 'p')
+			self.quiet(rig_project.new, folder, 'demo-tool', 4)
+			self.quiet(rig_project.plugin, folder, 'tester')
+			self.assertEqual(self.quiet(rig_project.build, folder, True)[0], 0)
+			with open(os.path.join(folder, 'plugin', 'src', 'gen', 'front.json'), encoding='utf-8') as f:
+				front = json.load(f)
+			self.assertEqual([t['name'] for t in front['tools']], ['start_run', 'answer_gate', 'run_status'])  # no tool for the human gate
+			self.assertIn('you cannot answer', front['prompt'])
+
+			def call(*args):
+				r = subprocess.run(['node', '--no-warnings', 'try.ts'] + list(args), cwd=os.path.join(folder, 'plugin'), capture_output=True, text=True)
+				return json.loads(r.stdout.strip().splitlines()[-1])
+			r = call('start_run', '{"item": "a longer item"}')
+			self.assertEqual(r['waiting']['node'], 'sensible')
+			r = call('answer_gate', json.dumps({'run': r['run'], 'pass': True}))
+			self.assertEqual(r['waiting']['kind'], 'human')
+			self.assertIn('refused', call('answer_gate', json.dumps({'run': r['run'], 'pass': True})))
+		finally:
+			shutil.rmtree(tmp)
+
 	def test_release_example_is_current_and_complete(self):
 		self.assertEqual(self.quiet(rig_project.build, RELEASE, True)[0], 0, 'run: rig.py build examples/release-tool')
 		code, out = self.quiet(rig_project.doctor, RELEASE)
 		self.assertEqual(code, 0, out)
 
 	def test_release_example_from_the_command_line(self):
-		tmp = tempfile.mkdtemp()
-		try:
-			folder = os.path.join(tmp, 'release')
-			shutil.copytree(os.path.join(RELEASE, 'tests', 'cases', 'short-notes'), folder)
-			r = subprocess.run([sys.executable, os.path.join(RELEASE, 'tool.py'), 'rules'], capture_output=True, text=True)
-			self.assertIn('"notes.min_words": 50', r.stdout)
-		finally:
-			shutil.rmtree(tmp)
+		r = subprocess.run([sys.executable, os.path.join(RELEASE, 'tool.py'), 'rules'], capture_output=True, text=True)
+		self.assertIn('"notes.min_words": 50', r.stdout)
 
 
 if __name__ == '__main__':

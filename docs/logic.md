@@ -1,6 +1,8 @@
 # How Rig works, and why
 
-This page explains the ideas. The exact rules are in [the specification](../skills/rig/spec.md).
+This page explains the ideas of the language. The exact rules are in [the specification](../skills/rig/spec.md).
+
+**Since 2026-11-15 the centre of Rig is the agent scale**: tools and agents whose code lives in normal files, with a runner that walks the flow. The method for that is in [the guide](../skills/rig/guide/README.md). The snippet scale of Section 4 (matrix, cast, remelt) still works and is still tested, but it is now the small end of Rig, not its headline. [status.md](status.md) has the state of the work.
 
 ## 1. The problem
 
@@ -65,8 +67,11 @@ An agent unit is a small state machine. **Steps** do work. **Gates** decide. **E
 | `hard` | code (`by`) | a fact; a fail blocks |
 | `soft` | code (`by`) | a fact; a fail is reported |
 | `judge` | the model (`brief`) | a **guess**, and labelled so |
+| `human` | a person (`brief`) | the flow waits; the model cannot answer |
 
-**Coverage** is the share of gates that **proved** code decides. A `by` line must name a unit or an `external`, and the gate takes the level of that code: proved, observed, code (Rig does not prove it), or none (the name points at nothing). A gate that names code is not yet a fact: only proved code makes it one. Over time, move gates from `judge` to `hard` or `soft` when you can write the check, and prove the check. The model stays where it is good: inside the judge gates and inside the steps, for decisions that no rule can hold.
+**Coverage** is the share of gates that **proved or tested** code decides. A `by` line names a unit, an `external`, or a function of a `code` line (code in a normal file, with its test file). The gate takes the level of that code: proved (Rig ran its examples), tested (a test file names the function), observed, code (nothing checks it), or none (the name points at nothing). A gate that names code is not yet a fact: only checked code makes it one.
+
+**A gate in a prompt is a suggestion; a gate in a runner is a fact.** The first compiled skill asked the model to walk the flow and to obey the gates. A test run showed the limit of that: a word limit that was only text was broken, and nothing saw it. So a tool now has a **runner** (`rigkit.py`): code walks the flow, calls the code of the steps and the gates, and stops only at a `judge` gate, a `human` gate, or a step that has no code. It refuses an answer for another node. Over time, move gates from `judge` to `hard` or `soft` when you can write the check, and prove the check. The model stays where it is good: inside the judge gates and inside the steps, for decisions that no rule can hold.
 
 A `judge` result is a guess, and the person must see that. The compiled skill tells the agent to end its answer with a `Guessed:` line that names the gates it decided itself.
 
@@ -84,7 +89,8 @@ A Rig file is pseudo-code that the agent writes and the human reads. It is also 
 
 ## 7. What Rig is not
 
-- It is not a replacement for a programming language. Casts are written in normal languages.
+- It is not a replacement for a programming language. The code of a tool is written in a normal language, in normal files.
+- It is not a framework that a tool must live in. A tool keeps one copied file (`rigkit.py`) and its compiled catalogue.
 - It is not a prompt format for open-ended work. For "help me design this", plain language is better.
 - It is not a way to trust a model. It is a way to *not need to*: the runtime decides.
 
@@ -93,3 +99,4 @@ A Rig file is pseudo-code that the agent writes and the human reads. It is also 
 - [sidenote-agent-configuration.md](sidenote-agent-configuration.md): agent configuration as a graph of gates and rules.
 - [self-writing-language.md](self-writing-language.md): intent as data, and the self-writing loop.
 - [findings-2026-11-11.md](findings-2026-11-11.md): research on related work, and what to learn from it.
+- [status.md](status.md): the refocus of 2026-11-15, from a language to a kit and a guide.
