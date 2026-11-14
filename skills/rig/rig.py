@@ -1332,6 +1332,7 @@ def skill(u, rules_path=None, preset=None, driver=None):
 			'3. Repeat step 2 until the result has `outcome`.', '',
 			'Never decide a hard or soft gate: code decides them. Use only values from a result or from the rules.',
 			'`{} status <run>` shows a run again; `{} rules` shows the rules.'.format(driver, driver), '',
+			'Many items: `{} batch \'<a JSON list of inputs>\' --report reports/<name>.md`. Code starts a run for each item and gives a summary. Then answer the runs in `left_for_model`, one at a time (`status <run>` shows what each waits for). Give the person the list `waits_for_person` and the path of the report. `{} queues` shows what waits, at any time.'.format(driver, driver), '',
 			'## Flow (the map of the run)', '']
 	elif c['flow']:
 		out += ['## Flow', '', 'Start at `{}`. Go from node to node as written. Do not skip a gate.'.format(c['start']), '']

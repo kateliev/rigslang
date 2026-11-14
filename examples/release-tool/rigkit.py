@@ -9,7 +9,8 @@ It reads a catalogue (rig.py compile json) and gives a tool five things:
     Kit       binds the code of the steps and gates, and walks the flow
     runs      a run is one item on its way through the flow; it is saved as a file,
               it keeps its trace, and it refuses an answer for another node
-    cli       run, answer, approve, status, rules, flow, call, regress: one JSON line each
+    cli       run, batch, queues, answer, approve, status, rules, flow, call, regress:
+              one JSON line each
     step      a wrapper for code that runs inside a host application
 
 Code does the steps and decides the hard and soft gates. At a judge gate, a human gate,
@@ -148,15 +149,19 @@ def write_json(path, data):
 
 
 class Kit(object):
-	def __init__(self, catalogue, runs=None, max_visits=10):
+	def __init__(self, catalogue, runs=None, max_visits=10, errors_stop=2):
 		'''catalogue: the path of a compiled catalogue, or the catalogue itself.
 		runs: a folder for the run files (None: runs live in memory only).
-		max_visits: a run that enters one node more often stops (a loop in the flow).'''
+		max_visits: a run that enters one node more often stops (a loop in the flow).
+		errors_stop: a batch stops after this many errors in a row (the host may be down).
+		A rule "run.max_visits" or "run.errors_stop" of the catalogue replaces the value.'''
 		self.catalogue = read_json(catalogue) if isinstance(catalogue, str) else catalogue
 		self.rules = Rules(self.catalogue)
 		self.flow = dict((n['id'], n) for n in self.catalogue.get('flow', []))
 		self.start = self.catalogue.get('start')
-		self.runs, self.max_visits = runs, max_visits
+		self.runs = runs
+		self.max_visits = self.rules('run.max_visits') if 'run.max_visits' in self.rules.by_id else max_visits
+		self.errors_stop = self.rules('run.errors_stop') if 'run.errors_stop' in self.rules.by_id else errors_stop
 		self.code, self.tools, self.memory, self.count = {}, {}, {}, 0
 
 	# - Binding the code
@@ -402,6 +407,98 @@ class Kit(object):
 		out['path'] = [t['node'] for t in run['trace']]
 		return out
 
+	# - Batches and queues: code runs the list; the model gets a summary and the runs that wait
+	def row(self, r, inputs):
+		row = {'run': r['run'], 'inputs': inputs, 'problems': r['problems']}
+		if 'outcome' in r:
+			row['end'] = r['outcome']['end'] or r['outcome']['label']
+		elif 'error' in r:
+			row['error'] = r['error']['error']
+		elif 'waiting' in r:
+			row['waiting'] = {'node': r['waiting']['node'], 'kind': r['waiting']['kind']}
+		return row
+
+	def batch(self, items, rules=None, preset=None, report=None):
+		'''Start a run for each item of a list. -> a short summary. An item that needs the model or a
+		person does not stop the batch: its run waits, and "queues" lists it.'''
+		rows, in_row, stopped = [], 0, None
+		for inputs in items:
+			try:
+				row = self.row(self.run(inputs, rules=rules, preset=preset), inputs)
+			except Refused as e:
+				row = {'run': None, 'inputs': inputs, 'problems': [], 'refused': str(e)}
+			rows.append(row)
+			in_row = in_row + 1 if 'error' in row else 0
+			if in_row >= self.errors_stop:
+				stopped = 'stopped after {} errors in a row: {} of {} items started'.format(in_row, len(rows), len(items))
+				break
+		ends = {}
+		for row in rows:
+			if 'end' in row:
+				ends[row['end']] = ends.get(row['end'], 0) + 1
+		out = {'items': len(items), 'started': len(rows), 'ends': ends,
+			'left_for_model': [r['run'] for r in rows if r.get('waiting', {}).get('kind') in ('judge', 'step')],
+			'waits_for_person': [r['run'] for r in rows if r.get('waiting', {}).get('kind') == 'human'],
+			'errors': [{'run': r['run'], 'error': r['error']} for r in rows if 'error' in r],
+			'refused': [{'inputs': r['inputs'], 'refused': r['refused']} for r in rows if 'refused' in r]}
+		if stopped:
+			out['stopped'] = stopped
+		if report:
+			self.write_report(report, rows, out)
+			out['report'] = report
+		return out
+
+	def write_report(self, path, rows, summary):
+		'''A batch report as Markdown: what failed first, then what waits, then the rest.'''
+		def cell(v):
+			return str(v).replace('|', '\\|').replace('\n', ' ')
+		bad = [r for r in rows if 'error' in r or 'refused' in r]
+		problems = [r for r in rows if r.get('problems') and r not in bad]
+		waits = [r for r in rows if 'waiting' in r and r not in problems]
+		clean = [r for r in rows if r not in bad and r not in problems and r not in waits]
+		L = ['# Batch report: {}'.format(self.catalogue.get('unit')), '', datetime.datetime.now().isoformat(timespec='seconds'), '',
+			'{} of {} items started. Ends: {}. Left for the model: {}. Waits for a person: {}. Errors: {}.'.format(summary['started'], summary['items'],
+				', '.join('{} {}'.format(n, e) for e, n in sorted(summary['ends'].items())) or 'none', len(summary['left_for_model']), len(summary['waits_for_person']), len(summary['errors'])), '']
+		if summary.get('stopped'):
+			L += ['**{}**'.format(summary['stopped']), '']
+		for title, part in (('Errors and refused items', bad), ('Items with problems', problems), ('Items that wait, with no problem so far', waits), ('Items with no problem', clean)):
+			if not part:
+				continue
+			L += ['## ' + title, '', '| Run | Inputs | State | Problems |', '|---|---|---|---|']
+			for r in part:
+				state = r.get('end') and 'end: ' + str(r['end']) or r.get('error') or r.get('refused') or 'waits at {} ({})'.format(r['waiting']['node'], r['waiting']['kind'])
+				L.append('| {} | {} | {} | {} |'.format(r['run'] or '-', cell(json.dumps(r['inputs'], ensure_ascii=False)), cell(state), cell('; '.join(r.get('problems', [])))))
+			L.append('')
+		os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+		with open(path, 'w', encoding='utf-8', newline='\n') as f:
+			f.write('\n'.join(L))
+
+	def all_runs(self):
+		if self.runs is None:
+			return list(self.memory.values())
+		if not os.path.isdir(self.runs):
+			return []
+		return [read_json(os.path.join(self.runs, n)) for n in sorted(os.listdir(self.runs)) if n.endswith('.json')]
+
+	def queues(self):
+		'''The runs that did not end, by who must act: the model, a person, or nobody until an error is fixed.'''
+		out = {'left_for_model': [], 'waits_for_person': [], 'errors': []}
+		for run in self.all_runs():
+			if run.get('outcome') is not None:
+				continue
+			node = self.flow.get(run['at'], {})
+			entry = {'run': run['id'], 'node': run['at'], 'inputs': run['inputs']}
+			if node.get('name'):
+				entry['name'] = node['name']
+			if run.get('error'):
+				entry['error'] = run['error']['error']
+				out['errors'].append(entry)
+			elif node.get('kind') == 'human':
+				out['waits_for_person'].append(entry)
+			else:
+				out['left_for_model'].append(entry)
+		return out
+
 	# - Tools (units with one function)
 	def call(self, name, args):
 		if name not in self.tools:
@@ -443,14 +540,19 @@ class Kit(object):
 
 	# - Command line: one JSON line for each call
 	def cli(self, argv, out=None):
-		'''run [JSON] [--preset N] [--set id=value]... | answer RUN JSON | approve RUN yes|no [NOTE]
-		| resume RUN | status RUN | rules | flow | call TOOL [JSON] | regress FILE [--baseline]'''
+		'''run [JSON] [--preset N] [--set id=value]... | batch ITEMS [--report PATH] [--preset N] [--set id=value]...
+		| queues | answer RUN JSON | approve RUN yes|no [NOTE] | resume RUN | status RUN | rules | flow
+		| call TOOL [JSON] | regress FILE [--baseline]        ITEMS: a JSON list of inputs, or a file with one'''
 		out = out or (lambda text: print(text))
 		argv = list(argv)
 		cmd = argv.pop(0) if argv else ''
 		try:
-			if cmd == 'run':
-				preset, changes = None, {}
+			if cmd in ('run', 'batch'):
+				preset, changes, report = None, {}, None
+				while '--report' in argv:
+					i = argv.index('--report')
+					report = argv[i + 1]
+					del argv[i:i + 2]
 				while '--preset' in argv:
 					i = argv.index('--preset')
 					preset = argv[i + 1]
@@ -464,7 +566,15 @@ class Kit(object):
 						pass
 					changes[rid] = v
 					del argv[i:i + 2]
-				res = self.run(json.loads(argv[0]) if argv else {}, rules=changes, preset=preset)
+				if cmd == 'batch':
+					items = read_json(argv[0]) if os.path.exists(argv[0]) else json.loads(argv[0])
+					if not isinstance(items, list):
+						raise Refused('batch: a JSON list of inputs, or a file that holds one')
+					res = self.batch(items, rules=changes, preset=preset, report=report)
+				else:
+					res = self.run(json.loads(argv[0]) if argv else {}, rules=changes, preset=preset)
+			elif cmd == 'queues':
+				res = self.queues()
 			elif cmd == 'answer':
 				res = self.answer(argv[0], json.loads(argv[1]))
 			elif cmd == 'approve':

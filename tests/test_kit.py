@@ -179,6 +179,34 @@ class Runs(unittest.TestCase):
 		self.assertEqual(k.cli(['run', 'not json'], lines.append), 0)
 		self.assertIn('refused', lines[2])
 
+	def test_batch_and_queues(self):
+		tmp = tempfile.mkdtemp()
+		try:
+			k = kit(runs=os.path.join(tmp, 'runs'))
+			report = os.path.join(tmp, 'reports', 'b.md')
+			got = k.batch([{'n': 2}, {'n': 8}, {'n': 80}, {'wrong': 1}], report=report)
+			self.assertEqual(got['ends'], {'big': 1, 'huge': 1})
+			self.assertEqual(len(got['left_for_model']), 1)
+			self.assertEqual(len(got['refused']), 1)
+			with open(report, encoding='utf-8') as f:
+				text = f.read()
+			self.assertLess(text.index('## Errors and refused items'), text.index('## Items with problems'))
+			q = k.queues()
+			self.assertEqual([e['node'] for e in q['left_for_model']], ['nice'])
+			r = k.answer(q['left_for_model'][0]['run'], {'pass': True})
+			self.assertEqual([e['node'] for e in k.queues()['waits_for_person']], ['sure'])
+			k.answer(r['run'], {'pass': True}, who='person')
+			self.assertEqual(k.queues(), {'left_for_model': [], 'waits_for_person': [], 'errors': []})
+		finally:
+			shutil.rmtree(tmp)
+
+	def test_a_batch_stops_when_the_host_is_down(self):
+		def double(s, R):
+			raise OSError('the host is down')
+		got = kit(double=double).batch([{'n': 1}] * 5)
+		self.assertEqual(got['started'], 2)
+		self.assertIn('2 errors in a row', got['stopped'])
+
 	def test_regress(self):
 		cases = [{'name': 'a', 'inputs': {'n': 2}, 'answers': {'nice': {'pass': True}, 'sure': {'person': True, 'pass': True}}, 'expect': {'end': 'done'}},
 			{'name': 'b', 'inputs': {'n': 8}, 'expect': {'end': 'done'}}]
@@ -278,7 +306,7 @@ class Projects(unittest.TestCase):
 			self.assertEqual(self.quiet(rig_project.build, folder, True)[0], 0)
 			with open(os.path.join(folder, 'plugin', 'src', 'gen', 'front.json'), encoding='utf-8') as f:
 				front = json.load(f)
-			self.assertEqual([t['name'] for t in front['tools']], ['start_run', 'answer_gate', 'run_status'])  # no tool for the human gate
+			self.assertEqual([t['name'] for t in front['tools']], ['start_run', 'answer_gate', 'run_status', 'start_batch', 'queues'])  # no tool for the human gate
 			self.assertIn('you cannot answer', front['prompt'])
 
 			def call(*args):

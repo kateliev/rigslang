@@ -44,7 +44,8 @@ Sort every item that is not done by **who must act**:
 | waits for the person to confirm | a person, with one look | The tool made the thing; one look releases all the items that wait for it. |
 | ready to go on | nobody yet: run them again | The thing they waited for now exists. |
 
-- A queue is a file, one for each target, next to the runs. An item of another target is not "ready".
+- The runner gives two queues from the run files: `left_for_model` and `waits_for_person` (`tool.py queues`). Queues that depend on the job (waits for a part, ready to go on) are ends of the flow, or files that the steps write.
+- A queue belongs to one target: keep one runs folder for each. An item of another target is not "ready".
 - When the host can show a mark on an item (a colour, a tag), use one mark for each queue. The colours are rules.
 - A report for the person lists the queues sorted by how many items wait for each thing. The person then does the work that frees the most items first.
 
@@ -57,6 +58,8 @@ Sort every item that is not done by **who must act**:
 - An item that needs a choice is put back as it was, and goes to the queue "left for the model". The batch goes on.
 - At the end, the left items come back to the model as a short list, one time each.
 - A batch has a size limit, and it is a rule. The first batch is small.
+
+The runner has this: `tool.py batch` runs a list and writes a report, and `tool.py queues` lists the runs that wait, by who must act. A run that needs the model does not stop the batch: it waits in its file.
 
 ## 6. The state survives a restart
 

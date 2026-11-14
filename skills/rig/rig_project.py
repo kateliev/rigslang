@@ -96,7 +96,10 @@ def outputs(folder, m):
 	if m.get('kit'):
 		out[m['kit']] = read(KIT)
 	if m.get('plugin'):
-		out[os.path.join(m['plugin'].get('folder', 'plugin'), 'src', 'gen', 'front.json')] = json.dumps(front(m, files, main), ensure_ascii=False, indent=1) + '\n'
+		sub = m['plugin'].get('folder', 'plugin')
+		out[os.path.join(sub, 'src', 'gen', 'front.json')] = json.dumps(front(m, files, main), ensure_ascii=False, indent=1) + '\n'
+		for rel in ('src/bridge.ts', 'src/index.ts', 'try.ts'):  # the same code for every tool: keep each copy current
+			out[os.path.join(sub, *rel.split('/'))] = read(os.path.join(TEMPLATES, 'plugin', *rel.split('/')))
 	return out
 
 
@@ -123,6 +126,10 @@ def front(m, files, main):
 				'parameters': {'type': 'object', 'properties': {'run': run, 'result': {'description': 'What the step gave: a text, a number or an object.'}}, 'required': ['run', 'result']}})
 		tools.append({'name': 'run_status', 'kind': 'status', 'description': 'Show a run again: where it is and what it waits for.',
 			'parameters': {'type': 'object', 'properties': {'run': run}, 'required': ['run']}})
+		tools.append({'name': 'start_batch', 'kind': 'batch', 'description': 'Start a run for each item of a list. Gives a short summary and the path of the report. Use it for more than one item.',
+			'parameters': {'type': 'object', 'properties': {'items': {'type': 'array', 'items': d['parameters'], 'description': 'One object for each item, with the inputs of start_run.'}}, 'required': ['items']}})
+		tools.append({'name': 'queues', 'kind': 'queues', 'description': 'The runs that did not end: left_for_model (you answer them), waits_for_person (the operator answers), errors.',
+			'parameters': {'type': 'object', 'properties': {}, 'required': []}})
 		inputs = ', '.join(x.word(0) for x in main.kids('in')) or 'no input'
 		rules = ['To work on one item, call start_run ({}). Work on one item at a time.'.format(inputs),
 			'Read each result. It is JSON.',
@@ -132,6 +139,7 @@ def front(m, files, main):
 			rules.append('"waiting" with kind "step": do what "do" says. Call finish_step with the run id and the result.')
 		if any(g.word(1) == 'human' for g in main.kids('gate')):
 			rules.append('"waiting" with kind "human": you cannot answer. Tell the operator what "brief" asks, and this command: {} approve <run id> yes (or no). Stop work on this item.'.format(driver))
+		rules.append('More than one item: call start_batch with the list. Show only its summary and the report path. Then, for each run in "left_for_model": call run_status, and answer it as in the rules above. Tell the operator the list "waits_for_person". To continue earlier work, call queues.')
 		rules += ['"refused": the call was wrong. It is final. Do not repeat it. Call run_status to see where the run is.',
 			'"error": tell the operator the error text. Do not answer the run.',
 			'Do not invent names or numbers. Use only values from a result.',

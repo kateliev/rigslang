@@ -26,6 +26,8 @@ Every tool has `tool.py`. It is the only door to the tool.
 | Call | What it does |
 |---|---|
 | `tool.py run '<inputs as JSON>'` | Start a run. Code walks the flow as far as it can. Options: `--preset NAME`, `--set group.name=value` (for this run only). |
+| `tool.py batch '<JSON list>' --report PATH` | Start a run for each item of a list (or of a file). Code runs the list and gives a summary; the report has the failures first. A batch stops after two errors in a row. |
+| `tool.py queues` | The runs that did not end, by who must act: `left_for_model`, `waits_for_person`, `errors`. |
 | `tool.py answer RUN '<JSON>'` | The model answers the node that the run waits at: `{"pass": true, "why": "..."}` for a gate, `{"result": ...}` for a step. |
 | `tool.py approve RUN yes\|no [NOTE]` | A person answers a human gate. |
 | `tool.py resume RUN` | Walk on after an error was fixed. |
@@ -46,6 +48,8 @@ Each call prints one JSON line. The keys to read:
 | `guessed` | The gates that the model decided. |
 | `path` | The nodes that the run went through. |
 
+Two settings of the runner can be rules of the source: `run.max_visits` (a run that enters one node more often stops: a loop; default 10) and `run.errors_stop` (a batch stops after this many errors in a row; default 2).
+
 ## 2. The front for Claude: a skill
 
 `rig.json` names the skill file (`"build": {"skill": "skill/SKILL.md"}`). The build compiles it with the driver, so the skill does not ask Claude to walk the flow. It says: start a run, read the result, answer what waits. Then it shows the rules and the flow as a map.
@@ -62,7 +66,7 @@ python3 RIG plugin DIR --owner NAME
 
 This adds the folder `plugin/`: an LM Studio plugin. Its code is the same for every tool. Everything about the tool comes from `plugin/src/gen/front.json`, which the build compiles:
 
-- **The tools.** `start_run` (with the inputs of the unit), `answer_gate`, `finish_step` (only when the flow has a step for the model), `run_status`, and one tool for each tool unit.
+- **The tools.** `start_run` (with the inputs of the unit), `answer_gate`, `finish_step` (only when the flow has a step for the model), `run_status`, `start_batch`, `queues`, and one tool for each tool unit.
 - **The rules text.** About ten short numbered lines. The plugin puts it before the first message of a chat.
 - **The driver.** The plugin starts it for each call, without a shell.
 
@@ -84,7 +88,7 @@ node --no-warnings try.ts start_run '{"item": "a longer item"}'
 
 A small local model is not a small frontier model. It follows a short list well, and a long text badly.
 
-- **Few tools.** Each tool is one more thing to choose wrongly. The flow tools above are four. Do not give the model a tool for each step: the runner does the steps.
+- **Few tools.** Each tool is one more thing to choose wrongly. The flow tools above are six at most. Do not give the model a tool for each step: the runner does the steps.
 - **A short rules text.** One line for each kind of result. The text of each decision arrives with the result (`brief`, `do`), when the model needs it and not before.
 - **The result says what to do next.** The model reads `waiting` and acts. It does not plan the flow.
 - **Simple words.** Short sentences, one meaning for one word, the condition before the instruction. Write the `intent`, `brief` and `do` texts of the source for the small model; the large model reads them just as well.

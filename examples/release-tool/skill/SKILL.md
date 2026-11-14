@@ -38,6 +38,8 @@ Run every command in the folder of the tool (the folder that holds `rig.json`).
 Never decide a hard or soft gate: code decides them. Use only values from a result or from the rules.
 `python3 tool.py status <run>` shows a run again; `python3 tool.py rules` shows the rules.
 
+Many items: `python3 tool.py batch '<a JSON list of inputs>' --report reports/<name>.md`. Code starts a run for each item and gives a summary. Then answer the runs in `left_for_model`, one at a time (`status <run>` shows what each waits for). Give the person the list `waits_for_person` and the path of the report. `python3 tool.py queues` shows what waits, at any time.
+
 ## Flow (the map of the run)
 
 ### `collect` Collect (step)

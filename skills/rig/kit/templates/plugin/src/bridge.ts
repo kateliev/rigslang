@@ -12,7 +12,7 @@ import frontJson from "./gen/front.json" with { type: "json" };
 
 export type FrontTool = {
   name: string;
-  kind: string; // run | answer_gate | finish_step | status | call
+  kind: string; // run | batch | queues | answer_gate | finish_step | status | call
   unit?: string; // kind "call": the name of the tool unit
   description: string;
   parameters: { type: string; properties: Record<string, unknown>; required: string[] };
@@ -38,6 +38,8 @@ export function argvFor(tool: FrontTool, p: Record<string, unknown>): string[] {
   if (tool.kind === "answer_gate") return ["answer", run, JSON.stringify(p.why ? { pass: p.pass === true, why: String(p.why) } : { pass: p.pass === true })];
   if (tool.kind === "finish_step") return ["answer", run, JSON.stringify({ result: p.result })];
   if (tool.kind === "status") return ["status", run];
+  if (tool.kind === "queues") return ["queues"];
+  if (tool.kind === "batch") return ["batch", JSON.stringify(Array.isArray(p.items) ? p.items : []), "--report", `reports/batch-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.md`];
   return ["call", tool.unit ?? tool.name, JSON.stringify(p)];
 }
 

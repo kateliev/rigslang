@@ -1,6 +1,6 @@
 {
  "name": "release",
- "prompt": "Rules for the tool release (publish a release folder only when its notes, its version and its tests are ready, and a person agrees):\n1. To work on one item, call start_run (folder). Work on one item at a time.\n2. Read each result. It is JSON.\n3. \"outcome\": the run ended. Tell the operator the end and the \"problems\". Then go to the next item.\n4. \"waiting\" with kind \"judge\": decide what \"brief\" asks. Call answer_gate with the run id, pass true or false, and why in one sentence.\n5. \"waiting\" with kind \"step\": do what \"do\" says. Call finish_step with the run id and the result.\n6. \"waiting\" with kind \"human\": you cannot answer. Tell the operator what \"brief\" asks, and this command: python3 tool.py approve <run id> yes (or no). Stop work on this item.\n7. \"refused\": the call was wrong. It is final. Do not repeat it. Call run_status to see where the run is.\n8. \"error\": tell the operator the error text. Do not answer the run.\n9. Do not invent names or numbers. Use only values from a result.\n10. When a run ends and its \"guessed\" list is not empty, write one last line: Guessed: and the names in that list.",
+ "prompt": "Rules for the tool release (publish a release folder only when its notes, its version and its tests are ready, and a person agrees):\n1. To work on one item, call start_run (folder). Work on one item at a time.\n2. Read each result. It is JSON.\n3. \"outcome\": the run ended. Tell the operator the end and the \"problems\". Then go to the next item.\n4. \"waiting\" with kind \"judge\": decide what \"brief\" asks. Call answer_gate with the run id, pass true or false, and why in one sentence.\n5. \"waiting\" with kind \"step\": do what \"do\" says. Call finish_step with the run id and the result.\n6. \"waiting\" with kind \"human\": you cannot answer. Tell the operator what \"brief\" asks, and this command: python3 tool.py approve <run id> yes (or no). Stop work on this item.\n7. More than one item: call start_batch with the list. Show only its summary and the report path. Then, for each run in \"left_for_model\": call run_status, and answer it as in the rules above. Tell the operator the list \"waits_for_person\". To continue earlier work, call queues.\n8. \"refused\": the call was wrong. It is final. Do not repeat it. Call run_status to see where the run is.\n9. \"error\": tell the operator the error text. Do not answer the run.\n10. Do not invent names or numbers. Use only values from a result.\n11. When a run ends and its \"guessed\" list is not empty, write one last line: Guessed: and the names in that list.",
  "driver": [
   "python3",
   "tool.py"
@@ -86,6 +86,45 @@
     "required": [
      "run"
     ]
+   }
+  },
+  {
+   "name": "start_batch",
+   "kind": "batch",
+   "description": "Start a run for each item of a list. Gives a short summary and the path of the report. Use it for more than one item.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "folder": {
+         "type": "string",
+         "description": "the release folder: it holds NOTES.md, VERSION and tests.json"
+        }
+       },
+       "required": [
+        "folder"
+       ]
+      },
+      "description": "One object for each item, with the inputs of start_run."
+     }
+    },
+    "required": [
+     "items"
+    ]
+   }
+  },
+  {
+   "name": "queues",
+   "kind": "queues",
+   "description": "The runs that did not end: left_for_model (you answer them), waits_for_person (the operator answers), errors.",
+   "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
    }
   }
  ]
