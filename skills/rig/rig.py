@@ -1325,7 +1325,7 @@ def skill(u, rules_path=None, preset=None, driver=None):
 			'Run every command in the folder of the tool (the folder that holds `rig.json`).', '',
 			'1. Start a run: `{} run \'<inputs as JSON>\'`{}.'.format(driver, ' (inputs: ' + args + ')' if args else ''),
 			'2. Read the result. It is one JSON object.',
-			'   - `outcome`: the run ended at that end node. Report it, with `problems` first. `result` is what the run made: the value of its last step.',
+			'   - `outcome`: the run ended at that end node. Report it, with `problems` first. `result` is what the run made (only when a step leads to the end).',
 			'   - `waiting`: the run stopped at a node that code cannot do. Read `kind`, `do` and `brief`. `sees` holds the facts of the run that you need for this node: use them, and nothing else.',
 			'     - `judge`: decide as `brief` says. Answer: `{} answer <run> \'{{"pass": true}}\'` (or false, with `"why"`).'.format(driver),
 			'     - `step`: do what `do` says. Answer: `{} answer <run> \'{{"result": ...}}\'`.'.format(driver),
@@ -1335,7 +1335,7 @@ def skill(u, rules_path=None, preset=None, driver=None):
 			'3. Repeat step 2 until the result has `outcome`.', '',
 			'Never decide a hard or soft gate: code decides them. Use only values from a result or from the rules.',
 			'`{} status <run>` shows a run again; `{} rules` shows the rules.'.format(driver, driver), '',
-			'Many items: `{} batch \'<a JSON list of inputs>\' --report reports/<name>.md`. Code starts a run for each item and gives a summary. Then answer the runs in `left_for_model`, one at a time (`status <run>` shows what each waits for). Give the person the list `waits_for_person` and the path of the report. `{} queues` shows what waits, at any time.'.format(driver, driver), '',
+			'More than one item: `{} batch \'<a JSON list of inputs>\' --report reports/<name>.md`. Code starts a run for each item and gives a summary. Then answer the runs in `left_for_model`, one at a time (`status <run>` shows what each waits for). Give the person the list `waits_for_person` and the path of the report. `{} queues` shows what waits, at any time.'.format(driver, driver), '',
 			'## Flow (the map of the run)', '']
 	elif c['flow']:
 		out += ['## Flow', '', 'Start at `{}`. Go from node to node as written. Do not skip a gate.'.format(c['start']), '']
@@ -1385,7 +1385,8 @@ def skill(u, rules_path=None, preset=None, driver=None):
 				'You decide these gates yourself, not code: {}. Their results are guesses.'.format(', '.join('`{}`'.format(g) for g in guessed)),
 				'End your answer with one line that starts with `Guessed:` and names each of these gates that you decided, for example:', '',
 				'Guessed: ' + names, '',
-				'Do not leave this line out. A person must see which results are guesses.', '']
+				'Do not leave this line out. A person must see which results are guesses.'
+			+ (' Write it for each run in which you decided a gate, also when the run ended early.' if driver else ''), '']
 	return '\n'.join(out).rstrip('\n') + '\n'
 
 

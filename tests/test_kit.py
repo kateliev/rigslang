@@ -208,14 +208,19 @@ class Runs(unittest.TestCase):
 		self.assertEqual(got['started'], 2)
 		self.assertIn('2 errors in a row', got['stopped'])
 
-	def test_sees_and_the_result_of_a_run(self):
+	def test_sees(self):
 		text = FLOW.replace('    brief "is {limits.max} a nice limit?"', '    brief "is {limits.max} a nice limit?"\n    sees n double nothing.here')
 		k = rigkit.Kit(catalogue(text)).bind('code', {'double': lambda s, R: {'value': s['n'] * 2}, 'small': lambda s, R: True})
 		r = k.run({'n': 2})
 		self.assertEqual(r['waiting']['sees'], {'n': 2, 'double': {'value': 4}})   # a path that is not there is left out
 		r = k.answer(r['run'], {'pass': True})
 		r = k.answer(r['run'], {'pass': True}, who='person')
-		self.assertEqual(r['result'], {'value': 4})                                # the value of the last step
+		self.assertNotIn('result', r)                                              # a gate ended the run: no result
+
+	def test_the_result_is_the_value_of_the_step_before_the_end(self):
+		text = 'unit t agent\n  step make\n    by code.make\n    next -> done\n  end done\n'
+		k = rigkit.Kit(catalogue(text)).bind('code', {'make': lambda s, R: 'made'})
+		self.assertEqual(k.run({})['result'], 'made')
 
 	def test_regress(self):
 		cases = [{'name': 'a', 'inputs': {'n': 2}, 'answers': {'nice': {'pass': True}, 'sure': {'person': True, 'pass': True}}, 'expect': {'end': 'done'}},

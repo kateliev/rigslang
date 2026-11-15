@@ -31,6 +31,14 @@ def pick_title(band, titles):
 	return titles[0] if titles else None
 
 
+def same_name(band, title):
+	'''Is the title the name of the band? "Name", or "Name (band)" and the like; case and "The" do not count.'''
+	def norm(s):
+		s = re.sub(r'\s*\([^)]*\)\s*$', '', s.strip().lower())
+		return re.sub(r'^the\s+', '', s)
+	return bool(norm(band)) and norm(band) == norm(title)
+
+
 def album_list(wikitext):
 	'''The albums of the wikitext of a Discography section -> [[title, year]]; the year is 0 when
 	the line has none. Many large bands keep only a link to another article here: then the list is empty.'''

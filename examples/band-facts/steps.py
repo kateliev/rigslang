@@ -52,11 +52,23 @@ def find(state, R):
 	return {'answered': answered, 'results': results, 'title': title, 'url': 'https://en.wikipedia.org/wiki/' + quote(title) if title else None}
 
 
+def summary_of(title, R):
+	text = fetch(SUMMARY + quote(title.replace(' ', '_'), safe=''), R)
+	return json.loads(text) if text.strip().startswith('{') else {}
+
+
 def read(state, R):
-	text = fetch(SUMMARY + quote(state['find']['title'], safe=''), R)
-	page = json.loads(text) if text.strip().startswith('{') else {}
+	'''Read the article. A page that only lists the meanings of a name is not an article:
+	then try the title "name (band)".'''
+	tried, page = [], {}
+	for title in (state['find']['title'], state['band'].strip() + ' (band)'):
+		tried.append(title.replace('_', ' '))
+		page = summary_of(title, R)
+		if page.get('extract') and page.get('type') != 'disambiguation':
+			break
+		page = {}
 	if not page.get('extract'):
-		return {'title': state['find']['title'], 'url': state['find']['url'], 'description': '', 'summary': '', 'albums': []}
+		return {'title': state['find']['title'].replace('_', ' '), 'url': state['find']['url'], 'description': '', 'summary': '', 'albums': [], 'tried': tried}
 	q = '&page=' + quote(page['title'], safe='')
 	sections = (json.loads(fetch(API + '&prop=sections' + q, R) or '{}').get('parse') or {}).get('sections', [])
 	found = next((s for s in sections if s.get('line', '').strip().lower() == 'discography'), None)
@@ -64,7 +76,7 @@ def read(state, R):
 	if found:
 		wikitext = (json.loads(fetch(API + '&prop=wikitext&section={}'.format(found['index']) + q, R) or '{}').get('parse') or {}).get('wikitext', '')
 	return {'title': page['title'], 'url': ((page.get('content_urls') or {}).get('desktop') or {}).get('page') or state['find']['url'],
-		'description': page.get('description', ''), 'summary': page['extract'], 'albums': parse.album_list(wikitext)}
+		'description': page.get('description', ''), 'summary': page['extract'], 'albums': parse.album_list(wikitext), 'tried': tried}
 
 
 def compose(state, R):

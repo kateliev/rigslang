@@ -1,4 +1,11 @@
 {
+ "srsearch=Lantern&": "search-lantern.json",
+ "srsearch=Some%20Words": "search-words.json",
+ "page/summary/Lantern_%28band%29": "summary-lantern-band.json",
+ "page/summary/Lantern": "summary-lantern.json",
+ "page/summary/Harbour_Master": "summary-harbour-master.json",
+ "prop=sections&page=Lantern%20%28band%29": "sections-lake.json",
+ "prop=sections&page=Harbour%20Master": "sections-lake.json",
  "srsearch=The%20Paper%20Lanterns": "search-paper-lanterns.json",
  "srsearch=Paper%20Lantern%20Lake": "search-lake.json",
  "srsearch=Nobody%20At%20All": "search-nothing.json",

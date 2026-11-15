@@ -418,9 +418,10 @@ class Kit(object):
 		if 'error' in out:
 			out['error'].pop('trace', None)
 		if 'outcome' in out:
-			steps = [t['node'] for t in run['trace'] if t['kind'] == 'step']
-			if steps and run['state'].get(steps[-1]) is not None:
-				out['result'] = run['state'][steps[-1]]
+			# The result of a run: the value of the step that leads to the end. A run that a gate ended has none.
+			before = run['trace'][-2] if len(run['trace']) > 1 and run['trace'][-1]['kind'] == 'end' else None
+			if before and before['kind'] == 'step' and run['state'].get(before['node']) is not None:
+				out['result'] = run['state'][before['node']]
 		out['problems'], out['guessed'] = run['problems'], run['guessed']
 		out['path'] = [t['node'] for t in run['trace']]
 		return out

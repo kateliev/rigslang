@@ -7,6 +7,7 @@
     "dev": "lms dev",
     "install-plugin": "lms dev --install --yes",
     "try": "node --no-warnings try.ts",
+    "agent": "node --no-warnings agent.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

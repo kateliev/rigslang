@@ -1,0 +1,11 @@
+{
+ "type": "standard",
+ "title": "Lantern (band)",
+ "description": "Folk band (invented for a test)",
+ "extract": "Lantern are a folk band of three players, formed in 2004.",
+ "content_urls": {
+  "desktop": {
+   "page": "https://en.wikipedia.org/wiki/Lantern_(band)"
+  }
+ }
+}

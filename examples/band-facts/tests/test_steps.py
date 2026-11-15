@@ -27,9 +27,14 @@ class Steps(unittest.TestCase):
 		self.assertFalse(steps.find({'band': 'The Service Is Down'}, self.kit.rules)['answered'])
 
 	def test_read(self):
-		got = steps.read({'find': {'title': 'The_Paper_Lanterns', 'url': 'u'}}, self.kit.rules)
+		got = steps.read({'band': 'The Paper Lanterns', 'find': {'title': 'The_Paper_Lanterns', 'url': 'u'}}, self.kit.rules)
 		self.assertEqual(got['albums'], [['First Light', 1999], ['Slow Tide', 2002], ['Harbour Songs', 2006], ['Demo Tape', 0]])
 		self.assertIn('rock band', got['summary'])
+
+	def test_read_goes_past_a_page_of_meanings(self):
+		got = steps.read({'band': 'Lantern', 'find': {'title': 'Lantern', 'url': 'u'}}, self.kit.rules)
+		self.assertEqual(got['title'], 'Lantern (band)')
+		self.assertEqual(got['tried'], ['Lantern', 'Lantern (band)'])
 
 	def test_compose(self):
 		state = {'write': GOOD, 'read': {'url': 'https://x.example', 'albums': [['A', 1999], ['B', 0], ['C', 2001]]}}

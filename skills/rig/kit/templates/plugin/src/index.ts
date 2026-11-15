@@ -3,10 +3,11 @@
 //   prompt: the short rules of gen/front.json, before the first user message of a chat
 
 import {
-  createConfigSchematics, rawFunctionTool,
-  type ChatMessage, type PluginContext, type PromptPreprocessorController, type Tool, type ToolsProviderController,
+  createConfigSchematics,
+  type ChatMessage, type PluginContext, type PromptPreprocessorController, type ToolsProviderController,
 } from "@lmstudio/sdk";
-import { callTool, front } from "./bridge.ts";
+import { front } from "./bridge.ts";
+import { tools } from "./tools.ts";
 
 const globalConfig = createConfigSchematics()
   .field(
@@ -21,16 +22,8 @@ const globalConfig = createConfigSchematics()
   )
   .build();
 
-async function tools(ctl: ToolsProviderController): Promise<Tool[]> {
-  const root = ctl.getGlobalPluginConfig(globalConfig).get("toolFolder");
-  return front.tools.map((t) =>
-    rawFunctionTool({
-      name: t.name,
-      description: t.description,
-      parametersJsonSchema: t.parameters,
-      implementation: (params) => callTool(t, params as Record<string, unknown>, root),
-    }),
-  );
+async function provide(ctl: ToolsProviderController) {
+  return tools(ctl.getGlobalPluginConfig(globalConfig).get("toolFolder"));
 }
 
 // A plugin cannot set the system prompt. So the rules go before the first user message, one time.
@@ -43,6 +36,6 @@ async function preprocess(ctl: PromptPreprocessorController, message: ChatMessag
 
 export async function main(context: PluginContext) {
   context.withGlobalConfigSchematics(globalConfig);
-  context.withToolsProvider(tools);
+  context.withToolsProvider(provide);
   context.withPromptPreprocessor(preprocess);
 }

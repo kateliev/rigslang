@@ -31,6 +31,13 @@ class Gates(unittest.TestCase):
 		self.assertTrue(gates.summary_ok({'find': {}, 'read': {'summary': 'A band.'}}, rules())['pass'])
 		self.assertFalse(gates.summary_ok({'find': {'title': 'X'}, 'read': {'summary': '  '}}, rules())['pass'])
 
+	def test_title_matches(self):
+		self.assertTrue(gates.title_matches({'band': 'the paper lanterns', 'read': {'title': 'The Paper Lanterns'}}, rules())['pass'])
+		self.assertTrue(gates.title_matches({'band': 'Mercury', 'read': {'title': 'Mercury (band)'}}, rules())['pass'])
+		v = gates.title_matches({'band': 'Nobody At All', 'read': {'title': 'Some Politician'}}, rules())
+		self.assertFalse(v['pass'])
+		self.assertIn('Some Politician', v['problems'][0])
+
 	def test_albums_found(self):
 		self.assertTrue(gates.albums_found({'read': {'albums': [['A', 1999]]}}, rules())['pass'])
 		self.assertFalse(gates.albums_found({'read': {'albums': []}}, rules())['pass'])
@@ -65,6 +72,12 @@ class Parse(unittest.TestCase):
 		self.assertEqual(parse.pick_title('Mercury', ['Mercury (planet)', 'Mercury (band)']), 'Mercury (band)')
 		self.assertEqual(parse.pick_title('Other', titles), 'List of Some Band members')
 		self.assertIsNone(parse.pick_title('Other', []))
+
+	def test_same_name(self):
+		self.assertTrue(parse.same_name('Some Band', 'some band'))
+		self.assertTrue(parse.same_name('Some Band', 'The Some Band (American band)'))
+		self.assertFalse(parse.same_name('Some Band', 'List of Some Band members'))
+		self.assertFalse(parse.same_name('', 'Anything'))
 
 	def test_wiki_title(self):
 		self.assertEqual(parse.wiki_title('https://en.wikipedia.org/wiki/Some_Band'), 'Some_Band')

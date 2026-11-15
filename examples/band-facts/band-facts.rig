@@ -53,15 +53,21 @@ unit band-facts agent
     fail -> none "the search found no article"
     fail -> offline "the search did not answer"
   step read "Read the article"
-    do "read the summary and the Discography section of the article"
+    do "read the summary and the Discography section of the article; if the page only lists the meanings of the name, read the article name (band)"
     by steps.read
     reads http.timeout
     next -> summary
   gate summary hard "Summary received"
     ensure "the article has a summary"
     by gates.summary_ok
-    pass -> is-band
+    pass -> title
     fail -> none "the article has no summary"
+  gate title hard "The article has the name of the band"
+    ensure "the title of the article is the name of the band, with or without a word in brackets"
+    by gates.title_matches
+    note "a run with a real model: a search for a name that is no band gave the article of a politician; the judge gate saw it, and now code sees it first"
+    pass -> is-band
+    fail -> none "the article has another name"
   gate is-band judge "The article is about the band"
     brief "pass if the description and the summary are about a music group with this name; fail if they are about a person, a place, a film or another thing"
     sees band read.title read.description read.summary

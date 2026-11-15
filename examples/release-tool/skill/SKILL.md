@@ -26,7 +26,7 @@ Run every command in the folder of the tool (the folder that holds `rig.json`).
 
 1. Start a run: `python3 tool.py run '<inputs as JSON>'` (inputs: folder=<path>).
 2. Read the result. It is one JSON object.
-   - `outcome`: the run ended at that end node. Report it, with `problems` first. `result` is what the run made: the value of its last step.
+   - `outcome`: the run ended at that end node. Report it, with `problems` first. `result` is what the run made (only when a step leads to the end).
    - `waiting`: the run stopped at a node that code cannot do. Read `kind`, `do` and `brief`. `sees` holds the facts of the run that you need for this node: use them, and nothing else.
      - `judge`: decide as `brief` says. Answer: `python3 tool.py answer <run> '{"pass": true}'` (or false, with `"why"`).
      - `step`: do what `do` says. Answer: `python3 tool.py answer <run> '{"result": ...}'`.
@@ -38,7 +38,7 @@ Run every command in the folder of the tool (the folder that holds `rig.json`).
 Never decide a hard or soft gate: code decides them. Use only values from a result or from the rules.
 `python3 tool.py status <run>` shows a run again; `python3 tool.py rules` shows the rules.
 
-Many items: `python3 tool.py batch '<a JSON list of inputs>' --report reports/<name>.md`. Code starts a run for each item and gives a summary. Then answer the runs in `left_for_model`, one at a time (`status <run>` shows what each waits for). Give the person the list `waits_for_person` and the path of the report. `python3 tool.py queues` shows what waits, at any time.
+More than one item: `python3 tool.py batch '<a JSON list of inputs>' --report reports/<name>.md`. Code starts a run for each item and gives a summary. Then answer the runs in `left_for_model`, one at a time (`status <run>` shows what each waits for). Give the person the list `waits_for_person` and the path of the report. `python3 tool.py queues` shows what waits, at any time.
 
 ## Flow (the map of the run)
 
@@ -135,4 +135,4 @@ End your answer with one line that starts with `Guessed:` and names each of thes
 
 Guessed: tone
 
-Do not leave this line out. A person must see which results are guesses.
+Do not leave this line out. A person must see which results are guesses. Write it for each run in which you decided a gate, also when the run ended early.

@@ -32,9 +32,9 @@
  },
  "start": "find",
  "coverage": {
-  "gates": 7,
+  "gates": 8,
   "proved": 0,
-  "tested": 5,
+  "tested": 6,
   "observed": 0,
   "code": 0,
   "judge": 2,
@@ -152,7 +152,7 @@
    "id": "read",
    "kind": "step",
    "name": "Read the article",
-   "do": "read the summary and the Discography section of the article",
+   "do": "read the summary and the Discography section of the article; if the page only lists the meanings of the name, read the article name (band)",
    "by": [
     "steps.read"
    ],
@@ -175,13 +175,39 @@
    ],
    "pass": [
     {
-     "to": "is-band"
+     "to": "title"
     }
    ],
    "fail": [
     {
      "to": "none",
      "when": "the article has no summary"
+    }
+   ]
+  },
+  {
+   "id": "title",
+   "kind": "hard",
+   "name": "The article has the name of the band",
+   "ensure": "the title of the article is the name of the band, with or without a word in brackets",
+   "by": [
+    "gates.title_matches"
+   ],
+   "pass": [
+    {
+     "to": "is-band"
+    }
+   ],
+   "fail": [
+    {
+     "to": "none",
+     "when": "the article has another name"
+    }
+   ],
+   "notes": [
+    {
+     "text": "a run with a real model: a search for a name that is no band gave the article of a politician; the judge gate saw it, and now code sees it first",
+     "evidence": []
     }
    ]
   },

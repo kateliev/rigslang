@@ -3,6 +3,7 @@
 Pure Python: no files, no network. A gate reads the state of the run and the rules
 (R('group.name')), and returns "pass", and for a fail the "problems".
 """
+import parse
 
 
 def article_found(state, R):
@@ -15,7 +16,14 @@ def article_found(state, R):
 
 def summary_ok(state, R):
 	ok = bool((state['read'].get('summary') or '').strip())
-	return {'pass': ok, 'problems': [] if ok else ['the article {!r} has no summary'.format(state['read'].get('title') or state['find'].get('title'))]}
+	return {'pass': ok, 'problems': [] if ok else ['no article with a summary; tried: {}'.format(', '.join(state['read'].get('tried') or [str(state['find'].get('title'))]))]}
+
+
+def title_matches(state, R):
+	'''The search gives a result for any words. An article with another name is not the article of the band.'''
+	title = state['read'].get('title') or ''
+	ok = parse.same_name(state['band'], title)
+	return {'pass': ok, 'title': title, 'problems': [] if ok else ['the article is {!r}, not {!r}'.format(title, state['band'])]}
 
 
 def albums_found(state, R):

@@ -73,7 +73,7 @@ A step is a function in `steps.py`: `def name(state, R)`. It reads the state of 
 - When the code runs inside a host application, keep each call short and return one JSON line (`rigkit.step`).
 - Use a public API of a service, not a page that is made for people. A page changes, and it may refuse a program.
 - A step that can get no answer (a service is down) returns that as a fact, and the gate after it has a fail line and an end for it. "No answer" and "nothing found" are two ends.
-- The result of a run is the value of its last step. When the tool makes something (a text, a file path), the last step returns it.
+- The result of a run is the value of the step that leads to its end. When the tool makes something (a text, a file path), make that the last step before the end. A run that a gate ended has no result, only problems.
 
 Write a test for each step that can run without the host. For a step that needs the host, test it in the host on a copy, and say so in the test file.
 

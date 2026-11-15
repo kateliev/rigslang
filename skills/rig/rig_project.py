@@ -98,7 +98,7 @@ def outputs(folder, m):
 	if m.get('plugin'):
 		sub = m['plugin'].get('folder', 'plugin')
 		out[os.path.join(sub, 'src', 'gen', 'front.json')] = json.dumps(front(m, files, main), ensure_ascii=False, indent=1) + '\n'
-		for rel in ('src/bridge.ts', 'src/index.ts', 'try.ts'):  # the same code for every tool: keep each copy current
+		for rel in ('src/bridge.ts', 'src/index.ts', 'src/tools.ts', 'try.ts', 'agent.ts', 'tsconfig.json'):  # the same code for every tool: keep each copy current
 			out[os.path.join(sub, *rel.split('/'))] = read(os.path.join(TEMPLATES, 'plugin', *rel.split('/')))
 	return out
 
