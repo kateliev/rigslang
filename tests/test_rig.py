@@ -27,19 +27,19 @@ class Examples(unittest.TestCase):
 			self.assertEqual(rig.check(load(path))[0], [], path)
 
 	def test_slugify_is_proved(self):
-		root = load(os.path.join(ROOT, 'examples', 'slugify.rig'))
+		root = load(os.path.join(ROOT, 'examples', 'older', 'slugify.rig'))
 		unit = rig.units(root)[0]
 		self.assertTrue(rig.unit_status(unit)[0].startswith('proved'))
 		ok, report = rig.prove(unit, 'slugify.rig')
 		self.assertTrue(ok, report)
 
 	def test_matrix_change_remelts(self):
-		with open(os.path.join(ROOT, 'examples', 'slugify.rig'), encoding='utf-8') as f:
+		with open(os.path.join(ROOT, 'examples', 'older', 'slugify.rig'), encoding='utf-8') as f:
 			text = f.read().replace('words joined by hyphens', 'words joined by dashes')
 		self.assertTrue(rig.unit_status(rig.units(rig.parse(text))[0])[0].startswith('remelted'))
 
 	def test_code_change_is_stale(self):
-		with open(os.path.join(ROOT, 'examples', 'slugify.rig'), encoding='utf-8') as f:
+		with open(os.path.join(ROOT, 'examples', 'older', 'slugify.rig'), encoding='utf-8') as f:
 			text = f.read().replace('.strip("-")', '.strip("-") or ""')
 		self.assertTrue(rig.unit_status(rig.units(rig.parse(text))[0])[0].startswith('stale'))
 
@@ -68,7 +68,7 @@ class RulesAndPresets(unittest.TestCase):
 
 class Compile(unittest.TestCase):
 	def unit(self, name, path='release-check.rig'):
-		return rig.find(load(os.path.join(ROOT, 'examples', path)), name)
+		return rig.find(load(os.path.join(ROOT, 'examples', 'older', path)), name)
 
 	def test_skill_writes_values_in(self):
 		text = rig.skill(self.unit('release-check'))
@@ -99,7 +99,7 @@ class Compile(unittest.TestCase):
 
 	def test_command_line(self):
 		tool = os.path.join(ROOT, 'skills', 'rig', 'rig.py')
-		path = os.path.join(ROOT, 'examples', 'translate-ui.rig')
+		path = os.path.join(ROOT, 'examples', 'older', 'translate-ui.rig')
 		out = subprocess.check_output([sys.executable, tool, 'compile', 'json', path, '--preset', 'careful']).decode('utf-8')
 		c = json.loads(out)
 		self.assertEqual((c['unit'], c['preset']), ('translate-ui', 'careful'))
@@ -107,7 +107,7 @@ class Compile(unittest.TestCase):
 		self.assertTrue(out.replace('\r\n', '\n').startswith('---\nname: check-translation\n'))
 
 
-BANDSEARCH = os.path.join(ROOT, 'examples', 'bandsearch')
+BANDSEARCH = os.path.join(ROOT, 'examples', 'older', 'bandsearch')
 TOOL = os.path.join(ROOT, 'skills', 'rig', 'rig.py')
 
 
@@ -138,12 +138,12 @@ class Levels(unittest.TestCase):
 		self.assertEqual(rig.coverage(rig.units(root)[0])['code'], 1)
 
 	def test_proved_unit_makes_a_proved_gate(self):
-		u = rig.find(load(os.path.join(ROOT, 'examples', 'translate-ui.rig')), 'check-translation')
+		u = rig.find(load(os.path.join(ROOT, 'examples', 'older', 'translate-ui.rig')), 'check-translation')
 		cv = rig.coverage(u)
 		self.assertEqual((cv['proved'], cv['code']), (2, 1))
 
 	def test_old_coverage_was_too_high(self):
-		cv = rig.coverage(rig.units(load(os.path.join(ROOT, 'examples', 'release-check.rig')))[0])
+		cv = rig.coverage(rig.units(load(os.path.join(ROOT, 'examples', 'older', 'release-check.rig')))[0])
 		self.assertEqual((cv['gates'], cv['proved'], cv['code'], cv['judge']), (4, 0, 3, 1))
 
 	def test_uses_file_reaches_another_file(self):
@@ -192,7 +192,7 @@ class Types(unittest.TestCase):
 
 class Report(unittest.TestCase):
 	def test_skill_asks_for_a_guessed_line(self):
-		text = rig.skill(rig.units(load(os.path.join(ROOT, 'examples', 'release-check.rig')))[0])
+		text = rig.skill(rig.units(load(os.path.join(ROOT, 'examples', 'older', 'release-check.rig')))[0])
 		self.assertIn('## Report', text)
 		self.assertIn('Guessed: tone', text)
 

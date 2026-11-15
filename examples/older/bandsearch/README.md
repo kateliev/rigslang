@@ -1,6 +1,6 @@
 # bandsearch: an LM Studio plugin built from Rig
 
-> **An older example.** It was made before the kit: the model walks the flow from a skill text, and the code lives inside the `.rig` files as casts. It stays as the example of the snippet scale (`prove`, `probe`, `emit`, TypeScript casts). The same tool built with the kit is [band-facts](../band-facts/); its README compares the two. For a new tool, copy [release-tool](../release-tool/).
+> **An older example.** It was made before the kit: the model walks the flow from a skill text, and the code lives inside the `.rig` files as casts. It stays as the example of the snippet scale (`prove`, `probe`, `emit`, TypeScript casts). The same tool built with the kit is [band-facts](../../band-facts/); its README compares the two. For a new tool, copy [release-tool](../../release-tool/).
 
 For a band name, the plugin writes one paragraph about the band and lists its albums. The facts come from English Wikipedia. A DuckDuckGo search finds the article.
 
@@ -50,11 +50,11 @@ Then open a new chat in LM Studio, turn on the plugin and type a band name.
 To change the plugin, change a `.rig` file. Then prove or probe the changed unit again, and build:
 
 ```bash
-python3 ../../skills/rig/rig.py prove wiki.rig --stamp
+python3 ../../../skills/rig/rig.py prove wiki.rig --stamp
 ```
 
 ```bash
-python3 ../../skills/rig/rig.py probe wiki.rig --stamp
+python3 ../../../skills/rig/rig.py probe wiki.rig --stamp
 ```
 
 ```bash
@@ -64,7 +64,7 @@ python3 build.py
 Other checks:
 
 ```bash
-python3 ../../skills/rig/rig.py check bandsearch.rig search.rig wiki.rig
+python3 ../../../skills/rig/rig.py check bandsearch.rig search.rig wiki.rig
 ```
 
 ```bash

@@ -30,9 +30,9 @@ Rig does not ask *why* a unit exists. The intent says what it must do, and that 
 
 | Scale | What a unit holds | Example |
 |---|---|---|
-| **snippet** | a matrix and a cast | [slugify.rig](../examples/slugify.rig) |
-| **tool** | a matrix, steps, gates, and units that it `uses` | [contacts.rig](../examples/contacts.rig) |
-| **agent** | rules (parameters), steps and gates | [release-check.rig](../examples/release-check.rig) |
+| **snippet** | a matrix and a cast | [slugify.rig](../examples/older/slugify.rig) |
+| **tool** | a matrix, steps, gates, and units that it `uses` | [contacts.rig](../examples/older/contacts.rig) |
+| **agent** | rules (parameters), steps and gates | [release-check.rig](../examples/older/release-check.rig) |
 
 The syntax does not change between scales. Only the amount you write changes. A snippet needs one intent and one example. Do not add ceremony that the work does not need.
 
@@ -96,7 +96,7 @@ A Rig file is pseudo-code that the agent writes and the human reads. It is also 
 
 ## 8. Where it came from
 
-- [sidenote-agent-configuration.md](sidenote-agent-configuration.md): agent configuration as a graph of gates and rules.
-- [self-writing-language.md](self-writing-language.md): intent as data, and the self-writing loop.
-- [findings-2026-11-11.md](findings-2026-11-11.md): research on related work, and what to learn from it.
+- [history/sidenote-agent-configuration.md](history/sidenote-agent-configuration.md): agent configuration as a graph of gates and rules.
+- [history/self-writing-language.md](history/self-writing-language.md): intent as data, and the self-writing loop.
+- [history/findings-2026-11-11.md](history/findings-2026-11-11.md): research on related work, and what to learn from it.
 - [status.md](status.md): the refocus of 2026-11-15, from a language to a kit and a guide.

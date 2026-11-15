@@ -2,7 +2,7 @@
 
 For a band name, the tool writes one paragraph about the band and lists its albums. The facts come from English Wikipedia, through its public API.
 
-It is a level 3 tool (flow), made with `rig.py new` and the build order of the guide. It is the earlier example [bandsearch](../bandsearch/) built again, and the differences show what the kit is for.
+It is a level 3 tool (flow), made with `rig.py new` and the build order of the guide. It is the earlier example [bandsearch](../older/bandsearch/) built again, and the differences show what the kit is for.
 
 | | bandsearch (before) | band-facts (with the kit) |
 |---|---|---|

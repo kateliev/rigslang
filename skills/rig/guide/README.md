@@ -102,4 +102,4 @@ The method was taken from a private production agent that runs a long procedure 
 - A local model that got the whole procedure as text left most of its work undone. The same model did the work when code walked the procedure and asked it only for the choices.
 - Good work was thrown away because every failed check was a stop. The split into hard and soft gates, and an end for "kept, but doubtful", ended that.
 
-Research that points the same way is in [docs/findings-2026-11-11.md](../../../docs/findings-2026-11-11.md).
+Research that points the same way is in [docs/history/findings-2026-11-11.md](../../../docs/history/findings-2026-11-11.md).

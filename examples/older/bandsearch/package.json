@@ -7,7 +7,7 @@
     "build": "python3 build.py",
     "dev": "python3 build.py && lms dev",
     "install-plugin": "python3 build.py && lms dev --install --yes",
-    "probe": "python3 ../../skills/rig/rig.py probe search.rig && python3 ../../skills/rig/rig.py probe wiki.rig",
+    "probe": "python3 ../../../skills/rig/rig.py probe search.rig && python3 ../../../skills/rig/rig.py probe wiki.rig",
     "agent": "node agent.ts",
     "typecheck": "tsc --noEmit"
   },

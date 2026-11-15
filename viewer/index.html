@@ -937,7 +937,7 @@ function render() {
 }
 function emptyView() {
   const ta = el("textarea", { placeholder: "…or paste Rig text here", spellcheck: "false", "aria-label": "Rig text" });
-  const examples = ["release-check.rig", "translate-ui.rig", "contacts.rig", "slugify.rig"];
+  const examples = ["release-tool/release.rig", "band-facts/band-facts.rig", "older/translate-ui.rig", "older/slugify.rig"];
   const http = location.protocol.startsWith("http");
   return el("div", { class: "empty" },
     el("p", {}, "Drop a ", el("code", {}, ".rig"), " file here, or ", el("button", { onclick: () => $("#file").click() }, "open one"), "."),

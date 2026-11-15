@@ -97,5 +97,5 @@ Possibly. A generic schema is small:
 ## 7. Log
 
 - 2026-11-11: gate graph made in the origin project. Wiring read-only, values editable. This note written from the discussion that followed.
-- 2026-11-11: the generic part of this note moved to the Rig repository, with all project material removed. The research that followed is in [findings-2026-11-11.md](findings-2026-11-11.md). The language that came out of it is described in [logic.md](logic.md).
-- 2026-11-15: the ideas of Section 5 and 6 are built. The compile step, gate coverage and rule evidence exist. New: a fourth gate kind (`human`), code in normal files bound by `code` lines, and a runner that enforces the flow. Trace replay on the graph is still open. See [status.md](status.md) and [the guide](../skills/rig/guide/README.md).
+- 2026-11-11: the generic part of this note moved to the Rig repository, with all project material removed. The research that followed is in [findings-2026-11-11.md](findings-2026-11-11.md). The language that came out of it is described in [logic.md](../logic.md).
+- 2026-11-15: the ideas of Section 5 and 6 are built. The compile step, gate coverage and rule evidence exist. New: a fourth gate kind (`human`), code in normal files bound by `code` lines, and a runner that enforces the flow. Trace replay on the graph is still open. See [status.md](../status.md) and [the guide](../../skills/rig/guide/README.md).

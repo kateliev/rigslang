@@ -14,7 +14,7 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-RIG = [sys.executable, os.path.join(HERE, '..', '..', 'skills', 'rig', 'rig.py')]
+RIG = [sys.executable, os.path.join(HERE, '..', '..', '..', 'skills', 'rig', 'rig.py')]
 GEN = os.path.join('src', 'gen')
 
 

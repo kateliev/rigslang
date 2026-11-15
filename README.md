@@ -73,11 +73,10 @@ python3 ../../skills/rig/rig.py serve release.rig --json gen/release.json
 | [viewer/index.html](viewer/index.html) | The viewer: units as tables, the flow as a node graph, the compiled skill and JSON. Values can be changed. One file, no install. |
 | [examples/release-tool/](examples/release-tool/) | The pattern example: a level 4 tool with its tests, its plugin and its notes. |
 | [examples/band-facts/](examples/band-facts/) | A second example, level 3: facts about a band from Wikipedia. Code finds and reads; the model writes one paragraph and judges two things. Its README says what the first live runs taught. |
-| [examples/bandsearch/](examples/bandsearch/) | An older example, from before the kit: the model walks the flow, and the code is inside the `.rig` files. Kept for the snippet scale. |
-| [examples/](examples/) | Single `.rig` files: a snippet, a tool, an agent. |
+| [examples/older/](examples/older/) | From before the kit: single `.rig` files, and `bandsearch`, a plugin with its code inside the `.rig` files. Kept for the snippet scale and its tests. |
 | [editors/](editors/) | Syntax highlighting for VS Code and Sublime Text, built from one table. |
 | [tests/](tests/) | Tests of `rig.py`, the runtime, the project commands and the templates, and a test that the viewer computes the same results as `rig.py`. |
-| [docs/](docs/) | [status.md](docs/status.md): the state of the work. [logic.md](docs/logic.md): the ideas of the language. The first memos and the research notes. |
+| [docs/](docs/) | [status.md](docs/status.md): the state of the work. [logic.md](docs/logic.md): the ideas of the language. [history/](docs/history/): the first memos and the research notes. |
 
 ## The source file
 
@@ -121,7 +120,7 @@ unit release agent
 Rig began as a language for single functions, and that part still works. A unit can hold its code inside the `.rig` file as a **cast**, proved against its examples in a real runtime and pinned by two hashes. If the spec changes, the cast **remelts** and must be proved again.
 
 ```bash
-python3 skills/rig/rig.py prove examples/slugify.rig
+python3 skills/rig/rig.py prove examples/older/slugify.rig
 ```
 
 It is useful for small pure functions. For a tool, keep the code in normal files and bind it with a `code` line. [docs/logic.md](docs/logic.md) explains the snippet scale; [skills/rig/snippets.md](skills/rig/snippets.md) is the task file for it.
