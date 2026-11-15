@@ -26,8 +26,8 @@ Run every command in the folder of the tool (the folder that holds `rig.json`).
 
 1. Start a run: `python3 tool.py run '<inputs as JSON>'` (inputs: folder=<path>).
 2. Read the result. It is one JSON object.
-   - `outcome`: the run ended at that end node. Report it, with `problems` first.
-   - `waiting`: the run stopped at a node that code cannot do. Read `kind`, `do` and `brief`.
+   - `outcome`: the run ended at that end node. Report it, with `problems` first. `result` is what the run made: the value of its last step.
+   - `waiting`: the run stopped at a node that code cannot do. Read `kind`, `do` and `brief`. `sees` holds the facts of the run that you need for this node: use them, and nothing else.
      - `judge`: decide as `brief` says. Answer: `python3 tool.py answer <run> '{"pass": true}'` (or false, with `"why"`).
      - `step`: do what `do` says. Answer: `python3 tool.py answer <run> '{"result": ...}'`.
      - `human`: show the person what `brief` says, ask, and wait. Then give the decision of the person, never your own: `python3 tool.py approve <run> yes` (or `no`, with a note).
@@ -75,6 +75,7 @@ Many items: `python3 tool.py batch '<a JSON list of inputs>' --report reports/<n
 
 ### `tone` Notes speak to users (judge gate)
 
+- Sees: `collect.notes`, `rewrite`
 - Judge: read the notes as a user would; fail if they use internal words or miss the upgrade steps. Label the result as a guess.
 - Pass: go to `approve`.
 - Fail: go to `rounds` (the notes need a rewrite).
@@ -90,11 +91,13 @@ Many items: `python3 tool.py batch '<a JSON list of inputs>' --report reports/<n
 ### `rewrite` Rewrite the notes (step)
 
 - Do: rewrite the notes for users: plain words, and the upgrade steps; give the new text as the result
+- Sees: `collect.notes`, `rewrite`
 - You do this step when the run waits here.
 - Next: go to `notes`.
 
 ### `approve` A person agrees (human gate)
 
+- Sees: `collect.version`, `collect.notes`, `rewrite`
 - A person decides: show the person the version and the notes; ask: may this release be published?. Stop and ask the person. Do not decide this gate yourself.
 - Pass: go to `allowed`.
 - Fail: go to `stop` (the person said no).

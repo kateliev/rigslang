@@ -1,5 +1,7 @@
 # bandsearch: an LM Studio plugin built from Rig
 
+> **An older example.** It was made before the kit: the model walks the flow from a skill text, and the code lives inside the `.rig` files as casts. It stays as the example of the snippet scale (`prove`, `probe`, `emit`, TypeScript casts). The same tool built with the kit is [band-facts](../band-facts/); its README compares the two. For a new tool, copy [release-tool](../release-tool/).
+
 For a band name, the plugin writes one paragraph about the band and lists its albums. The facts come from English Wikipedia. A DuckDuckGo search finds the article.
 
 The `.rig` files are the only source. All code and all definitions in `src/gen/` come from them.

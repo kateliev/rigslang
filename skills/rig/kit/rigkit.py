@@ -162,6 +162,7 @@ class Kit(object):
 		self.runs = runs
 		self.max_visits = self.rules('run.max_visits') if 'run.max_visits' in self.rules.by_id else max_visits
 		self.errors_stop = self.rules('run.errors_stop') if 'run.errors_stop' in self.rules.by_id else errors_stop
+		self.sees_max = self.rules('run.sees_max') if 'run.sees_max' in self.rules.by_id else 6000  # characters of one "sees" text
 		self.code, self.tools, self.memory, self.count = {}, {}, {}, 0
 
 	# - Binding the code
@@ -292,7 +293,7 @@ class Kit(object):
 				break
 			fns = self.node_code(node)
 			if kind in ('judge', 'human') or fns is None:
-				run['waiting'] = self.waiting(node, R)
+				run['waiting'] = self.waiting(node, R, run['state'])
 				break
 			run['state']['_visits'] = run['visits']  # how often the run entered each node: for a gate that limits rounds
 			try:
@@ -316,7 +317,18 @@ class Kit(object):
 		self.save(run)
 		return self.report(run)
 
-	def waiting(self, node, R):
+	def see(self, state, path):
+		'''One "sees" path in the state of a run: a step id or an input, then keys. A long text is cut.'''
+		v = state
+		for key in path.split('.'):
+			if not isinstance(v, dict) or key not in v:
+				return None
+			v = v[key]
+		if isinstance(v, str) and len(v) > self.sees_max:
+			v = v[:self.sees_max] + ' … (cut: {} of {} characters)'.format(self.sees_max, len(v))
+		return v
+
+	def waiting(self, node, R, state=None):
 		kind = node['kind']
 		w = {'node': node['id'], 'kind': 'judge' if kind in ('hard', 'soft') else kind}
 		if node.get('name'):
@@ -326,6 +338,8 @@ class Kit(object):
 				w[k] = R.fill(node[k])
 		if node.get('by'):
 			w['by'] = node['by']
+		if node.get('sees') and state is not None:
+			w['sees'] = dict((p, v) for p, v in ((p, self.see(state, p)) for p in node['sees']) if v is not None)
 		if kind in ('hard', 'soft'):
 			w['no_code'] = 'No code decides this gate yet. Decide it yourself; the result is a guess.'
 		w['answer'] = {'step': '{"result": <what the step gave>}', 'human': 'a person answers: approve <run> yes|no'}.get(w['kind'], '{"pass": true or false, "why": "<one sentence>"}')
@@ -403,6 +417,10 @@ class Kit(object):
 				out[k] = dict(run[k])
 		if 'error' in out:
 			out['error'].pop('trace', None)
+		if 'outcome' in out:
+			steps = [t['node'] for t in run['trace'] if t['kind'] == 'step']
+			if steps and run['state'].get(steps[-1]) is not None:
+				out['result'] = run['state'][steps[-1]]
 		out['problems'], out['guessed'] = run['problems'], run['guessed']
 		out['path'] = [t['node'] for t in run['trace']]
 		return out

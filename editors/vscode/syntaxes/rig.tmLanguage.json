@@ -414,6 +414,14 @@
 			]
 		},
 		{
+			"match": "^\\s*(sees)(?=[\\s;]|$)",
+			"captures": {
+				"1": {
+					"name": "keyword.control.flow.rig"
+				}
+			}
+		},
+		{
 			"include": "#items"
 		}
 	],

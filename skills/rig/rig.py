@@ -72,8 +72,8 @@ CHILDREN = {
 	'preset': {'set'},
 	'note': {'evidence'},
 	'rule': {'min', 'max', 'options', 'unit', 'label', 'note'},
-	'step': {'do', 'by', 'reads', 'next', 'note'},
-	'gate': {'when', 'reads', 'ensure', 'by', 'brief', 'pass', 'fail', 'note'},
+	'step': {'do', 'by', 'reads', 'sees', 'next', 'note'},
+	'gate': {'when', 'reads', 'sees', 'ensure', 'by', 'brief', 'pass', 'fail', 'note'},
 	'end': {'note'},
 }
 NUMBER = re.compile(r'^-?\d+(\.\d+)?$')
@@ -1182,6 +1182,9 @@ def flow_info(f):
 	rd = node_reads(f)
 	if rd:
 		d['reads'] = rd
+	sees = [a[1] for c in f.kids('sees') for a in c.args]
+	if sees:
+		d['sees'] = sees
 	for k in ('next', 'pass', 'fail'):
 		ls = links(f, k)
 		if ls:
@@ -1322,8 +1325,8 @@ def skill(u, rules_path=None, preset=None, driver=None):
 			'Run every command in the folder of the tool (the folder that holds `rig.json`).', '',
 			'1. Start a run: `{} run \'<inputs as JSON>\'`{}.'.format(driver, ' (inputs: ' + args + ')' if args else ''),
 			'2. Read the result. It is one JSON object.',
-			'   - `outcome`: the run ended at that end node. Report it, with `problems` first.',
-			'   - `waiting`: the run stopped at a node that code cannot do. Read `kind`, `do` and `brief`.',
+			'   - `outcome`: the run ended at that end node. Report it, with `problems` first. `result` is what the run made: the value of its last step.',
+			'   - `waiting`: the run stopped at a node that code cannot do. Read `kind`, `do` and `brief`. `sees` holds the facts of the run that you need for this node: use them, and nothing else.',
 			'     - `judge`: decide as `brief` says. Answer: `{} answer <run> \'{{"pass": true}}\'` (or false, with `"why"`).'.format(driver),
 			'     - `step`: do what `do` says. Answer: `{} answer <run> \'{{"result": ...}}\'`.'.format(driver),
 			'     - `human`: show the person what `brief` says, ask, and wait. Then give the decision of the person, never your own: `{} approve <run> yes` (or `no`, with a note).'.format(driver),
@@ -1349,6 +1352,8 @@ def skill(u, rules_path=None, preset=None, driver=None):
 					out.append('- {}: {}'.format(title, fill(f[key])))
 			if 'reads' in f:
 				out.append('- Rules: ' + ', '.join('`{}`'.format(r) if rules_path or r not in byrule else '`{}` = {}'.format(r, val(r)) for r in f['reads']))
+			if 'sees' in f:
+				out.append('- Sees: ' + ', '.join('`{}`'.format(x) for x in f['sees']))
 			by = ', '.join('`{}`'.format(b) for b in f.get('by', []))
 			guess = '- No code decides this gate yet: decide it yourself and label the result as a guess.'
 			if driver and by and k in ('step', 'hard', 'soft'):
@@ -1461,6 +1466,8 @@ def from_catalog(c):
 			out.append('    by ' + b)
 		if f.get('reads'):
 			out.append('    reads ' + ' '.join(f['reads']))
+		if f.get('sees'):
+			out.append('    sees ' + ' '.join(f['sees']))
 		notes(f.get('notes', []), '    ')
 		for key in ('next', 'pass', 'fail'):
 			for l in f.get(key, []):

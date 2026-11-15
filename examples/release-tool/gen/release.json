@@ -190,6 +190,10 @@
    "kind": "judge",
    "name": "Notes speak to users",
    "brief": "read the notes as a user would; fail if they use internal words or miss the upgrade steps",
+   "sees": [
+    "collect.notes",
+    "rewrite"
+   ],
    "pass": [
     {
      "to": "approve"
@@ -230,6 +234,10 @@
    "kind": "step",
    "name": "Rewrite the notes",
    "do": "rewrite the notes for users: plain words, and the upgrade steps; give the new text as the result",
+   "sees": [
+    "collect.notes",
+    "rewrite"
+   ],
    "next": [
     {
      "to": "notes"
@@ -241,6 +249,11 @@
    "kind": "human",
    "name": "A person agrees",
    "brief": "show the person the version and the notes; ask: may this release be published?",
+   "sees": [
+    "collect.version",
+    "collect.notes",
+    "rewrite"
+   ],
    "pass": [
     {
      "to": "allowed"

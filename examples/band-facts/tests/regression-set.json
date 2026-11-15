@@ -1,0 +1,299 @@
+[
+ {
+  "name": "answered",
+  "inputs": {
+   "band": "The Paper Lanterns"
+  },
+  "answers": {
+   "is-band": {
+    "pass": true
+   },
+   "write": {
+    "result": "The Paper Lanterns are a rock band formed in 1998. The group has four members and is known for long songs with two guitars and a cello."
+   },
+   "grounded": {
+    "pass": true
+   }
+  },
+  "expect": {
+   "end": "done",
+   "path": [
+    "find",
+    "article",
+    "read",
+    "summary",
+    "is-band",
+    "albums",
+    "write",
+    "short",
+    "grounded",
+    "compose",
+    "done"
+   ]
+  }
+ },
+ {
+  "name": "too long, then right",
+  "inputs": {
+   "band": "The Paper Lanterns"
+  },
+  "answers": {
+   "is-band": {
+    "pass": true
+   },
+   "write": [
+    {
+     "result": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word"
+    },
+    {
+     "result": "The Paper Lanterns are a rock band formed in 1998. The group has four members and is known for long songs with two guitars and a cello."
+    }
+   ],
+   "grounded": {
+    "pass": true
+   }
+  },
+  "expect": {
+   "end": "done",
+   "path": [
+    "find",
+    "article",
+    "read",
+    "summary",
+    "is-band",
+    "albums",
+    "write",
+    "short",
+    "rounds",
+    "write",
+    "short",
+    "grounded",
+    "compose",
+    "done"
+   ]
+  }
+ },
+ {
+  "name": "too long three times",
+  "inputs": {
+   "band": "The Paper Lanterns"
+  },
+  "answers": {
+   "is-band": {
+    "pass": true
+   },
+   "write": [
+    {
+     "result": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word"
+    },
+    {
+     "result": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word"
+    },
+    {
+     "result": "word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word"
+    }
+   ]
+  },
+  "expect": {
+   "end": "unfinished",
+   "path": [
+    "find",
+    "article",
+    "read",
+    "summary",
+    "is-band",
+    "albums",
+    "write",
+    "short",
+    "rounds",
+    "write",
+    "short",
+    "rounds",
+    "write",
+    "short",
+    "rounds",
+    "unfinished"
+   ]
+  }
+ },
+ {
+  "name": "not grounded, then right",
+  "inputs": {
+   "band": "The Paper Lanterns"
+  },
+  "answers": {
+   "is-band": {
+    "pass": true
+   },
+   "write": [
+    {
+     "result": "The Paper Lanterns are a rock band formed in 1998. The group has four members and is known for long songs with two guitars and a cello. They won a prize in 2005."
+    },
+    {
+     "result": "The Paper Lanterns are a rock band formed in 1998. The group has four members and is known for long songs with two guitars and a cello."
+    }
+   ],
+   "grounded": [
+    {
+     "pass": false,
+     "why": "the prize is not in the summary"
+    },
+    {
+     "pass": true
+    }
+   ]
+  },
+  "expect": {
+   "end": "done",
+   "path": [
+    "find",
+    "article",
+    "read",
+    "summary",
+    "is-band",
+    "albums",
+    "write",
+    "short",
+    "grounded",
+    "rounds",
+    "write",
+    "short",
+    "grounded",
+    "compose",
+    "done"
+   ]
+  }
+ },
+ {
+  "name": "an empty paragraph",
+  "inputs": {
+   "band": "The Paper Lanterns"
+  },
+  "rules": {
+   "answer.rounds": 0
+  },
+  "answers": {
+   "is-band": {
+    "pass": true
+   },
+   "write": {
+    "result": ""
+   }
+  },
+  "expect": {
+   "end": "unfinished",
+   "path": [
+    "find",
+    "article",
+    "read",
+    "summary",
+    "is-band",
+    "albums",
+    "write",
+    "short",
+    "rounds",
+    "unfinished"
+   ]
+  }
+ },
+ {
+  "name": "the article is a lake",
+  "inputs": {
+   "band": "Paper Lantern Lake"
+  },
+  "answers": {
+   "is-band": {
+    "pass": false,
+    "why": "a lake"
+   }
+  },
+  "expect": {
+   "end": "none",
+   "path": [
+    "find",
+    "article",
+    "read",
+    "summary",
+    "is-band",
+    "none"
+   ]
+  }
+ },
+ {
+  "name": "a band with no albums in the article",
+  "inputs": {
+   "band": "Paper Lantern Lake"
+  },
+  "answers": {
+   "is-band": {
+    "pass": true
+   },
+   "write": {
+    "result": "Paper Lantern Lake is known for a festival of lights."
+   },
+   "grounded": {
+    "pass": true
+   }
+  },
+  "expect": {
+   "end": "done",
+   "path": [
+    "find",
+    "article",
+    "read",
+    "summary",
+    "is-band",
+    "albums",
+    "write",
+    "short",
+    "grounded",
+    "compose",
+    "done"
+   ]
+  }
+ },
+ {
+  "name": "no article",
+  "inputs": {
+   "band": "Nobody At All"
+  },
+  "expect": {
+   "end": "none",
+   "path": [
+    "find",
+    "article",
+    "none"
+   ]
+  }
+ },
+ {
+  "name": "the service is down",
+  "inputs": {
+   "band": "The Service Is Down"
+  },
+  "expect": {
+   "end": "offline",
+   "path": [
+    "find",
+    "article",
+    "offline"
+   ]
+  }
+ },
+ {
+  "name": "the model has not answered yet",
+  "inputs": {
+   "band": "The Paper Lanterns"
+  },
+  "expect": {
+   "end": null,
+   "path": [
+    "find",
+    "article",
+    "read",
+    "summary"
+   ],
+   "waiting": "is-band"
+  }
+ }
+]

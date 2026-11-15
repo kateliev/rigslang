@@ -49,6 +49,7 @@ HEADS = [
 	(rf'^\s*(by){E}(?:\s+({W}))?', [FLOW, 'support.function.rig'], False),
 	(rf'^\s*(when|do|brief|next|pass|fail){E}', [FLOW], False),
 	(rf'^\s*(reads){E}', [FLOW], True),
+	(rf'^\s*(sees){E}', [FLOW], False),
 ]
 
 # - Casts: (rig name, VS Code language id, VS Code scope, Sublime scope)

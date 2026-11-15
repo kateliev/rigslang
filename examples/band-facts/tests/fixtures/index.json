@@ -1,0 +1,10 @@
+{
+ "srsearch=The%20Paper%20Lanterns": "search-paper-lanterns.json",
+ "srsearch=Paper%20Lantern%20Lake": "search-lake.json",
+ "srsearch=Nobody%20At%20All": "search-nothing.json",
+ "page/summary/The_Paper_Lanterns": "summary-paper-lanterns.json",
+ "page/summary/Paper_Lantern_Lake": "summary-lake.json",
+ "prop=sections&page=The%20Paper%20Lanterns": "sections-paper-lanterns.json",
+ "prop=sections&page=Paper%20Lantern%20Lake": "sections-lake.json",
+ "prop=wikitext&section=3&page=The%20Paper%20Lanterns": "wikitext-paper-lanterns.json"
+}

@@ -57,6 +57,7 @@ unit release agent
     fail -> tone "tests failed; reported"
   gate tone judge "Notes speak to users"
     brief "read the notes as a user would; fail if they use internal words or miss the upgrade steps"
+    sees collect.notes rewrite
     pass -> approve
     fail -> rounds "the notes need a rewrite"
   gate rounds hard "A rewrite is left"
@@ -66,9 +67,11 @@ unit release agent
     fail -> stop "no rewrite left"
   step rewrite "Rewrite the notes"
     do "rewrite the notes for users: plain words, and the upgrade steps; give the new text as the result"
+    sees collect.notes rewrite
     next -> notes
   gate approve human "A person agrees"
     brief "show the person the version and the notes; ask: may this release be published?"
+    sees collect.version collect.notes rewrite
     pass -> allowed
     fail -> stop "the person said no"
   gate allowed hard "The tool may publish"

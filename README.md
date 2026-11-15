@@ -72,7 +72,8 @@ python3 ../../skills/rig/rig.py serve release.rig --json gen/release.json
 | [skills/rig/spec.md](skills/rig/spec.md) | The language of `.rig` files: one page of grammar, a short list of words. |
 | [viewer/index.html](viewer/index.html) | The viewer: units as tables, the flow as a node graph, the compiled skill and JSON. Values can be changed. One file, no install. |
 | [examples/release-tool/](examples/release-tool/) | The pattern example: a level 4 tool with its tests, its plugin and its notes. |
-| [examples/bandsearch/](examples/bandsearch/) | An older example: an LM Studio plugin with TypeScript code inside the `.rig` files. Not yet moved to the runner: see [docs/status.md](docs/status.md). |
+| [examples/band-facts/](examples/band-facts/) | A second example, level 3: facts about a band from Wikipedia. Code finds and reads; the model writes one paragraph and judges two things. Its README says what the first live runs taught. |
+| [examples/bandsearch/](examples/bandsearch/) | An older example, from before the kit: the model walks the flow, and the code is inside the `.rig` files. Kept for the snippet scale. |
 | [examples/](examples/) | Single `.rig` files: a snippet, a tool, an agent. |
 | [editors/](editors/) | Syntax highlighting for VS Code and Sublime Text, built from one table. |
 | [tests/](tests/) | Tests of `rig.py`, the runtime, the project commands and the templates, and a test that the viewer computes the same results as `rig.py`. |

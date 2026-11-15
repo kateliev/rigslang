@@ -71,6 +71,9 @@ A step is a function in `steps.py`: `def name(state, R)`. It reads the state of 
 - A step that changes something has a way back: it keeps the old thing, or it works on a copy ([patterns.md](patterns.md)).
 - A step that fails raises an error with a clear text. The runner turns it into a result, and the run can resume after the cause is fixed.
 - When the code runs inside a host application, keep each call short and return one JSON line (`rigkit.step`).
+- Use a public API of a service, not a page that is made for people. A page changes, and it may refuse a program.
+- A step that can get no answer (a service is down) returns that as a fact, and the gate after it has a fail line and an end for it. "No answer" and "nothing found" are two ends.
+- The result of a run is the value of its last step. When the tool makes something (a text, a file path), the last step returns it.
 
 Write a test for each step that can run without the host. For a step that needs the host, test it in the host on a copy, and say so in the test file.
 
@@ -117,6 +120,8 @@ A gate is a pure function: `def name(state, R)`. No files, no network, no host. 
 - `problems` is text for a person: the value, the rule and its value. "the notes have 12 words (notes.min_words 50)".
 - `when` names the fail line to follow, when the gate has more than one.
 - Other keys are facts. They go into the trace of the run.
+
+A `judge` gate, a `human` gate and a step that the model does need a `sees` line: the parts of the state that go with the question, for example `sees read.summary write`. The one who answers gets these values with the node, and nothing else. Without the line, the model judges blind, or it goes to look for the facts itself.
 
 Each gate gets a test with the rule defaults, and a test with a changed rule. The checker counts a gate as tested only when the test file names its function.
 

@@ -1,0 +1,131 @@
+{
+ "name": "band-facts",
+ "prompt": "Rules for the tool band-facts (for a band name, write one paragraph about the band and list its albums, with the facts of its English Wikipedia article only):\n1. To work on one item, call start_run (band). Work on one item at a time.\n2. Read each result. It is JSON.\n3. \"outcome\": the run ended. Tell the operator the end and the \"problems\". Then go to the next item.\n4. \"waiting\" with kind \"judge\": decide what \"brief\" asks. Call answer_gate with the run id, pass true or false, and why in one sentence.\n5. \"waiting\" with kind \"step\": do what \"do\" says. Call finish_step with the run id and the result.\n6. More than one item: call start_batch with the list. Show only its summary and the report path. Then, for each run in \"left_for_model\": call run_status, and answer it as in the rules above. Tell the operator the list \"waits_for_person\". To continue earlier work, call queues.\n7. \"refused\": the call was wrong. It is final. Do not repeat it. Call run_status to see where the run is.\n8. \"error\": tell the operator the error text. Do not answer the run.\n9. Do not invent names or numbers. Use only values from a result.\n10. When a run ends and its \"guessed\" list is not empty, write one last line: Guessed: and the names in that list.",
+ "driver": [
+  "python3",
+  "tool.py"
+ ],
+ "timeout_s": 120,
+ "tools": [
+  {
+   "name": "start_run",
+   "kind": "run",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "band": {
+      "type": "string",
+      "description": "the name of the band"
+     }
+    },
+    "required": [
+     "band"
+    ]
+   },
+   "description": "Start a run for one item: for a band name, write one paragraph about the band and list its albums, with the facts of its English Wikipedia article only. Code does the work and stops when it needs you."
+  },
+  {
+   "name": "answer_gate",
+   "kind": "answer_gate",
+   "description": "Answer the gate that a run waits at, when \"waiting\" has kind \"judge\". Decide as its \"brief\" says.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "run": {
+      "type": "string",
+      "description": "The run id: \"run\" in the result of start_run."
+     },
+     "pass": {
+      "type": "boolean",
+      "description": "true: the gate passes. false: it fails."
+     },
+     "why": {
+      "type": "string",
+      "description": "The reason, in one sentence."
+     }
+    },
+    "required": [
+     "run",
+     "pass"
+    ]
+   }
+  },
+  {
+   "name": "finish_step",
+   "kind": "finish_step",
+   "description": "Give the result of the step that a run waits at, when \"waiting\" has kind \"step\". Do what its \"do\" says first.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "run": {
+      "type": "string",
+      "description": "The run id: \"run\" in the result of start_run."
+     },
+     "result": {
+      "description": "What the step gave: a text, a number or an object."
+     }
+    },
+    "required": [
+     "run",
+     "result"
+    ]
+   }
+  },
+  {
+   "name": "run_status",
+   "kind": "status",
+   "description": "Show a run again: where it is and what it waits for.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "run": {
+      "type": "string",
+      "description": "The run id: \"run\" in the result of start_run."
+     }
+    },
+    "required": [
+     "run"
+    ]
+   }
+  },
+  {
+   "name": "start_batch",
+   "kind": "batch",
+   "description": "Start a run for each item of a list. Gives a short summary and the path of the report. Use it for more than one item.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "band": {
+         "type": "string",
+         "description": "the name of the band"
+        }
+       },
+       "required": [
+        "band"
+       ]
+      },
+      "description": "One object for each item, with the inputs of start_run."
+     }
+    },
+    "required": [
+     "items"
+    ]
+   }
+  },
+  {
+   "name": "queues",
+   "kind": "queues",
+   "description": "The runs that did not end: left_for_model (you answer them), waits_for_person (the operator answers), errors.",
+   "parameters": {
+    "type": "object",
+    "properties": {},
+    "required": []
+   }
+  }
+ ]
+}

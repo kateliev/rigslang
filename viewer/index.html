@@ -333,8 +333,8 @@ const CHILDREN = {
   unit: ["in", "out", "intent", "example", "ensure", "note", "uses", "external", "probe", "rule", "preset", "cast", "code", "step", "gate", "end"],
   ensure: ["check", "note"], probe: ["check", "note"], external: ["note"], code: ["test", "note"], preset: ["set"], note: ["evidence"],
   rule: ["min", "max", "options", "unit", "label", "note"],
-  step: ["do", "by", "reads", "next", "note"],
-  gate: ["when", "reads", "ensure", "by", "brief", "pass", "fail", "note"],
+  step: ["do", "by", "reads", "sees", "next", "note"],
+  gate: ["when", "reads", "sees", "ensure", "by", "brief", "pass", "fail", "note"],
   end: ["note"],
 };
 class RigError extends Error { constructor(line, text) { super("line " + line + ": " + text); this.line = line; } }
@@ -734,6 +734,7 @@ function flowInfo(f) {
   for (const k of PROSE) { const xs = kids(f, k); if (xs.length) d[k] = xs.map(textOf).join(" "); }
   if (kids(f, "by").length) d.by = kids(f, "by").map(x => word(x, 0));
   const rd = nodeReads(f); if (rd.length) d.reads = rd;
+  const sees = kids(f, "sees").flatMap(c => c.args.map(a => a.t)); if (sees.length) d.sees = sees;
   for (const k of ["next", "pass", "fail"]) { const ls = links(f, k); if (ls.length) d[k] = ls; }
   const ns = notesOf(f); if (ns.length) d.notes = ns;
   return d;
@@ -809,6 +810,7 @@ function skill(u, rulesPath, preset) {
       out.push(`### \`${f.id}\`${f.name ? " " + fill(f.name) : ""} (${label})`, "");
       for (const [key, title] of [["when", "When"], ["do", "Do"], ["ensure", "Check"]]) if (has(f, key)) out.push(`- ${title}: ${fill(f[key])}`);
       if (has(f, "reads")) out.push("- Rules: " + f.reads.map(r => rulesPath || !has(byrule, r) ? `\`${r}\`` : `\`${r}\` = ${val(r)}`).join(", "));
+      if (has(f, "sees")) out.push("- Sees: " + f.sees.map(x => `\`${x}\``).join(", "));
       const by = (f.by || []).map(b => `\`${b}\``).join(", ");
       const guess = "- No code decides this gate yet: decide it yourself and label the result as a guess.";
       if (k === "step" && by) out.push(`- Code: run ${by}.`);
@@ -1381,6 +1383,7 @@ function inspector() {
     sec("When", f.when && chips(u, f.when, pickRule)), sec("Do", f.do && chips(u, f.do, pickRule)),
     sec(f.kind === "step" ? "Ensure" : "Check", f.ensure && chips(u, f.ensure, pickRule)), sec(f.kind === "human" ? "Ask the person" : "Judge", f.brief && chips(u, f.brief, pickRule)),
     (f.notes || []).length ? [el("div", { class: "k" }, "Notes"), f.notes.map(n => el("p", { class: "hint" }, chips(u, n.text, pickRule), n.evidence.length ? " (evidence: " + n.evidence.join(", ") + ")" : ""))] : null,
+    (f.sees || []).length ? [el("div", { class: "k" }, "Sees"), el("p", { class: "code" }, f.sees.join(", "))] : null,
     (f.reads || []).length ? [el("div", { class: "k" }, "Reads"), el("p", {}, f.reads.map(rid => [chips(u, "{" + rid + "}", pickRule), " "]))] : null,
     [...(f.next || []), ...(f.pass || [])].length || (f.fail || []).length ? el("div", { class: "k" }, "Leads to") : null,
     [...(f.next || []), ...(f.pass || [])].map(l => el("div", { class: "lk pass" }, el("span", { class: "sym" }, "✓"), link(l.to), l.when ? el("span", { class: "when" }, fillText(l.when)) : null)),

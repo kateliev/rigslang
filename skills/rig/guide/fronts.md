@@ -41,7 +41,8 @@ Each call prints one JSON line. The keys to read:
 | Key | Meaning |
 |---|---|
 | `outcome` | The run ended: `end` is the id of the end node. |
-| `waiting` | The run needs an answer: `node`, `kind` (`judge`, `step`, `human`), and the text of the node. |
+| `waiting` | The run needs an answer: `node`, `kind` (`judge`, `step`, `human`), the text of the node, and `sees`: the facts of the run that the node names. |
+| `result` | With `outcome`: what the run made (the value of its last step). |
 | `error` | A step failed: `node` and the error text. The run stays at that node. |
 | `refused` | The call is not allowed now. It is final. |
 | `problems` | Every failed gate so far, as text. |

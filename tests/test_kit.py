@@ -18,6 +18,7 @@ import rig_project  # noqa: E402
 import rigkit  # noqa: E402
 
 RELEASE = os.path.join(ROOT, 'examples', 'release-tool')
+BAND = os.path.join(ROOT, 'examples', 'band-facts')
 
 FLOW = '''unit demo agent
   in n int "a number"
@@ -207,6 +208,15 @@ class Runs(unittest.TestCase):
 		self.assertEqual(got['started'], 2)
 		self.assertIn('2 errors in a row', got['stopped'])
 
+	def test_sees_and_the_result_of_a_run(self):
+		text = FLOW.replace('    brief "is {limits.max} a nice limit?"', '    brief "is {limits.max} a nice limit?"\n    sees n double nothing.here')
+		k = rigkit.Kit(catalogue(text)).bind('code', {'double': lambda s, R: {'value': s['n'] * 2}, 'small': lambda s, R: True})
+		r = k.run({'n': 2})
+		self.assertEqual(r['waiting']['sees'], {'n': 2, 'double': {'value': 4}})   # a path that is not there is left out
+		r = k.answer(r['run'], {'pass': True})
+		r = k.answer(r['run'], {'pass': True}, who='person')
+		self.assertEqual(r['result'], {'value': 4})                                # the value of the last step
+
 	def test_regress(self):
 		cases = [{'name': 'a', 'inputs': {'n': 2}, 'answers': {'nice': {'pass': True}, 'sure': {'person': True, 'pass': True}}, 'expect': {'end': 'done'}},
 			{'name': 'b', 'inputs': {'n': 8}, 'expect': {'end': 'done'}}]
@@ -320,10 +330,11 @@ class Projects(unittest.TestCase):
 		finally:
 			shutil.rmtree(tmp)
 
-	def test_release_example_is_current_and_complete(self):
-		self.assertEqual(self.quiet(rig_project.build, RELEASE, True)[0], 0, 'run: rig.py build examples/release-tool')
-		code, out = self.quiet(rig_project.doctor, RELEASE)
-		self.assertEqual(code, 0, out)
+	def test_examples_are_current_and_complete(self):
+		for folder in (RELEASE, BAND):
+			self.assertEqual(self.quiet(rig_project.build, folder, True)[0], 0, 'run: rig.py build ' + folder)
+			code, out = self.quiet(rig_project.doctor, folder)
+			self.assertEqual(code, 0, out)
 
 	def test_serve_gives_the_levels_and_the_runs(self):
 		import socket

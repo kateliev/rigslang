@@ -156,6 +156,9 @@ contexts:
       captures:
         1: keyword.control.flow.rig
       push: rule-refs
+    - match: '^\s*(sees)(?=[\s;]|$)'
+      captures:
+        1: keyword.control.flow.rig
     - include: items
 
   items:
