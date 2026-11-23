@@ -61,6 +61,14 @@ Sort every item that is not done by **who must act**:
 
 The runner has this: `tool.py batch` runs a list and writes a report, and `tool.py queues` lists the runs that wait, by who must act. A run that needs the model does not stop the batch: it waits in its file.
 
+**One large item.** Sometimes the item is one file with thousands of records, and the model or the person must answer for parts of it. Then the item is one run, and the flow has a loop:
+
+- A step takes the next part that is not done yet, from files in a work folder. The model or the person answers that part. A step saves the answer as its own file.
+- A gate in code ends the loop when no part is left. It returns `"route": true` with its fail, so the end of the loop is not a problem.
+- The state of the run holds counts and paths only. The run file stays small, and after a restart the run goes on from the last saved part.
+- The loop visits its nodes many times: set the rule `run.max_visits` high enough, with a note.
+- The pattern example is `examples/bookmarks`: pages of choices for the person, and sort batches for the model.
+
 ## 6. The state survives a restart
 
 **Failure:** the host was restarted, and the tool no longer knew what it had pasted where.

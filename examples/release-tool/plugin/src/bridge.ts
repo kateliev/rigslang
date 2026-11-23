@@ -55,15 +55,66 @@ function start(command: string[], cwd: string, seconds: number): Promise<{ code:
   });
 }
 
-/** Run one tool call. The answer is always one JSON text: a result, a refusal or an error. */
-export async function callTool(tool: FrontTool, params: Record<string, unknown>, rootSetting?: string): Promise<string> {
-  const root = toolRoot(rootSetting);
-  if (!root) return refused("The tool folder is not found. The operator must set \"Tool folder\" in the plugin settings: the folder that holds rig.json.");
-  const args = argvFor(tool, params);
+const quote = (s: string) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`);
+
+/** A run that waits for a person: add the exact command for the operator, with the tool folder.
+ *  The model cannot answer a human gate; it only passes this text on. */
+export function withCommand(line: string, root: string): string {
+  try {
+    const r = JSON.parse(line);
+    if (r?.waiting?.kind !== "human" || !r.run) return line;
+    r.waiting.command = `cd ${quote(root)} && ${front.driver.map(quote).join(" ")} approve ${r.run} yes`;
+    return JSON.stringify(r);
+  } catch {
+    return line;
+  }
+}
+
+/** Run the driver with these arguments in the tool folder. -> its last JSON line, or an error as JSON. */
+async function drive(args: string[], root: string): Promise<string> {
   let r = await start([...front.driver, ...args], root, front.timeout_s);
   // "python3" is "python" on some computers.
   if (r.missing && front.driver[0] === "python3") r = await start(["python", ...front.driver.slice(1), ...args], root, front.timeout_s);
   const lines = r.out.split("\n").map((l) => l.trim()).filter((l) => l.startsWith("{"));
-  if (lines.length) return lines[lines.length - 1];
+  if (lines.length) return withCommand(lines[lines.length - 1], root);
   return JSON.stringify({ ok: false, error: (r.err || r.out || "the driver gave no result").trim().slice(-400) });
+}
+
+/** Run one tool call. The answer is always one JSON text: a result, a refusal or an error. */
+export async function callTool(tool: FrontTool, params: Record<string, unknown>, rootSetting?: string): Promise<string> {
+  const root = toolRoot(rootSetting);
+  if (!root) return refused("The tool folder is not found. The operator must set \"Tool folder\" in the plugin settings: the folder that holds rig.json.");
+  return drive(argvFor(tool, params), root);
+}
+
+/** The words of a message of the operator that answers a human gate:
+ *  "approve [RUN] yes|no [WORDS]". -> [run or "", "yes" | "no", words] or null. */
+export function approval(text: string): [string, string, string[]] | null {
+  const m = text.trim().match(/^approve\s+(?:([\w.-]+)\s+)?(yes|no)(?:\s+(.*))?$/is);
+  if (!m) return null;
+  return [m[1] ?? "", m[2].toLowerCase(), (m[3] ?? "").split(/\s+/).filter(Boolean)];
+}
+
+/** A message of the operator that starts with "approve" answers the human gate as the person.
+ *  Only the operator's own message can do this: it is no tool, so the model cannot call it.
+ *  Without a run id, the one run that waits for a person is meant. -> the result as JSON, or null
+ *  when the message is no approval. */
+export async function operatorAnswer(text: string, rootSetting?: string): Promise<string | null> {
+  const a = approval(text);
+  if (!a) return null;
+  const root = toolRoot(rootSetting);
+  if (!root) return refused("The tool folder is not found. Set \"Tool folder\" in the plugin settings.");
+  let [run, word, words] = a;
+  if (!run) {
+    let waits: { run: string }[] = [];
+    try { waits = JSON.parse(await drive(["queues"], root)).waits_for_person ?? []; } catch { /* no list */ }
+    if (waits.length !== 1) return refused(`${waits.length} runs wait for a person. Write the run id: approve <run id> ${word}. They are: ${waits.map((w) => w.run).join(", ") || "none"}.`);
+    run = waits[0].run;
+  }
+  return drive(["approve", run, word, ...words], root);
+}
+
+/** What the model reads in place of an approval message of the operator. */
+export function forModel(message: string, result: string): string {
+  return `The operator answered a human gate with "${message.trim()}". The result of the tool: ${result}\nRead it and go on as the rules say.`;
 }

@@ -1,0 +1,808 @@
+[
+ {
+  "name": "the whole way: shortest kept, two batches, new folders, written",
+  "inputs": {
+   "file": "tests/fixtures/export.html"
+  },
+  "rules": {
+   "files.work": "tests/.tmp/work",
+   "files.out": "tests/.tmp/out",
+   "sort.batch": 10
+  },
+  "answers": {
+   "choose": [
+    {
+     "person": true,
+     "pass": true
+    }
+   ],
+   "sort": [
+    {
+     "result": [
+      {
+       "id": 4,
+       "folder": "Other favorites > Cooking > Baking"
+      },
+      {
+       "id": 6,
+       "folder": "Other favorites > Travel"
+      },
+      {
+       "id": 7,
+       "folder": "Other favorites > Nature",
+       "new": true
+      },
+      {
+       "id": 9,
+       "folder": "Other favorites"
+      },
+      {
+       "id": 10,
+       "folder": "Other favorites > Cooking"
+      },
+      {
+       "id": 11,
+       "folder": "Other favorites > Travel"
+      },
+      {
+       "id": 12,
+       "folder": "Other favorites > Programming > Python"
+      },
+      {
+       "id": 13,
+       "folder": "Other favorites > Nature",
+       "new": true
+      },
+      {
+       "id": 14,
+       "folder": "Other favorites > Knitting",
+       "new": true
+      },
+      {
+       "id": 15,
+       "folder": "Other favorites > Knitting"
+      }
+     ]
+    },
+    {
+     "result": [
+      {
+       "id": 16,
+       "folder": "Other favorites > Cooking"
+      },
+      {
+       "id": 32,
+       "folder": "Other favorites > Cooking"
+      }
+     ]
+    }
+   ],
+   "new-ok": [
+    {
+     "person": true,
+     "pass": true
+    }
+   ],
+   "approve": [
+    {
+     "person": true,
+     "pass": true
+    }
+   ]
+  },
+  "expect": {
+   "end": "done",
+   "path": [
+    "read",
+    "file-ok",
+    "dupes",
+    "group",
+    "page",
+    "page-left",
+    "choose",
+    "apply",
+    "choice-ok",
+    "page",
+    "page-left",
+    "loose",
+    "batch",
+    "batch-left",
+    "sort",
+    "sort-ok",
+    "keep",
+    "batch",
+    "batch-left",
+    "sort",
+    "sort-ok",
+    "keep",
+    "batch",
+    "batch-left",
+    "folders",
+    "any-new",
+    "new-ok",
+    "accept",
+    "accept-ok",
+    "links",
+    "report",
+    "share",
+    "approve",
+    "build",
+    "verify",
+    "target",
+    "place",
+    "done"
+   ]
+  }
+ },
+ {
+  "name": "a page answer not understood, then keep all; one new folder left out",
+  "inputs": {
+   "file": "tests/fixtures/export.html"
+  },
+  "rules": {
+   "files.work": "tests/.tmp/work",
+   "files.out": "tests/.tmp/out",
+   "sort.batch": 10,
+   "permissions.overwrite": true
+  },
+  "answers": {
+   "choose": [
+    {
+     "person": true,
+     "pass": true,
+     "why": "1=9"
+    },
+    {
+     "person": true,
+     "pass": true,
+     "why": "1=all 2=2"
+    }
+   ],
+   "sort": [
+    {
+     "result": [
+      {
+       "id": 4,
+       "folder": "Other favorites > Cooking > Baking"
+      },
+      {
+       "id": 6,
+       "folder": "Other favorites > Travel"
+      },
+      {
+       "id": 7,
+       "folder": "Other favorites > Nature",
+       "new": true
+      },
+      {
+       "id": 9,
+       "folder": "Other favorites"
+      },
+      {
+       "id": 10,
+       "folder": "Other favorites > Cooking"
+      },
+      {
+       "id": 11,
+       "folder": "Other favorites > Travel"
+      },
+      {
+       "id": 12,
+       "folder": "Other favorites > Programming > Python"
+      },
+      {
+       "id": 13,
+       "folder": "Other favorites > Nature",
+       "new": true
+      },
+      {
+       "id": 14,
+       "folder": "Other favorites > Knitting",
+       "new": true
+      },
+      {
+       "id": 15,
+       "folder": "Other favorites > Knitting"
+      }
+     ]
+    },
+    {
+     "result": [
+      {
+       "id": 16,
+       "folder": "Other favorites > Cooking"
+      },
+      {
+       "id": 32,
+       "folder": "Other favorites > Cooking"
+      }
+     ]
+    }
+   ],
+   "new-ok": [
+    {
+     "person": true,
+     "pass": true,
+     "why": "5=no"
+    },
+    {
+     "person": true,
+     "pass": true,
+     "why": "2=no"
+    }
+   ],
+   "approve": [
+    {
+     "person": true,
+     "pass": true
+    }
+   ]
+  },
+  "expect": {
+   "end": "done",
+   "path": [
+    "read",
+    "file-ok",
+    "dupes",
+    "group",
+    "page",
+    "page-left",
+    "choose",
+    "apply",
+    "choice-ok",
+    "choose",
+    "apply",
+    "choice-ok",
+    "page",
+    "page-left",
+    "loose",
+    "batch",
+    "batch-left",
+    "sort",
+    "sort-ok",
+    "keep",
+    "batch",
+    "batch-left",
+    "sort",
+    "sort-ok",
+    "keep",
+    "batch",
+    "batch-left",
+    "folders",
+    "any-new",
+    "new-ok",
+    "accept",
+    "accept-ok",
+    "new-ok",
+    "accept",
+    "accept-ok",
+    "links",
+    "report",
+    "share",
+    "approve",
+    "build",
+    "verify",
+    "target",
+    "place",
+    "done"
+   ]
+  }
+ },
+ {
+  "name": "the person says rest on the first page and no to new folders",
+  "inputs": {
+   "file": "tests/fixtures/export.html"
+  },
+  "rules": {
+   "files.work": "tests/.tmp/work",
+   "files.out": "tests/.tmp/out",
+   "sort.batch": 10,
+   "similar.page_size": 1,
+   "permissions.overwrite": true
+  },
+  "answers": {
+   "choose": [
+    {
+     "person": true,
+     "pass": true,
+     "why": "rest"
+    }
+   ],
+   "sort": [
+    {
+     "result": [
+      {
+       "id": 4,
+       "folder": "Other favorites > Cooking > Baking"
+      },
+      {
+       "id": 6,
+       "folder": "Other favorites > Travel"
+      },
+      {
+       "id": 7,
+       "folder": "Other favorites > Nature",
+       "new": true
+      },
+      {
+       "id": 9,
+       "folder": "Other favorites"
+      },
+      {
+       "id": 10,
+       "folder": "Other favorites > Cooking"
+      },
+      {
+       "id": 11,
+       "folder": "Other favorites > Travel"
+      },
+      {
+       "id": 12,
+       "folder": "Other favorites > Programming > Python"
+      },
+      {
+       "id": 13,
+       "folder": "Other favorites > Nature",
+       "new": true
+      },
+      {
+       "id": 14,
+       "folder": "Other favorites > Knitting",
+       "new": true
+      },
+      {
+       "id": 15,
+       "folder": "Other favorites > Knitting"
+      }
+     ]
+    },
+    {
+     "result": [
+      {
+       "id": 16,
+       "folder": "Other favorites > Cooking"
+      },
+      {
+       "id": 32,
+       "folder": "Other favorites > Cooking"
+      }
+     ]
+    }
+   ],
+   "new-ok": [
+    {
+     "person": true,
+     "pass": false
+    }
+   ],
+   "approve": [
+    {
+     "person": true,
+     "pass": true
+    }
+   ]
+  },
+  "expect": {
+   "end": "done",
+   "path": [
+    "read",
+    "file-ok",
+    "dupes",
+    "group",
+    "page",
+    "page-left",
+    "choose",
+    "apply",
+    "choice-ok",
+    "page",
+    "page-left",
+    "loose",
+    "batch",
+    "batch-left",
+    "sort",
+    "sort-ok",
+    "keep",
+    "batch",
+    "batch-left",
+    "sort",
+    "sort-ok",
+    "keep",
+    "batch",
+    "batch-left",
+    "folders",
+    "any-new",
+    "new-ok",
+    "accept",
+    "accept-ok",
+    "links",
+    "report",
+    "share",
+    "approve",
+    "build",
+    "verify",
+    "target",
+    "place",
+    "done"
+   ]
+  }
+ },
+ {
+  "name": "a batch with no good answer stays unsorted; no new folder; the person says no",
+  "inputs": {
+   "file": "tests/fixtures/export.html"
+  },
+  "rules": {
+   "files.work": "tests/.tmp/work",
+   "files.out": "tests/.tmp/out",
+   "sort.batch": 10
+  },
+  "answers": {
+   "choose": [
+    {
+     "person": true,
+     "pass": false
+    }
+   ],
+   "sort": [
+    {
+     "result": [
+      {
+       "id": 4,
+       "folder": "Other favorites > Cooking > Baking"
+      },
+      {
+       "id": 6,
+       "folder": "Other favorites > Travel"
+      },
+      {
+       "id": 7,
+       "folder": "Other favorites > Nature",
+       "new": true
+      }
+     ]
+    },
+    {
+     "result": [
+      {
+       "id": 4,
+       "folder": "Other favorites > Cooking > Baking"
+      },
+      {
+       "id": 6,
+       "folder": "Other favorites > Travel"
+      },
+      {
+       "id": 7,
+       "folder": "Other favorites > Nature",
+       "new": true
+      }
+     ]
+    },
+    {
+     "result": [
+      {
+       "id": 99,
+       "folder": "Nowhere"
+      }
+     ]
+    },
+    {
+     "result": [
+      {
+       "id": 16,
+       "folder": "Other favorites > Cooking"
+      },
+      {
+       "id": 32,
+       "folder": "Other favorites > Cooking"
+      }
+     ]
+    }
+   ],
+   "approve": [
+    {
+     "person": true,
+     "pass": false
+    }
+   ]
+  },
+  "expect": {
+   "end": "declined",
+   "path": [
+    "read",
+    "file-ok",
+    "dupes",
+    "group",
+    "page",
+    "page-left",
+    "choose",
+    "apply",
+    "choice-ok",
+    "page",
+    "page-left",
+    "loose",
+    "batch",
+    "batch-left",
+    "sort",
+    "sort-ok",
+    "rounds",
+    "sort",
+    "sort-ok",
+    "rounds",
+    "sort",
+    "sort-ok",
+    "rounds",
+    "skip",
+    "batch",
+    "batch-left",
+    "sort",
+    "sort-ok",
+    "keep",
+    "batch",
+    "batch-left",
+    "folders",
+    "any-new",
+    "links",
+    "report",
+    "share",
+    "approve",
+    "declined"
+   ]
+  }
+ },
+ {
+  "name": "the live JSON file of the browser is refused",
+  "inputs": {
+   "file": "tests/fixtures/live-bookmarks.json"
+  },
+  "rules": {
+   "files.work": "tests/.tmp/work",
+   "files.out": "tests/.tmp/out",
+   "sort.batch": 10
+  },
+  "answers": {},
+  "expect": {
+   "end": "bad-file",
+   "path": [
+    "read",
+    "file-ok",
+    "bad-file"
+   ]
+  }
+ },
+ {
+  "name": "a plan that removes too much is held back",
+  "inputs": {
+   "file": "tests/fixtures/export.html"
+  },
+  "rules": {
+   "files.work": "tests/.tmp/work",
+   "files.out": "tests/.tmp/out",
+   "sort.batch": 10,
+   "safety.max_removed": 1
+  },
+  "answers": {
+   "choose": [
+    {
+     "person": true,
+     "pass": true
+    }
+   ],
+   "sort": [
+    {
+     "result": [
+      {
+       "id": 4,
+       "folder": "Other favorites"
+      },
+      {
+       "id": 6,
+       "folder": "Other favorites"
+      },
+      {
+       "id": 7,
+       "folder": "Other favorites"
+      },
+      {
+       "id": 9,
+       "folder": "Other favorites"
+      },
+      {
+       "id": 10,
+       "folder": "Other favorites"
+      },
+      {
+       "id": 11,
+       "folder": "Other favorites"
+      },
+      {
+       "id": 12,
+       "folder": "Other favorites"
+      },
+      {
+       "id": 13,
+       "folder": "Other favorites"
+      },
+      {
+       "id": 14,
+       "folder": "Other favorites"
+      },
+      {
+       "id": 15,
+       "folder": "Other favorites"
+      }
+     ]
+    },
+    {
+     "result": [
+      {
+       "id": 16,
+       "folder": "Other favorites > Cooking"
+      },
+      {
+       "id": 32,
+       "folder": "Other favorites > Cooking"
+      }
+     ]
+    }
+   ]
+  },
+  "expect": {
+   "end": "held",
+   "path": [
+    "read",
+    "file-ok",
+    "dupes",
+    "group",
+    "page",
+    "page-left",
+    "choose",
+    "apply",
+    "choice-ok",
+    "page",
+    "page-left",
+    "loose",
+    "batch",
+    "batch-left",
+    "sort",
+    "sort-ok",
+    "keep",
+    "batch",
+    "batch-left",
+    "sort",
+    "sort-ok",
+    "keep",
+    "batch",
+    "batch-left",
+    "folders",
+    "any-new",
+    "links",
+    "report",
+    "share",
+    "held"
+   ]
+  }
+ },
+ {
+  "name": "the output file of an earlier case exists: nothing written",
+  "inputs": {
+   "file": "tests/fixtures/export.html"
+  },
+  "rules": {
+   "files.work": "tests/.tmp/work",
+   "files.out": "tests/.tmp/out",
+   "sort.batch": 10
+  },
+  "answers": {
+   "choose": [
+    {
+     "person": true,
+     "pass": true
+    }
+   ],
+   "sort": [
+    {
+     "result": [
+      {
+       "id": 4,
+       "folder": "Other favorites"
+      },
+      {
+       "id": 6,
+       "folder": "Other favorites"
+      },
+      {
+       "id": 7,
+       "folder": "Other favorites"
+      },
+      {
+       "id": 9,
+       "folder": "Other favorites"
+      },
+      {
+       "id": 10,
+       "folder": "Other favorites"
+      },
+      {
+       "id": 11,
+       "folder": "Other favorites"
+      },
+      {
+       "id": 12,
+       "folder": "Other favorites"
+      },
+      {
+       "id": 13,
+       "folder": "Other favorites"
+      },
+      {
+       "id": 14,
+       "folder": "Other favorites"
+      },
+      {
+       "id": 15,
+       "folder": "Other favorites"
+      }
+     ]
+    },
+    {
+     "result": [
+      {
+       "id": 16,
+       "folder": "Other favorites > Cooking"
+      },
+      {
+       "id": 32,
+       "folder": "Other favorites > Cooking"
+      }
+     ]
+    }
+   ],
+   "approve": [
+    {
+     "person": true,
+     "pass": true
+    }
+   ]
+  },
+  "expect": {
+   "end": "exists",
+   "path": [
+    "read",
+    "file-ok",
+    "dupes",
+    "group",
+    "page",
+    "page-left",
+    "choose",
+    "apply",
+    "choice-ok",
+    "page",
+    "page-left",
+    "loose",
+    "batch",
+    "batch-left",
+    "sort",
+    "sort-ok",
+    "keep",
+    "batch",
+    "batch-left",
+    "sort",
+    "sort-ok",
+    "keep",
+    "batch",
+    "batch-left",
+    "folders",
+    "any-new",
+    "links",
+    "report",
+    "share",
+    "approve",
+    "build",
+    "verify",
+    "target",
+    "exists"
+   ]
+  }
+ }
+]

@@ -1,0 +1,925 @@
+{
+ "rig": 0,
+ "unit": "bookmarks",
+ "scope": "agent",
+ "preset": null,
+ "intent": "clean up a bookmarks HTML file that Edge exported: remove exact duplicates, fold similar URLs as the person chooses, sort loose bookmarks into folders, and write a new file to import",
+ "notes": [],
+ "uses": [],
+ "external": [],
+ "code": [
+  {
+   "prefix": "gates",
+   "file": "gates.py",
+   "test": "tests/test_gates.py"
+  },
+  {
+   "prefix": "steps",
+   "file": "steps.py",
+   "test": "tests/test_steps.py"
+  }
+ ],
+ "in": [
+  {
+   "name": "file",
+   "type": "path",
+   "text": "the bookmarks HTML file that Edge exported (Settings, Favorites, Export favorites)"
+  }
+ ],
+ "out": {
+  "type": "text",
+  "text": "the path of the new bookmarks file and of its report"
+ },
+ "start": "read",
+ "coverage": {
+  "gates": 14,
+  "proved": 0,
+  "tested": 11,
+  "observed": 0,
+  "code": 0,
+  "judge": 0,
+  "human": 3,
+  "none": 0
+ },
+ "presets": {},
+ "rules": [
+  {
+   "id": "files.work",
+   "group": "files",
+   "label": "Folder for the work of each run",
+   "type": "text",
+   "value": "work",
+   "default": "work",
+   "note": "relative to the tool folder; one sub-folder for each run, with the choices and the sorted batches. Not in version control"
+  },
+  {
+   "id": "files.out",
+   "group": "files",
+   "label": "Folder for the new bookmarks file",
+   "type": "text",
+   "value": "out",
+   "default": "out",
+   "note": "relative to the tool folder; the export stays where it is"
+  },
+  {
+   "id": "keep.bar",
+   "group": "keep",
+   "label": "Leave the favorites bar alone",
+   "type": "switch",
+   "value": true,
+   "default": true,
+   "note": "a bookmark directly on the favorites bar is a shortcut that the person put there: it is never removed, grouped or moved"
+  },
+  {
+   "id": "dupes.tracking",
+   "group": "dupes",
+   "label": "Tracking parameters to ignore",
+   "type": "list",
+   "value": [
+    "utm_",
+    "fbclid",
+    "gclid",
+    "dclid",
+    "msclkid",
+    "mc_cid",
+    "mc_eid",
+    "igshid",
+    "_hsenc",
+    "_hsmi",
+    "yclid"
+   ],
+   "default": [
+    "utm_",
+    "fbclid",
+    "gclid",
+    "dclid",
+    "msclkid",
+    "mc_cid",
+    "mc_eid",
+    "igshid",
+    "_hsenc",
+    "_hsmi",
+    "yclid"
+   ],
+   "note": "a name that ends with _ is a prefix. These parameters do not change the page"
+  },
+  {
+   "id": "similar.skip_hosts",
+   "group": "similar",
+   "label": "Sites with many separate pages: never group",
+   "type": "list",
+   "value": [
+    "github.com",
+    "youtube.com",
+    "youtu.be",
+    "google.com",
+    "wikipedia.org",
+    "stackoverflow.com",
+    "reddit.com",
+    "amazon.com",
+    "medium.com",
+    "x.com",
+    "twitter.com",
+    "facebook.com"
+   ],
+   "default": [
+    "github.com",
+    "youtube.com",
+    "youtu.be",
+    "google.com",
+    "wikipedia.org",
+    "stackoverflow.com",
+    "reddit.com",
+    "amazon.com",
+    "medium.com",
+    "x.com",
+    "twitter.com",
+    "facebook.com"
+   ],
+   "note": "on these sites a longer path is another page with its own content, not a variant. Add a site here to stop its groups"
+  },
+  {
+   "id": "similar.skip_pattern",
+   "group": "similar",
+   "label": "Host names of documentation sites: never group",
+   "type": "pattern",
+   "value": "^(docs|developer|developers|support|help|wiki)\\.",
+   "default": "^(docs|developer|developers|support|help|wiki)\\."
+  },
+  {
+   "id": "similar.index_names",
+   "group": "similar",
+   "label": "Last parts of a path that name the same page as the folder",
+   "type": "list",
+   "value": [
+    "index",
+    "index.html",
+    "index.htm",
+    "index.php",
+    "home",
+    "default.aspx",
+    "default.htm"
+   ],
+   "default": [
+    "index",
+    "index.html",
+    "index.htm",
+    "index.php",
+    "home",
+    "default.aspx",
+    "default.htm"
+   ],
+   "note": "home.org/index.html is home.org; code folds such a variant when the short URL is a bookmark too"
+  },
+  {
+   "id": "similar.max_group",
+   "group": "similar",
+   "label": "Largest group to show to the person",
+   "type": "number",
+   "value": 8,
+   "default": 8,
+   "min": 2,
+   "max": 50,
+   "note": "a larger group is a site with many pages, not variants of one page; first value, check it on the real file"
+  },
+  {
+   "id": "similar.page_size",
+   "group": "similar",
+   "label": "Groups on one page of choices",
+   "type": "number",
+   "value": 20,
+   "default": 20,
+   "min": 1,
+   "max": 100,
+   "unit": "groups",
+   "note": "first value; a page must be easy to read in a chat"
+  },
+  {
+   "id": "sort.loose_depth",
+   "group": "sort",
+   "label": "Folders this deep or less hold loose bookmarks",
+   "type": "number",
+   "value": 1,
+   "default": 1,
+   "min": 0,
+   "max": 3,
+   "note": "1: the top level and the top folders, such as Other favorites. The favorites bar is left alone (keep.bar)"
+  },
+  {
+   "id": "sort.host_elsewhere",
+   "group": "sort",
+   "label": "Bookmarks of the same site in another folder that make one likely misfiled",
+   "type": "number",
+   "value": 2,
+   "default": 2,
+   "min": 1,
+   "max": 20,
+   "note": "first value, set on the test file; a single bookmark of a site in another folder says little"
+  },
+  {
+   "id": "sort.batch",
+   "group": "sort",
+   "label": "Bookmarks in one batch for the model",
+   "type": "number",
+   "value": 60,
+   "default": 60,
+   "min": 10,
+   "max": 100,
+   "unit": "bookmarks",
+   "note": "the owner asked for batches of about fifty to a hundred; a small local model loses items in a longer list"
+  },
+  {
+   "id": "sort.rounds",
+   "group": "sort",
+   "label": "Retries of one batch",
+   "type": "number",
+   "value": 2,
+   "default": 2,
+   "min": 0,
+   "max": 5,
+   "note": "after the retries the batch stays unsorted and the report lists it"
+  },
+  {
+   "id": "sort.new_per_batch",
+   "group": "sort",
+   "label": "New folders in one batch",
+   "type": "number",
+   "value": 3,
+   "default": 3,
+   "min": 0,
+   "max": 10,
+   "note": "the owner wants the folders of the file plus a few new ones"
+  },
+  {
+   "id": "sort.new_max",
+   "group": "sort",
+   "label": "New folders in all",
+   "type": "number",
+   "value": 12,
+   "default": 12,
+   "min": 0,
+   "max": 50,
+   "note": "the owner wants the folders of the file plus a few new ones"
+  },
+  {
+   "id": "sort.url_chars",
+   "group": "sort",
+   "label": "Longest URL that the model sees",
+   "type": "number",
+   "value": 120,
+   "default": 120,
+   "min": 40,
+   "max": 400,
+   "unit": "characters",
+   "note": "a longer URL is cut; the model does not need the query to sort"
+  },
+  {
+   "id": "sort.title_chars",
+   "group": "sort",
+   "label": "Longest title that the model and the person see",
+   "type": "number",
+   "value": 80,
+   "default": 80,
+   "min": 20,
+   "max": 300,
+   "unit": "characters",
+   "note": "a longer title is cut in what is shown; the file keeps the whole title"
+  },
+  {
+   "id": "safety.max_removed",
+   "group": "safety",
+   "label": "Largest share of bookmarks that one run may remove",
+   "type": "number",
+   "value": 30,
+   "default": 30,
+   "min": 1,
+   "max": 100,
+   "unit": "percent",
+   "note": "a plan that removes more points at a bug or a wrong rule; the run is held back. First value"
+  },
+  {
+   "id": "links.check",
+   "group": "links",
+   "label": "Check the links (not in this version)",
+   "type": "switch",
+   "value": false,
+   "default": false,
+   "note": "the hook for a link checker: it will move dead links to the folder links.folder, never delete them"
+  },
+  {
+   "id": "links.folder",
+   "group": "links",
+   "label": "Folder for dead links",
+   "type": "text",
+   "value": "Dead links",
+   "default": "Dead links"
+  },
+  {
+   "id": "permissions.overwrite",
+   "group": "permissions",
+   "label": "The tool may write over an earlier new file",
+   "type": "switch",
+   "value": false,
+   "default": false,
+   "note": "off: when the output file exists, the run ends at exists and writes nothing"
+  },
+  {
+   "id": "run.max_visits",
+   "group": "run",
+   "label": "Most visits of one node in a run",
+   "type": "number",
+   "value": 1000,
+   "default": 1000,
+   "min": 10,
+   "max": 100000,
+   "note": "the pages of choices and the sort batches are loops; a file of many thousand bookmarks needs some hundred rounds"
+  }
+ ],
+ "flow": [
+  {
+   "id": "read",
+   "kind": "step",
+   "name": "Read the export",
+   "do": "read the bookmarks file: every folder with its path, every bookmark with its title, URL, folder and date",
+   "by": [
+    "steps.read"
+   ],
+   "reads": [
+    "files.work"
+   ],
+   "next": [
+    {
+     "to": "file-ok"
+    }
+   ]
+  },
+  {
+   "id": "file-ok",
+   "kind": "hard",
+   "name": "A bookmarks export",
+   "ensure": "the file is a bookmarks file in the Netscape HTML form, with at least one bookmark; the live JSON file of the browser is refused",
+   "by": [
+    "gates.file_ok"
+   ],
+   "pass": [
+    {
+     "to": "dupes"
+    }
+   ],
+   "fail": [
+    {
+     "to": "bad-file",
+     "when": "not a bookmarks export"
+    }
+   ]
+  },
+  {
+   "id": "dupes",
+   "kind": "step",
+   "name": "Remove exact duplicates",
+   "do": "find copies of one URL, ignoring http or https, www, a last slash, a #part and the tracking parameters of dupes.tracking; keep the copy in the deeper folder, else the oldest",
+   "by": [
+    "steps.dupes"
+   ],
+   "reads": [
+    "dupes.tracking",
+    "keep.bar"
+   ],
+   "next": [
+    {
+     "to": "group"
+    }
+   ]
+  },
+  {
+   "id": "group",
+   "kind": "step",
+   "name": "Group similar URLs",
+   "do": "group the URLs of one site where one path starts with another; fold the plain variants of similar.index_names; skip the sites of similar.skip_hosts and similar.skip_pattern; cut the groups into pages",
+   "by": [
+    "steps.group"
+   ],
+   "reads": [
+    "similar.index_names",
+    "similar.skip_hosts",
+    "similar.skip_pattern",
+    "similar.max_group",
+    "similar.page_size"
+   ],
+   "next": [
+    {
+     "to": "page"
+    }
+   ]
+  },
+  {
+   "id": "page",
+   "kind": "step",
+   "name": "Next page of groups",
+   "do": "take the next page of groups that the person has not decided",
+   "by": [
+    "steps.page"
+   ],
+   "reads": [
+    "sort.title_chars",
+    "run.max_visits"
+   ],
+   "next": [
+    {
+     "to": "page-left"
+    }
+   ]
+  },
+  {
+   "id": "page-left",
+   "kind": "hard",
+   "name": "A page waits",
+   "ensure": "a page of groups is not decided yet",
+   "by": [
+    "gates.page_left"
+   ],
+   "pass": [
+    {
+     "to": "choose"
+    }
+   ],
+   "fail": [
+    {
+     "to": "loose",
+     "when": "every page is decided"
+    }
+   ]
+  },
+  {
+   "id": "choose",
+   "kind": "human",
+   "name": "The person chooses the URLs to keep",
+   "brief": "show the person each group of this page: its site and its URLs with their numbers, and the path of the page file. Ask which URLs to keep. Give the person the answers of how: each one is the end of the command",
+   "sees": [
+    "page"
+   ],
+   "pass": [
+    {
+     "to": "apply"
+    }
+   ],
+   "fail": [
+    {
+     "to": "apply",
+     "when": "keep every URL from here on"
+    }
+   ]
+  },
+  {
+   "id": "apply",
+   "kind": "step",
+   "name": "Apply the choices of the page",
+   "do": "read the answer of the person; save the choices of the page only when every word is understood",
+   "by": [
+    "steps.apply"
+   ],
+   "next": [
+    {
+     "to": "choice-ok"
+    }
+   ]
+  },
+  {
+   "id": "choice-ok",
+   "kind": "hard",
+   "name": "The answer is understood",
+   "ensure": "every word of the answer names a group of the page and a choice",
+   "by": [
+    "gates.choice_ok"
+   ],
+   "pass": [
+    {
+     "to": "page"
+    }
+   ],
+   "fail": [
+    {
+     "to": "choose",
+     "when": "the answer is not understood"
+    }
+   ]
+  },
+  {
+   "id": "loose",
+   "kind": "step",
+   "name": "Find loose and misfiled bookmarks",
+   "do": "leave alone the bookmarks that fit their folder; take the loose ones (sort.loose_depth) and the likely misfiled ones (sort.host_elsewhere); cut them into batches of sort.batch",
+   "by": [
+    "steps.loose"
+   ],
+   "reads": [
+    "sort.loose_depth",
+    "sort.host_elsewhere",
+    "sort.batch",
+    "keep.bar"
+   ],
+   "next": [
+    {
+     "to": "batch"
+    }
+   ]
+  },
+  {
+   "id": "batch",
+   "kind": "step",
+   "name": "Next batch to sort",
+   "do": "take the next batch that is not sorted, with the folder list",
+   "by": [
+    "steps.batch"
+   ],
+   "reads": [
+    "sort.url_chars",
+    "sort.title_chars",
+    "run.max_visits",
+    "keep.bar"
+   ],
+   "next": [
+    {
+     "to": "batch-left"
+    }
+   ]
+  },
+  {
+   "id": "batch-left",
+   "kind": "hard",
+   "name": "A batch waits",
+   "ensure": "a batch is not sorted yet",
+   "by": [
+    "gates.batch_left"
+   ],
+   "pass": [
+    {
+     "to": "sort"
+    }
+   ],
+   "fail": [
+    {
+     "to": "folders",
+     "when": "every batch is sorted"
+    }
+   ]
+  },
+  {
+   "id": "sort",
+   "kind": "step",
+   "name": "Sort the batch",
+   "do": "put each bookmark of the batch into the folder where it fits best. Choose a folder of the list folders. A bookmark that fits its present folder keeps that folder. Only when no folder fits, propose a new folder: give its whole path under a folder of the list, and \"new\": true; at most {sort.new_per_batch} new folders in this batch. Give the result as a list with one object for each bookmark: {\"id\": <id>, \"folder\": \"<path>\"}. Write each path as in the list, with > between the names. Do not change a URL or a title. When waiting has problems, your last answer failed: fix them",
+   "reads": [
+    "sort.new_per_batch"
+   ],
+   "sees": [
+    "batch"
+   ],
+   "next": [
+    {
+     "to": "sort-ok"
+    }
+   ]
+  },
+  {
+   "id": "sort-ok",
+   "kind": "hard",
+   "name": "Every bookmark once, in a known folder",
+   "ensure": "the answer has every id of the batch once and no other id, no changed URL or title, only folders of the list or new folders under them, at most {sort.new_per_batch} new folders in the batch and {sort.new_max} in all",
+   "by": [
+    "gates.sort_ok"
+   ],
+   "reads": [
+    "sort.new_per_batch",
+    "sort.new_max"
+   ],
+   "pass": [
+    {
+     "to": "keep"
+    }
+   ],
+   "fail": [
+    {
+     "to": "rounds",
+     "when": "the answer is not good"
+    }
+   ]
+  },
+  {
+   "id": "rounds",
+   "kind": "hard",
+   "name": "A retry is left",
+   "ensure": "the batch was sent back at most {sort.rounds} times",
+   "by": [
+    "gates.rounds_left"
+   ],
+   "reads": [
+    "sort.rounds"
+   ],
+   "pass": [
+    {
+     "to": "sort"
+    }
+   ],
+   "fail": [
+    {
+     "to": "skip",
+     "when": "no retry left"
+    }
+   ]
+  },
+  {
+   "id": "keep",
+   "kind": "step",
+   "name": "Keep the sorted batch",
+   "do": "save the folders of the batch; a bookmark whose folder did not change does not move",
+   "by": [
+    "steps.keep"
+   ],
+   "next": [
+    {
+     "to": "batch"
+    }
+   ]
+  },
+  {
+   "id": "skip",
+   "kind": "step",
+   "name": "Leave the batch unsorted",
+   "do": "save the batch as unsorted: its bookmarks stay where they are, and the report lists it",
+   "by": [
+    "steps.skip"
+   ],
+   "next": [
+    {
+     "to": "batch"
+    }
+   ]
+  },
+  {
+   "id": "folders",
+   "kind": "step",
+   "name": "Collect the new folders",
+   "do": "list the new folders that the model proposed, with the number of bookmarks and some titles for each",
+   "by": [
+    "steps.folders"
+   ],
+   "next": [
+    {
+     "to": "any-new"
+    }
+   ]
+  },
+  {
+   "id": "any-new",
+   "kind": "hard",
+   "name": "A new folder is proposed",
+   "ensure": "the model proposed at least one new folder",
+   "by": [
+    "gates.any_new"
+   ],
+   "pass": [
+    {
+     "to": "new-ok"
+    }
+   ],
+   "fail": [
+    {
+     "to": "links",
+     "when": "no new folder"
+    }
+   ]
+  },
+  {
+   "id": "new-ok",
+   "kind": "human",
+   "name": "The person agrees to the new folders",
+   "brief": "show the person each new folder: its path, how many bookmarks go to it, and the examples. Ask: may the tool make these folders? Give the person the answers of how: each one is the end of the command",
+   "sees": [
+    "folders"
+   ],
+   "pass": [
+    {
+     "to": "accept"
+    }
+   ],
+   "fail": [
+    {
+     "to": "accept",
+     "when": "no new folder"
+    }
+   ]
+  },
+  {
+   "id": "accept",
+   "kind": "step",
+   "name": "Apply the answer about the new folders",
+   "do": "read the answer of the person; a left-out folder keeps its bookmarks where they were",
+   "by": [
+    "steps.accept"
+   ],
+   "next": [
+    {
+     "to": "accept-ok"
+    }
+   ]
+  },
+  {
+   "id": "accept-ok",
+   "kind": "hard",
+   "name": "The answer is understood",
+   "ensure": "every word of the answer names a new folder of the list",
+   "by": [
+    "gates.accept_ok"
+   ],
+   "pass": [
+    {
+     "to": "links"
+    }
+   ],
+   "fail": [
+    {
+     "to": "new-ok",
+     "when": "the answer is not understood"
+    }
+   ]
+  },
+  {
+   "id": "links",
+   "kind": "step",
+   "name": "Dead links (a hook, not in this version)",
+   "do": "when links.check is on, a later version checks the links and moves dead ones to links.folder; now it only reads dead.json of the work folder, when it exists",
+   "by": [
+    "steps.links"
+   ],
+   "reads": [
+    "links.check",
+    "links.folder"
+   ],
+   "next": [
+    {
+     "to": "report"
+    }
+   ]
+  },
+  {
+   "id": "report",
+   "kind": "step",
+   "name": "Write the dry-run report",
+   "do": "count and list what the new file would remove, fold, move and make, and write the report into the work folder; write nothing else",
+   "by": [
+    "steps.report"
+   ],
+   "next": [
+    {
+     "to": "share"
+    }
+   ]
+  },
+  {
+   "id": "share",
+   "kind": "hard",
+   "name": "Not too much removed",
+   "ensure": "the plan removes at most {safety.max_removed} percent of the bookmarks",
+   "by": [
+    "gates.share_ok"
+   ],
+   "reads": [
+    "safety.max_removed"
+   ],
+   "pass": [
+    {
+     "to": "approve"
+    }
+   ],
+   "fail": [
+    {
+     "to": "held",
+     "when": "the plan removes too much"
+    }
+   ]
+  },
+  {
+   "id": "approve",
+   "kind": "human",
+   "name": "The person agrees with the report",
+   "brief": "show the person the counts of the dry run and the path of the report. Ask: may the tool write the new bookmarks file?",
+   "sees": [
+    "report"
+   ],
+   "pass": [
+    {
+     "to": "build"
+    }
+   ],
+   "fail": [
+    {
+     "to": "declined",
+     "when": "the person said no"
+    }
+   ]
+  },
+  {
+   "id": "build",
+   "kind": "step",
+   "name": "Build the new file",
+   "do": "write the new file into the work folder and read it again",
+   "by": [
+    "steps.build"
+   ],
+   "reads": [
+    "files.out"
+   ],
+   "next": [
+    {
+     "to": "verify"
+    }
+   ]
+  },
+  {
+   "id": "verify",
+   "kind": "hard",
+   "name": "The new file keeps what it must",
+   "ensure": "the new file has every bookmark that stays, with its title and URL, every folder of the export with its name, every new folder, and every moved bookmark in its new folder",
+   "by": [
+    "gates.verify"
+   ],
+   "pass": [
+    {
+     "to": "target"
+    }
+   ],
+   "fail": [
+    {
+     "to": "held",
+     "when": "the new file failed its check"
+    }
+   ]
+  },
+  {
+   "id": "target",
+   "kind": "hard",
+   "name": "The output file is free",
+   "ensure": "no file has the name of the output, or the rule permissions.overwrite is on",
+   "by": [
+    "gates.may_place"
+   ],
+   "reads": [
+    "permissions.overwrite"
+   ],
+   "pass": [
+    {
+     "to": "place"
+    }
+   ],
+   "fail": [
+    {
+     "to": "exists",
+     "when": "the output file exists"
+    }
+   ]
+  },
+  {
+   "id": "place",
+   "kind": "step",
+   "name": "Place the new file",
+   "do": "copy the checked file to the folder of files.out; the export and the files of the browser stay as they are",
+   "by": [
+    "steps.place"
+   ],
+   "reads": [
+    "permissions.overwrite"
+   ],
+   "next": [
+    {
+     "to": "done"
+    }
+   ]
+  },
+  {
+   "id": "done",
+   "kind": "end",
+   "name": "Written: import the new file into Edge"
+  },
+  {
+   "id": "declined",
+   "kind": "end",
+   "name": "The person said no: nothing written"
+  },
+  {
+   "id": "held",
+   "kind": "end",
+   "name": "Held back by a safety check: nothing written"
+  },
+  {
+   "id": "exists",
+   "kind": "end",
+   "name": "The output file exists: nothing written"
+  },
+  {
+   "id": "bad-file",
+   "kind": "end",
+   "name": "Not a bookmarks export"
+  }
+ ]
+}

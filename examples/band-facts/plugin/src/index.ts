@@ -6,7 +6,7 @@ import {
   createConfigSchematics,
   type ChatMessage, type PluginContext, type PromptPreprocessorController, type ToolsProviderController,
 } from "@lmstudio/sdk";
-import { front } from "./bridge.ts";
+import { forModel, front, operatorAnswer } from "./bridge.ts";
 import { tools } from "./tools.ts";
 
 const globalConfig = createConfigSchematics()
@@ -27,11 +27,15 @@ async function provide(ctl: ToolsProviderController) {
 }
 
 // A plugin cannot set the system prompt. So the rules go before the first user message, one time.
+// A message of the operator that starts with "approve" answers a human gate as the person: the plugin
+// runs it before the model sees the message, and the model gets only the result (bridge.ts, operatorAnswer).
 async function preprocess(ctl: PromptPreprocessorController, message: ChatMessage) {
-  if (!front.prompt) return message;
+  const answer = await operatorAnswer(message.getText(), ctl.getGlobalPluginConfig(globalConfig).get("toolFolder"));
+  const text = answer === null ? message.getText() : forModel(message.getText(), answer);
+  if (!front.prompt) return answer === null ? message : text;
   const history = await ctl.pullHistory();
-  if (history.getMessagesArray().some((m) => m.getRole() === "user")) return message;
-  return `${front.prompt}\n\n${message.getText()}`;
+  if (history.getMessagesArray().some((m) => m.getRole() === "user")) return answer === null ? message : text;
+  return `${front.prompt}\n\n${text}`;
 }
 
 export async function main(context: PluginContext) {

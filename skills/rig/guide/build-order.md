@@ -119,6 +119,7 @@ A gate is a pure function: `def name(state, R)`. No files, no network, no host. 
 
 - `problems` is text for a person: the value, the rule and its value. "the notes have 12 words (notes.min_words 50)".
 - `when` names the fail line to follow, when the gate has more than one.
+- `route: true` with a fail: the gate only ends a loop ("no page is left"). The fail is a turn of the flow, not a problem, so the runner does not add it to the problems of the run.
 - Other keys are facts. They go into the trace of the run.
 
 A `judge` gate, a `human` gate and a step that the model does need a `sees` line: the parts of the state that go with the question, for example `sees read.summary write`. The one who answers gets these values with the node, and nothing else. Without the line, the model judges blind, or it goes to look for the facts itself.

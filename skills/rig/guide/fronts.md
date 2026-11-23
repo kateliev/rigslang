@@ -41,11 +41,11 @@ Each call prints one JSON line. The keys to read:
 | Key | Meaning |
 |---|---|
 | `outcome` | The run ended: `end` is the id of the end node. |
-| `waiting` | The run needs an answer: `node`, `kind` (`judge`, `step`, `human`), the text of the node, and `sees`: the facts of the run that the node names. |
+| `waiting` | The run needs an answer: `node`, `kind` (`judge`, `step`, `human`), the text of the node, and `sees`: the facts of the run that the node names. `waiting.problems`: what failed after the last answer at this node, so that the next answer can fix it. It is not there at the first visit of a node. |
 | `result` | With `outcome`: what the run made (the value of the step that leads to the end). A run that a gate ended has none. |
 | `error` | A step failed: `node` and the error text. The run stays at that node. |
 | `refused` | The call is not allowed now. It is final. |
-| `problems` | Every failed gate so far, as text. |
+| `problems` | Every failed gate so far, as text. A gate in code that ends a loop marks its fail with `"route": true`: that fail is a turn of the flow, and it is not a problem. |
 | `guessed` | The gates that the model decided. |
 | `path` | The nodes that the run went through. |
 
@@ -67,11 +67,20 @@ python3 RIG plugin DIR --owner NAME
 
 This adds the folder `plugin/`: an LM Studio plugin. Its code is the same for every tool. Everything about the tool comes from `plugin/src/gen/front.json`, which the build compiles:
 
-- **The tools.** `start_run` (with the inputs of the unit), `answer_gate`, `finish_step` (only when the flow has a step for the model), `run_status`, `start_batch`, `queues`, and one tool for each tool unit.
+- **The tools.** `start_run` (with the inputs of the unit), `answer_gate` (only when the flow has a gate for the model), `finish_step` (only when the flow has a step for the model), `run_status`, `start_batch`, `queues`, and one tool for each tool unit.
 - **The rules text.** About ten short numbered lines. The plugin puts it before the first message of a chat.
 - **The driver.** The plugin starts it for each call, without a shell.
 
-There is no tool for a human gate. The model can only tell the operator what to decide and which command to run.
+There is no tool for a human gate. The model can only show the operator what to decide. The operator answers with a chat message that starts with `approve`:
+
+| Message | What it does |
+|---|---|
+| `approve yes` | Answers the one run that waits for a person: yes. |
+| `approve no` | The same, no. |
+| `approve yes WORDS` | Yes, with words that the tool reads (for example the choices of a page). |
+| `approve RUN yes` | When more than one run waits: names the run. |
+
+The plugin runs such a message before the model sees it (`operatorAnswer` in `src/bridge.ts`), and the model gets only the result. The model cannot do this: it is not a tool, and only a message of the operator goes through this step. A result that waits for a person also has `waiting.command`: the same answer as a command for a terminal, with the tool folder.
 
 Try the plugin without LM Studio:
 
@@ -83,7 +92,13 @@ node --no-warnings try.ts
 node --no-warnings try.ts start_run '{"item": "a longer item"}'
 ```
 
-`try.ts` uses the same bridge as the plugin, with you in place of the model. Use it to read the exact JSON that the model will see.
+`try.ts` uses the same bridge as the plugin, with you in place of the model. Use it to read the exact JSON that the model will see. `node --no-warnings try.ts say "approve yes"` sends a message of the operator.
+
+A live run with the loaded model, without the chat window. Each `--then` is a later message of the operator in the same chat:
+
+```bash
+node --no-warnings agent.ts "the task" --then "approve yes"
+```
 
 ### What a small model needs
 

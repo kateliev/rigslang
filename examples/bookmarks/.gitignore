@@ -1,0 +1,9 @@
+runs/
+__pycache__/
+work/
+out/
+tests/.tmp/
+# a real bookmarks file never goes into version control: only the synthetic fixtures
+*.html
+*.htm
+!tests/fixtures/*.html

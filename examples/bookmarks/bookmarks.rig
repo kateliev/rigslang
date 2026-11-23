@@ -1,0 +1,258 @@
+; bookmarks: clean up a bookmarks file that a browser exported, and sort the loose bookmarks.
+; Made with "rig.py new", level 4. Code reads the file, removes exact duplicates, groups similar URLs,
+; checks every answer and writes the new file. A person chooses in the similar groups, agrees to new
+; folders and agrees to the dry-run report. The model only sorts loose bookmarks into folders.
+; The tool never changes the export or a live file of the browser: it writes a new HTML file to import.
+
+unit bookmarks agent
+  intent "clean up a bookmarks HTML file that Edge exported: remove exact duplicates, fold similar URLs as the person chooses, sort loose bookmarks into folders, and write a new file to import"
+  in file path "the bookmarks HTML file that Edge exported (Settings, Favorites, Export favorites)"
+  out text "the path of the new bookmarks file and of its report"
+  code gates gates.py
+    test tests/test_gates.py
+  code steps steps.py
+    test tests/test_steps.py
+
+  rule files.work "work"
+    label "Folder for the work of each run"
+    note "relative to the tool folder; one sub-folder for each run, with the choices and the sorted batches. Not in version control"
+  rule files.out "out"
+    label "Folder for the new bookmarks file"
+    note "relative to the tool folder; the export stays where it is"
+  rule keep.bar on
+    label "Leave the favorites bar alone"
+    note "a bookmark directly on the favorites bar is a shortcut that the person put there: it is never removed, grouped or moved"
+  rule dupes.tracking (utm_ fbclid gclid dclid msclkid mc_cid mc_eid igshid _hsenc _hsmi yclid)
+    label "Tracking parameters to ignore"
+    note "a name that ends with _ is a prefix. These parameters do not change the page"
+  rule similar.skip_hosts (github.com youtube.com youtu.be google.com wikipedia.org stackoverflow.com reddit.com amazon.com medium.com x.com twitter.com facebook.com)
+    label "Sites with many separate pages: never group"
+    note "on these sites a longer path is another page with its own content, not a variant. Add a site here to stop its groups"
+  rule similar.skip_pattern /^(docs|developer|developers|support|help|wiki)\./
+    label "Host names of documentation sites: never group"
+  rule similar.index_names (index index.html index.htm index.php home default.aspx default.htm)
+    label "Last parts of a path that name the same page as the folder"
+    note "home.org/index.html is home.org; code folds such a variant when the short URL is a bookmark too"
+  rule similar.max_group 8
+    min 2
+    max 50
+    label "Largest group to show to the person"
+    note "a larger group is a site with many pages, not variants of one page; first value, check it on the real file"
+  rule similar.page_size 20
+    min 1
+    max 100
+    label "Groups on one page of choices"
+    unit "groups"
+    note "first value; a page must be easy to read in a chat"
+  rule sort.loose_depth 1
+    min 0
+    max 3
+    label "Folders this deep or less hold loose bookmarks"
+    note "1: the top level and the top folders, such as Other favorites. The favorites bar is left alone (keep.bar)"
+  rule sort.host_elsewhere 2
+    min 1
+    max 20
+    label "Bookmarks of the same site in another folder that make one likely misfiled"
+    note "first value, set on the test file; a single bookmark of a site in another folder says little"
+  rule sort.batch 60
+    min 10
+    max 100
+    label "Bookmarks in one batch for the model"
+    unit "bookmarks"
+    note "the owner asked for batches of about fifty to a hundred; a small local model loses items in a longer list"
+  rule sort.rounds 2
+    min 0
+    max 5
+    label "Retries of one batch"
+    note "after the retries the batch stays unsorted and the report lists it"
+  rule sort.new_per_batch 3
+    min 0
+    max 10
+    label "New folders in one batch"
+    note "the owner wants the folders of the file plus a few new ones"
+  rule sort.new_max 12
+    min 0
+    max 50
+    label "New folders in all"
+    note "the owner wants the folders of the file plus a few new ones"
+  rule sort.url_chars 120
+    min 40
+    max 400
+    label "Longest URL that the model sees"
+    unit "characters"
+    note "a longer URL is cut; the model does not need the query to sort"
+  rule sort.title_chars 80
+    min 20
+    max 300
+    label "Longest title that the model and the person see"
+    unit "characters"
+    note "a longer title is cut in what is shown; the file keeps the whole title"
+  rule safety.max_removed 30
+    min 1
+    max 100
+    unit "percent"
+    label "Largest share of bookmarks that one run may remove"
+    note "a plan that removes more points at a bug or a wrong rule; the run is held back. First value"
+  rule links.check off
+    label "Check the links (not in this version)"
+    note "the hook for a link checker: it will move dead links to the folder links.folder, never delete them"
+  rule links.folder "Dead links"
+    label "Folder for dead links"
+  rule permissions.overwrite off
+    label "The tool may write over an earlier new file"
+    note "off: when the output file exists, the run ends at exists and writes nothing"
+  rule run.max_visits 1000
+    min 10
+    max 100000
+    label "Most visits of one node in a run"
+    note "the pages of choices and the sort batches are loops; a file of many thousand bookmarks needs some hundred rounds"
+
+  step read "Read the export"
+    do "read the bookmarks file: every folder with its path, every bookmark with its title, URL, folder and date"
+    by steps.read
+    reads files.work
+    next -> file-ok
+  gate file-ok hard "A bookmarks export"
+    ensure "the file is a bookmarks file in the Netscape HTML form, with at least one bookmark; the live JSON file of the browser is refused"
+    by gates.file_ok
+    pass -> dupes
+    fail -> bad-file "not a bookmarks export"
+  step dupes "Remove exact duplicates"
+    do "find copies of one URL, ignoring http or https, www, a last slash, a #part and the tracking parameters of dupes.tracking; keep the copy in the deeper folder, else the oldest"
+    by steps.dupes
+    reads dupes.tracking keep.bar
+    next -> group
+  step group "Group similar URLs"
+    do "group the URLs of one site where one path starts with another; fold the plain variants of similar.index_names; skip the sites of similar.skip_hosts and similar.skip_pattern; cut the groups into pages"
+    by steps.group
+    reads similar.index_names similar.skip_hosts similar.skip_pattern similar.max_group similar.page_size
+    next -> page
+  step page "Next page of groups"
+    do "take the next page of groups that the person has not decided"
+    by steps.page
+    reads sort.title_chars run.max_visits
+    next -> page-left
+  gate page-left hard "A page waits"
+    ensure "a page of groups is not decided yet"
+    by gates.page_left
+    pass -> choose
+    fail -> loose "every page is decided"
+  gate choose human "The person chooses the URLs to keep"
+    brief "show the person each group of this page: its site and its URLs with their numbers, and the path of the page file. Ask which URLs to keep. Give the person the answers of how: each one is the end of the command"
+    sees page
+    pass -> apply
+    fail -> apply "keep every URL from here on"
+  step apply "Apply the choices of the page"
+    do "read the answer of the person; save the choices of the page only when every word is understood"
+    by steps.apply
+    next -> choice-ok
+  gate choice-ok hard "The answer is understood"
+    ensure "every word of the answer names a group of the page and a choice"
+    by gates.choice_ok
+    pass -> page
+    fail -> choose "the answer is not understood"
+  step loose "Find loose and misfiled bookmarks"
+    do "leave alone the bookmarks that fit their folder; take the loose ones (sort.loose_depth) and the likely misfiled ones (sort.host_elsewhere); cut them into batches of sort.batch"
+    by steps.loose
+    reads sort.loose_depth sort.host_elsewhere sort.batch keep.bar
+    next -> batch
+  step batch "Next batch to sort"
+    do "take the next batch that is not sorted, with the folder list"
+    by steps.batch
+    reads sort.url_chars sort.title_chars run.max_visits keep.bar
+    next -> batch-left
+  gate batch-left hard "A batch waits"
+    ensure "a batch is not sorted yet"
+    by gates.batch_left
+    pass -> sort
+    fail -> folders "every batch is sorted"
+  step sort "Sort the batch"
+    do "put each bookmark of the batch into the folder where it fits best. Choose a folder of the list folders. A bookmark that fits its present folder keeps that folder. Only when no folder fits, propose a new folder: give its whole path under a folder of the list, and \"new\": true; at most {sort.new_per_batch} new folders in this batch. Give the result as a list with one object for each bookmark: {\"id\": <id>, \"folder\": \"<path>\"}. Write each path as in the list, with > between the names. Do not change a URL or a title. When waiting has problems, your last answer failed: fix them"
+    sees batch
+    next -> sort-ok
+  gate sort-ok hard "Every bookmark once, in a known folder"
+    ensure "the answer has every id of the batch once and no other id, no changed URL or title, only folders of the list or new folders under them, at most {sort.new_per_batch} new folders in the batch and {sort.new_max} in all"
+    by gates.sort_ok
+    pass -> keep
+    fail -> rounds "the answer is not good"
+  gate rounds hard "A retry is left"
+    ensure "the batch was sent back at most {sort.rounds} times"
+    by gates.rounds_left
+    pass -> sort
+    fail -> skip "no retry left"
+  step keep "Keep the sorted batch"
+    do "save the folders of the batch; a bookmark whose folder did not change does not move"
+    by steps.keep
+    next -> batch
+  step skip "Leave the batch unsorted"
+    do "save the batch as unsorted: its bookmarks stay where they are, and the report lists it"
+    by steps.skip
+    next -> batch
+  step folders "Collect the new folders"
+    do "list the new folders that the model proposed, with the number of bookmarks and some titles for each"
+    by steps.folders
+    next -> any-new
+  gate any-new hard "A new folder is proposed"
+    ensure "the model proposed at least one new folder"
+    by gates.any_new
+    pass -> new-ok
+    fail -> links "no new folder"
+  gate new-ok human "The person agrees to the new folders"
+    brief "show the person each new folder: its path, how many bookmarks go to it, and the examples. Ask: may the tool make these folders? Give the person the answers of how: each one is the end of the command"
+    sees folders
+    pass -> accept
+    fail -> accept "no new folder"
+  step accept "Apply the answer about the new folders"
+    do "read the answer of the person; a left-out folder keeps its bookmarks where they were"
+    by steps.accept
+    next -> accept-ok
+  gate accept-ok hard "The answer is understood"
+    ensure "every word of the answer names a new folder of the list"
+    by gates.accept_ok
+    pass -> links
+    fail -> new-ok "the answer is not understood"
+  step links "Dead links (a hook, not in this version)"
+    do "when links.check is on, a later version checks the links and moves dead ones to links.folder; now it only reads dead.json of the work folder, when it exists"
+    by steps.links
+    reads links.check links.folder
+    next -> report
+  step report "Write the dry-run report"
+    do "count and list what the new file would remove, fold, move and make, and write the report into the work folder; write nothing else"
+    by steps.report
+    next -> share
+  gate share hard "Not too much removed"
+    ensure "the plan removes at most {safety.max_removed} percent of the bookmarks"
+    by gates.share_ok
+    pass -> approve
+    fail -> held "the plan removes too much"
+  gate approve human "The person agrees with the report"
+    brief "show the person the counts of the dry run and the path of the report. Ask: may the tool write the new bookmarks file?"
+    sees report
+    pass -> build
+    fail -> declined "the person said no"
+  step build "Build the new file"
+    do "write the new file into the work folder and read it again"
+    by steps.build
+    reads files.out
+    next -> verify
+  gate verify hard "The new file keeps what it must"
+    ensure "the new file has every bookmark that stays, with its title and URL, every folder of the export with its name, every new folder, and every moved bookmark in its new folder"
+    by gates.verify
+    pass -> target
+    fail -> held "the new file failed its check"
+  gate target hard "The output file is free"
+    reads permissions.overwrite
+    ensure "no file has the name of the output, or the rule permissions.overwrite is on"
+    by gates.may_place
+    pass -> place
+    fail -> exists "the output file exists"
+  step place "Place the new file"
+    do "copy the checked file to the folder of files.out; the export and the files of the browser stay as they are"
+    by steps.place
+    reads permissions.overwrite
+    next -> done
+  end done "Written: import the new file into Edge"
+  end declined "The person said no: nothing written"
+  end held "Held back by a safety check: nothing written"
+  end exists "The output file exists: nothing written"
+  end bad-file "Not a bookmarks export"

@@ -19,7 +19,9 @@ code decides, and never answers for a person.
 
 The code of a step:  def name(state, R) -> a value (it goes to state[<step id>])
 The code of a gate:  def name(state, R) -> True, False, or a dict with "pass" and,
-                     when you want them, "when" (which fail line), "problems", and facts
+                     when you want them, "when" (which fail line), "problems", and facts.
+                     "route": true with a fail: the fail is a turn of the flow (a loop ends),
+                     not a problem; the trace keeps it, the problems of the run do not.
 """
 import datetime
 import json
@@ -206,9 +208,11 @@ class Kit(object):
 		v = {'gate': node['id'], 'kind': node['kind'], 'pass': ok}
 		if result.get('problems'):
 			v['problems'] = list(result['problems'])
-		facts = dict((k, x) for k, x in result.items() if k not in ('pass', 'problems', 'when'))
+		facts = dict((k, x) for k, x in result.items() if k not in ('pass', 'problems', 'when', 'route'))
 		if facts:
 			v['facts'] = facts
+		if result.get('route') and not ok and not guessed:
+			v['route'] = True  # this fail is a turn of the flow (a loop ends), not a problem
 		if guessed:
 			v['guessed'] = True
 		edges = node.get('pass', []) if ok else node.get('fail', [])
@@ -293,7 +297,7 @@ class Kit(object):
 				break
 			fns = self.node_code(node)
 			if kind in ('judge', 'human') or fns is None:
-				run['waiting'] = self.waiting(node, R, run['state'])
+				run['waiting'] = self.waiting(node, R, run['state'], run)
 				break
 			run['state']['_visits'] = run['visits']  # how often the run entered each node: for a gate that limits rounds
 			try:
@@ -328,7 +332,7 @@ class Kit(object):
 			v = v[:self.sees_max] + ' … (cut: {} of {} characters)'.format(self.sees_max, len(v))
 		return v
 
-	def waiting(self, node, R, state=None):
+	def waiting(self, node, R, state=None, run=None):
 		kind = node['kind']
 		w = {'node': node['id'], 'kind': 'judge' if kind in ('hard', 'soft') else kind}
 		if node.get('name'):
@@ -342,6 +346,9 @@ class Kit(object):
 			w['sees'] = dict((p, v) for p, v in ((p, self.see(state, p)) for p in node['sees']) if v is not None)
 		if kind in ('hard', 'soft'):
 			w['no_code'] = 'No code decides this gate yet. Decide it yourself; the result is a guess.'
+		mark = (run or {}).get('answered', {}).get(node['id'])
+		if mark is not None and run['problems'][mark:]:
+			w['problems'] = run['problems'][mark:]  # what failed after the last answer at this node: fix it
 		w['answer'] = {'step': '{"result": <what the step gave>}', 'human': 'a person answers: approve <run> yes|no'}.get(w['kind'], '{"pass": true or false, "why": "<one sentence>"}')
 		return w
 
@@ -355,13 +362,13 @@ class Kit(object):
 
 	def after_gate(self, run, v):
 		entry = {'node': v['gate'], 'kind': v['kind'], 'pass': v['pass']}
-		for k in ('when', 'problems', 'facts', 'guessed', 'by', 'why'):
+		for k in ('when', 'problems', 'facts', 'guessed', 'by', 'why', 'route'):
 			if k in v:
 				entry[k] = v[k]
 		run['trace'].append(entry)
 		if v.get('guessed') and v['gate'] not in run['guessed']:
 			run['guessed'].append(v['gate'])
-		if not v['pass']:
+		if not v['pass'] and not v.get('route'):
 			run['problems'].append('{}: {}'.format(v['gate'], '; '.join(v.get('problems', [])) or v.get('when') or v.get('why') or 'failed'))
 		if v['next'] is None:
 			run['outcome'] = {'end': None, 'label': 'stopped: gate "{}" {} and has no line for that'.format(v['gate'], 'passed' if v['pass'] else 'failed')}
@@ -391,6 +398,7 @@ class Kit(object):
 				raise Refused('"{}" is a step: answer with {{"result": ...}}.'.format(cur['id']))
 			run['state'][cur['id']] = answer['result']
 			self.after_step(run, cur, {'node': cur['id'], 'kind': 'step', 'by': who})
+			run.setdefault('answered', {})[cur['id']] = len(run['problems'])
 		else:
 			if not isinstance(answer.get('pass'), bool):
 				raise Refused('"{}" is a gate: answer with {{"pass": true}} or {{"pass": false}}.'.format(cur['id']))
@@ -400,6 +408,7 @@ class Kit(object):
 				v['why'] = str(answer['why'])
 			run['state'][cur['id']] = {'pass': v['pass'], 'why': answer.get('why')}
 			self.after_gate(run, v)
+			run.setdefault('answered', {})[cur['id']] = len(run['problems'])
 		return self.walk(run)
 
 	def resume(self, run_id):

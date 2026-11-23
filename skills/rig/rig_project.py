@@ -115,10 +115,12 @@ def front(m, files, main):
 		run = {'type': 'string', 'description': 'The run id: "run" in the result of start_run.'}
 		tools.append({'name': 'start_run', 'kind': 'run', 'parameters': d['parameters'],
 			'description': 'Start a run for one item: {}. Code does the work and stops when it needs you.'.format(d['description'])})
-		tools.append({'name': 'answer_gate', 'kind': 'answer_gate',
-			'description': 'Answer the gate that a run waits at, when "waiting" has kind "judge". Decide as its "brief" says.',
-			'parameters': {'type': 'object', 'properties': {'run': run, 'pass': {'type': 'boolean', 'description': 'true: the gate passes. false: it fails.'},
-				'why': {'type': 'string', 'description': 'The reason, in one sentence.'}}, 'required': ['run', 'pass']}})
+		model_gates = any(g.word(1) == 'judge' or (g.word(1) in ('hard', 'soft') and not g.kids('by')) for g in main.kids('gate'))
+		if model_gates:  # a flow with no gate for the model gets no tool for it: one tool less to choose wrongly
+			tools.append({'name': 'answer_gate', 'kind': 'answer_gate',
+				'description': 'Answer the gate that a run waits at, when "waiting" has kind "judge". Decide as its "brief" says.',
+				'parameters': {'type': 'object', 'properties': {'run': run, 'pass': {'type': 'boolean', 'description': 'true: the gate passes. false: it fails.'},
+					'why': {'type': 'string', 'description': 'The reason, in one sentence.'}}, 'required': ['run', 'pass']}})
 		model_steps = [f.word(0) for f in main.kids('step') if not f.kids('by') or any(rig.by_target(b.word(0), main) != 'bound' for b in f.kids('by'))]
 		if model_steps:
 			tools.append({'name': 'finish_step', 'kind': 'finish_step',
@@ -133,12 +135,14 @@ def front(m, files, main):
 		inputs = ', '.join(x.word(0) for x in main.kids('in')) or 'no input'
 		rules = ['To work on one item, call start_run ({}). Work on one item at a time.'.format(inputs),
 			'Read each result. It is JSON.',
-			'"outcome": the run ended. Tell the operator the end and the "problems". Then go to the next item.',
-			'"waiting" with kind "judge": decide what "brief" asks. Call answer_gate with the run id, pass true or false, and why in one sentence.']
+			'"outcome": the run ended. Tell the operator the end and the "problems". Then go to the next item.']
+		if model_gates:
+			rules.append('"waiting" with kind "judge": decide what "brief" asks. Call answer_gate with the run id, pass true or false, and why in one sentence.')
 		if model_steps:
 			rules.append('"waiting" with kind "step": do what "do" says. Call finish_step with the run id and the result.')
+		rules.append('"waiting" has "problems": your last answer at that node failed for these reasons. Fix them in the new answer.')
 		if any(g.word(1) == 'human' for g in main.kids('gate')):
-			rules.append('"waiting" with kind "human": you cannot answer. Tell the operator what "brief" asks, and this command: {} approve <run id> yes (or no). Stop work on this item.'.format(driver))
+			rules.append('"waiting" with kind "human": you cannot answer. Show the operator what "brief" asks. The operator answers with a chat message: approve yes (or no), and the words of the answer, if any. In a terminal, the command in "command" does the same. Stop, and wait for the result of that answer.')
 		rules.append('More than one item: call start_batch with the list. Show only its summary and the report path. Then, for each run in "left_for_model": call run_status, and answer it as in the rules above. Tell the operator the list "waits_for_person". To continue earlier work, call queues.')
 		rules += ['"refused": the call was wrong. It is final. Do not repeat it. Call run_status to see where the run is.',
 			'"error": tell the operator the error text. Do not answer the run.',

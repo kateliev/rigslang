@@ -19,6 +19,7 @@ import rigkit  # noqa: E402
 
 RELEASE = os.path.join(ROOT, 'examples', 'release-tool')
 BAND = os.path.join(ROOT, 'examples', 'band-facts')
+BOOKMARKS = os.path.join(ROOT, 'examples', 'bookmarks')
 
 FLOW = '''unit demo agent
   in n int "a number"
@@ -127,6 +128,29 @@ class Runs(unittest.TestCase):
 		r = k.answer(r['run'], {'result': 3})
 		self.assertEqual(r['waiting']['node'], 'nice')
 		self.assertEqual(r['path'], ['double', 'small', 'nice', 'fix', 'small'])
+
+	def test_a_route_fail_is_not_a_problem(self):
+		k = kit(small=lambda s, R: {'pass': False, 'when': 'too big', 'route': True})
+		r = k.run({'n': 2})
+		self.assertEqual(r['outcome']['end'], 'big')
+		self.assertEqual(r['problems'], [])
+		run = k.load(r['run'])
+		self.assertTrue(run['trace'][1]['route'])  # the trace keeps it
+		r = kit(small=lambda s, R: {'pass': False, 'when': 'too big'}).run({'n': 2})
+		self.assertEqual(r['problems'], ['small: too big'])
+
+	def test_waiting_shows_the_problems_since_the_last_answer(self):
+		k = kit(small=lambda s, R: s.get('fix', 1) <= R('limits.max') or {'pass': False, 'when': 'too big', 'problems': ['{} is over limits.max'.format(s['fix'])]})
+		k.flow['small']['fail'] = [{'to': 'fix', 'when': 'too big'}]  # a correction loop
+		r = k.run({'n': 2})
+		r = k.answer(r['run'], {'pass': False})
+		self.assertNotIn('problems', r['waiting'])  # the first visit of fix
+		r = k.answer(r['run'], {'result': 11})
+		self.assertEqual((r['waiting']['node'], r['waiting']['problems']), ('fix', ['small: 11 is over limits.max']))
+		r = k.answer(r['run'], {'result': 12})
+		self.assertEqual(r['waiting']['problems'], ['small: 12 is over limits.max'])  # only what failed after the last answer
+		r = k.answer(r['run'], {'result': 3})
+		self.assertEqual(r['waiting']['node'], 'nice')
 
 	def test_a_loop_stops(self):
 		k = rigkit.Kit(catalogue(), max_visits=3).bind('code', {'double': lambda s, R: 1, 'small': lambda s, R: True})
@@ -332,11 +356,12 @@ class Projects(unittest.TestCase):
 			r = call('answer_gate', json.dumps({'run': r['run'], 'pass': True}))
 			self.assertEqual(r['waiting']['kind'], 'human')
 			self.assertIn('refused', call('answer_gate', json.dumps({'run': r['run'], 'pass': True})))
+			self.assertEqual(r['waiting']['command'], 'cd {} && python3 tool.py approve {} yes'.format(os.path.realpath(folder), r['run']))
 		finally:
 			shutil.rmtree(tmp)
 
 	def test_examples_are_current_and_complete(self):
-		for folder in (RELEASE, BAND):
+		for folder in (RELEASE, BAND, BOOKMARKS):
 			self.assertEqual(self.quiet(rig_project.build, folder, True)[0], 0, 'run: rig.py build ' + folder)
 			code, out = self.quiet(rig_project.doctor, folder)
 			self.assertEqual(code, 0, out)
@@ -372,6 +397,12 @@ class Projects(unittest.TestCase):
 				srv.wait(timeout=5)
 		finally:
 			shutil.rmtree(tmp)
+
+	def test_no_gate_tool_for_a_flow_with_no_gate_for_the_model(self):
+		with open(os.path.join(BOOKMARKS, 'plugin', 'src', 'gen', 'front.json'), encoding='utf-8') as f:
+			front = json.load(f)
+		self.assertEqual([t['name'] for t in front['tools']], ['start_run', 'finish_step', 'run_status', 'start_batch', 'queues'])
+		self.assertNotIn('answer_gate', front['prompt'])
 
 	def test_release_example_from_the_command_line(self):
 		r = subprocess.run([sys.executable, os.path.join(RELEASE, 'tool.py'), 'rules'], capture_output=True, text=True)
