@@ -41,7 +41,7 @@ Made by the handout `docs/handout-language-v1.md`. What changed:
 | Examples | All three in version 1; each passes its doctor and its tests. The regression cases of release-tool and band-facts end where they ended in version 0 (new baselines for the paths). |
 | Text | The spec, `docs/logic.md` (open item 4), the guide pages, the skill, the editor grammars and the READMEs. |
 
-**Decisions in this work that the owner did not see before** (the owner answered four questions first: keep `section`; a `fail` on the gate line; a fail goes only to an end or `continue`; keep the single compilers and `from-json` and update them):
+**Decisions in this work that the handout did not settle.** The owner answered four questions first (keep `section`; a `fail` on the gate line; a fail goes only to an end or `continue`; keep the single compilers and `from-json` and update them), and accepted the decisions below on 2026-11-25:
 
 - `by` on the line of a step or gate too (the example of the handout writes `step sort by model`).
 - `retry <rule id>` as well as `retry <n>`, so that a preset can change it (release-tool `notes.rounds`, bookmarks `sort.rounds`).
