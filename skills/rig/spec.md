@@ -140,7 +140,7 @@ The flow starts at the first `step` or `gate` of the unit.
 | **human** | a `human` gate: a person decides. |
 | **none** | a `hard` or `soft` gate with no `by`, or with a `by` that names nothing (also: a function that is not in its file). |
 
-A gate with more than one `by` has the lowest level of them. A unit is **proved** when its cast is proved, or when it has no stamped cast and all of its gates are proved. It is **observed** in the same way, with observed or proved in place of proved. A unit in another file counts only when the tool can read that file; else it counts as code. The same holds for a `code` file: the viewer cannot read it when you drop a `.rig` file on the page, so it shows **code**; `rig.py check` and `rig.py serve` read the files.
+A gate with more than one `by` has the lowest level of them. A unit is **proved** when its cast is proved, or when it has no stamped cast and all of its gates are proved. It is **observed** in the same way, with observed or proved in place of proved. A unit in another file counts only when the tool can read that file; else it counts as code. `rig.py check` and `rig.py serve` read the `code` files and their tests.
 
 **Tested is a weaker word than proved.** Proved means that Rig ran the examples. Tested means only that a test file names the function: run the tests yourself (`rig.py test`, Section 7).
 
@@ -208,7 +208,7 @@ One unit compiles to the forms that agents read. The `.rig` file stays the one s
 - **Report.** When a flow has gates that the agent decides itself (`judge` gates, and `hard` or `soft` gates with no `by`), the skill ends with a Report section. It tells the agent to end its answer with one line, `Guessed:` and the ids of those gates that it decided. A person must see which results are guesses.
 - **Tool.** `name` is the unit name. `description` is the intent, with the rule values written in. `parameters` is a JSON Schema object: one property for each `in`, with the text as its description. An input whose type is `(maybe T)` is not required. `returns` is the JSON Schema of the `out` type.
 - **Values.** By default, the compilers write each value in place of `{group.name}`. With `--rules PATH`, the skill refers to the catalogue at PATH instead, so the values have one place at run time too. With `--preset NAME`, the values of that preset are used.
-- **Serve.** `rig.py serve FILE --json OUT --skill OUT` shows the file in the viewer. Save writes the `.rig` file and compiles it again. The server also gives the viewer the levels of the code in `code` lines, and the runs of the tool (`--runs DIR`; default: the folder `runs` next to FILE), so that the graph can show the path of one run.
+- **Serve.** `rig.py serve FILE --json OUT --skill OUT` shows the file in the viewer. The viewer has no parser: `rig.py` compiles the file and gives the viewer the result (`/bundle`). A changed rule value is compiled again (`/compile`); Save writes the `.rig` file and compiles it again. The server also gives the viewer the levels of the code in `code` lines, and the runs of the tool (`--runs DIR`; default: the folder `runs` next to FILE), so that the graph can show the path of one run.
 
 ## 7. Projects: a unit with its code, its runner and its fronts
 

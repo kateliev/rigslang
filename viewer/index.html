@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rig viewer</title>
-<!-- One file, no network requests except: the examples next to it, and the file of `rig.py serve`.
-     It mirrors skills/rig/rig.py: the same parser, hashes, checks and compilers (tests/parity.js). -->
+<!-- One file, no network requests except: the bundle of `rig.py serve`, or the compiled examples next to it.
+     It has no parser: rig.py compiles the file, and this page draws what rig.py gives. -->
 <style>
 :root{
   --bg:#f7f6f2;--fg:#1d1d1b;--muted:#6b6a65;--faint:#9a988f;--line:#e2dfd6;--card:#fff;--head:#f1efe8;
@@ -235,7 +235,7 @@ aside p{margin:0}
     <button id="open">Open…</button>
     <button id="save" class="primary" disabled>Save</button>
     <button id="close" disabled>Close</button>
-    <input type="file" id="file" accept=".rig,text/plain" hidden>
+    <input type="file" id="file" accept=".json,application/json" hidden>
   </div>
   <div class="bar sub" id="gbar" hidden>
     <span class="pill" id="cov"></span>
@@ -276,785 +276,225 @@ const store = {
 };
 const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 
-// - SHA-256 (no secure context needed) -----------------
-const SHA = (() => {
-  const K = [], H = [], frac = x => ((x - Math.floor(x)) * 4294967296) >>> 0;
-  for (let n = 2, c = 0; c < 64; n++) {
-    let p = true;
-    for (let d = 2; d * d <= n; d++) if (n % d === 0) { p = false; break; }
-    if (!p) continue;
-    if (c < 8) H.push(frac(Math.sqrt(n)));
-    K.push(frac(Math.cbrt(n)));
-    c++;
-  }
-  return { K, H };
-})();
-function sha256hex(str) {
-  const msg = new TextEncoder().encode(str), len = msg.length;
-  const total = ((len + 9 + 63) >> 6) << 6, buf = new Uint8Array(total);
-  buf.set(msg); buf[len] = 0x80;
-  const dv = new DataView(buf.buffer);
-  dv.setUint32(total - 8, Math.floor(len / 536870912)); dv.setUint32(total - 4, (len * 8) >>> 0);
-  const h = SHA.H.slice(), w = new Uint32Array(64), r = (x, n) => (x >>> n) | (x << (32 - n));
-  for (let off = 0; off < total; off += 64) {
-    for (let i = 0; i < 16; i++) w[i] = dv.getUint32(off + i * 4);
-    for (let i = 16; i < 64; i++) {
-      const a = w[i - 15], b = w[i - 2];
-      w[i] = (w[i - 16] + (r(a, 7) ^ r(a, 18) ^ (a >>> 3)) + w[i - 7] + (r(b, 17) ^ r(b, 19) ^ (b >>> 10))) >>> 0;
-    }
-    let [A, B, C, D, E, F, G, X] = h;
-    for (let i = 0; i < 64; i++) {
-      const t1 = (X + (r(E, 6) ^ r(E, 11) ^ r(E, 25)) + ((E & F) ^ (~E & G)) + SHA.K[i] + w[i]) >>> 0;
-      const t2 = ((r(A, 2) ^ r(A, 13) ^ r(A, 22)) + ((A & B) ^ (A & C) ^ (B & C))) >>> 0;
-      X = G; G = F; F = E; E = (D + t1) >>> 0; D = C; C = B; B = A; A = (t1 + t2) >>> 0;
-    }
-    [A, B, C, D, E, F, G, X].forEach((v, i) => { h[i] = (h[i] + v) >>> 0; });
-  }
-  return h.map(x => x.toString(16).padStart(8, "0")).join("");
-}
-const h8 = s => "#" + sha256hex(s).slice(0, 8);
-
-// - Parser (same rules as rig.py) ----------------------
-const NUMBER = /^-?\d+(\.\d+)?$/;
-const RULE_ID = /^[A-Za-z_][\w-]*(\.[\w-]+)+$/;
+// - Data: the bundle that rig.py compiles -------------
+// The viewer has no parser. `rig.py serve` gives it a bundle: the text of the file, its errors and
+// warnings, and for each unit the catalogue, the skill, the tool definition and the levels of the
+// gates. A change of a rule value is written into the text, and rig.py compiles the text again.
 const PLACE = /\{([A-Za-z_][\w-]*(?:\.[\w-]+)+)\}/g;
-const PROSE_NUMBER = /(?<![\w.#{-])\d+(?:\.\d+)?(?![\w}])/;
-const PROSE = ["when", "do", "ensure", "brief"];
-const MATRIX = ["in", "out", "intent", "example", "ensure"];
-const FLOW = ["step", "gate", "end"];
-const KINDS = ["hard", "soft", "judge", "human"];
-const SCOPES = ["snippet", "tool", "agent"];
-const LEVELS = ["none", "code", "tested", "observed", "proved"];  // low to high; "judge" and "human" are apart
-let BOUND = {};  // unit -> { "by" name -> level }: from rig.py serve, which can read the code files
-const STAMPS = ["proved", "observed"];
-const BASE_TYPES = ["str", "text", "word", "path", "int", "float", "bool", "list", "dict", "any"];
-const TYPE_LISTS = ["list", "tuple", "record", "maybe", "one-of"];
-const CHILDREN = {
-  unit: ["in", "out", "intent", "example", "ensure", "note", "uses", "external", "probe", "rule", "preset", "cast", "code", "step", "gate", "end"],
-  ensure: ["check", "note"], probe: ["check", "note"], external: ["note"], code: ["test", "note"], preset: ["set"], note: ["evidence"],
-  rule: ["min", "max", "options", "unit", "label", "note"],
-  step: ["do", "by", "reads", "sees", "next", "note"],
-  gate: ["when", "reads", "sees", "ensure", "by", "brief", "pass", "fail", "note"],
-  end: ["note"],
-};
-class RigError extends Error { constructor(line, text) { super("line " + line + ": " + text); this.line = line; } }
-
-function tokenize(s, line) {
-  let out = [], stack = [], i = 0;
-  const n = s.length;
-  while (i < n) {
-    const c = s[i];
-    if (c === " " || c === "\t") { i++; continue; }
-    if (c === ";") break;
-    if (c === '"') {
-      let j = i + 1;
-      while (j < n && s[j] !== '"') j += s[j] === "\\" ? 2 : 1;
-      if (j >= n) throw new RigError(line, "the string is not closed");
-      out.push({ k: "str", t: s.slice(i, j + 1), a: i, b: j + 1 }); i = j + 1; continue;
-    }
-    if (c === "(") { stack.push([out, i]); out = []; i++; continue; }
-    if (c === ")") {
-      if (!stack.length) throw new RigError(line, 'a ")" without "("');
-      const [prev, a] = stack.pop();
-      prev.push({ k: "list", v: out, a, b: i + 1 }); out = prev; i++; continue;
-    }
-    if (c === "/") {
-      let j = i + 1;
-      while (j < n && s[j] !== "/") j += s[j] === "\\" ? 2 : 1;
-      if (j < n && (j + 1 === n || " \t)".includes(s[j + 1]))) { out.push({ k: "re", t: s.slice(i, j + 1), a: i, b: j + 1 }); i = j + 1; continue; }
-    }
-    let j = i;
-    while (j < n && !" \t();".includes(s[j])) j++;
-    const w = s.slice(i, j);
-    out.push({ k: NUMBER.test(w) ? "num" : "word", t: w, a: i, b: j }); i = j;
-  }
-  if (stack.length) throw new RigError(line, 'a "(" is not closed');
-  return out;
-}
-const ser = a => a.k === "list" ? "(" + a.v.map(ser).join(" ") + ")" : a.t;
-
-function parse(text) {
-  const lines = text.replace(/\r\n/g, "\n").split("\n");
-  const root = { head: "file", args: [], line: 0, indent: -1, children: [] };
-  const stack = [root];
-  let i = 0;
-  while (i < lines.length) {
-    const raw = lines[i], line = i + 1, body = raw.replace(/^[ \t]+/, "");
-    if (!body.trim() || body.startsWith(";")) { i++; continue; }
-    const lead = raw.slice(0, raw.length - body.length);
-    if (lead.includes("\t")) throw new RigError(line, "a tab in the indentation: indent with spaces");
-    const indent = lead.length;
-    while (stack[stack.length - 1].indent >= indent) stack.pop();
-    const toks = tokenize(body, line);
-    if (!toks.length) { i++; continue; }
-    if (toks[0].k !== "word") throw new RigError(line, "a line must start with a word");
-    const node = { head: toks[0].t, args: toks.slice(1), line, indent, children: [], body: null };
-    stack[stack.length - 1].children.push(node);
-    i++;
-    if (node.head === "cast") {
-      const cast = [];
-      while (i < lines.length) {
-        const r = lines[i];
-        if (r.trim() && r.length - r.replace(/^[ \t]+/, "").length <= indent) break;
-        cast.push(r); i++;
-      }
-      while (cast.length && !cast[cast.length - 1].trim()) cast.pop();
-      node.body = cast;
-      continue;
-    }
-    stack.push(node);
-  }
-  // a unit knows its file: "by" can name the other units in it
-  for (const u of root.children) Object.defineProperty(u, "root", { value: root, enumerable: false });
-  return root;
-}
-const word = (n, i, d) => n.args.length > i ? ser(n.args[i]) : d;
-const kids = (n, h) => n.children.filter(c => c.head === h);
-const units = root => root.children.filter(u => u.head === "unit");
-const flowOf = u => u.children.filter(c => FLOW.includes(c.head));
-function str(a) {  // a string token -> its text
-  if (!a) return "";
-  if (a.k !== "str") return ser(a);
-  return a.t.slice(1, -1).replace(/\\(.)/g, (m, c) => ({ n: "\n", t: "\t" })[c] || c);
-}
-function value(a) {  // a token -> its value, as rig.py value()
-  if (!a) return null;
-  if (a.k === "str") return str(a);
-  if (a.k === "num") return Number(a.t);
-  if (a.k === "list") return a.v.map(value);
-  if (a.k === "re") return a.t.slice(1, -1);
-  const m = { true: true, false: false, on: true, off: false, none: null };
-  return has(m, a.t) ? m[a.t] : a.t;
-}
-const textOf = n => n && n.args.length ? n.args.map(str).join(" ") : "";
-
-// - Hashes and status ----------------------------------
-function matrixText(u) {
-  const out = [];
-  const walk = (n, d) => { out.push("  ".repeat(d) + [n.head, ...n.args.map(ser)].join(" ")); n.children.forEach(c => walk(c, d + 1)); };
-  u.children.forEach(c => { if (MATRIX.includes(c.head)) walk(c, 0); });
-  return out.join("\n");
-}
-function bodyText(lines) {
-  let ls = (lines || []).map(l => l.trimEnd());
-  while (ls.length && !ls[0]) ls.shift();
-  while (ls.length && !ls[ls.length - 1]) ls.pop();
-  const full = ls.filter(Boolean);
-  const cut = full.length ? Math.min(...full.map(l => l.length - l.replace(/^[ \t]+/, "").length)) : 0;
-  return ls.map(l => l.slice(cut)).join("\n");
-}
-function castInfo(c) {
-  const w = c.args.map(ser), hs = w.filter(x => x.startsWith("#")), stamp = w.find(x => STAMPS.includes(x)) || null;
-  return { lang: w[0] || "?", matrix: hs[0] || null, body: hs[1] || null, stamp, date: stamp ? w[w.indexOf(stamp) + 1] || null : null };
-}
-function castState(u, c) {
-  const i = castInfo(c);
-  if (!i.matrix) return { s: "unproved", cls: "warn", t: "unproved " + i.lang, i };
-  if (i.matrix !== h8(matrixText(u))) return { s: "remelted", cls: "err", t: "remelted " + i.lang, i };
-  if (i.body !== h8(bodyText(c.body))) return { s: "stale", cls: "warn", t: "stale " + i.lang, i };
-  const s = i.stamp || "proved";
-  return { s, cls: s === "proved" ? "ok" : "", t: s + " " + i.lang + (i.date ? " " + i.date : ""), i };
-}
-
-// - Types (as rig.py) ----------------------------------
-const typeParts = t => [t.v.length && t.v[0].k === "word" ? t.v[0].t : null, t.v.slice(1)];
-const isMaybe = t => !!t && t.k === "list" && typeParts(t)[0] === "maybe";
-function typeProblem(t) {
-  if (t.k === "word") return BASE_TYPES.includes(t.t) ? null : `type "${t.t}" is not known: use ${BASE_TYPES.join(", ")} or a type list`;
-  if (t.k !== "list") return "a type is a word or a list";
-  const [head, rest] = typeParts(t);
-  if (!TYPE_LISTS.includes(head)) return "a type list starts with " + TYPE_LISTS.join(", ");
-  if (head === "list" || head === "maybe") return rest.length === 1 ? typeProblem(rest[0]) : `(${head} T) takes one type`;
-  if (head === "tuple") return rest.length ? rest.map(typeProblem).find(Boolean) || null : "(tuple T …) needs types";
-  if (head === "record") {
-    if (!rest.length || rest.length % 2) return "write (record name type …)";
-    for (let i = 0; i < rest.length; i += 2) {
-      if (rest[i].k !== "word") return "a record field name is a word";
-      const p = typeProblem(rest[i + 1]); if (p) return p;
-    }
-    return null;
-  }
-  return rest.length ? null : "(one-of …) needs values";
-}
-function typeSchema(t) {
-  if (!t) return {};
-  if (t.k === "list") {
-    const [head, rest] = typeParts(t);
-    if (head === "list") return { type: "array", items: rest.length ? typeSchema(rest[0]) : {} };
-    if (head === "tuple") return { type: "array", prefixItems: rest.map(typeSchema), minItems: rest.length, maxItems: rest.length };
-    if (head === "record") {
-      const properties = {}, required = [];
-      for (let i = 0; i + 1 < rest.length; i += 2) { properties[rest[i].t] = typeSchema(rest[i + 1]); if (!isMaybe(rest[i + 1])) required.push(rest[i].t); }
-      return { type: "object", properties, required };
-    }
-    if (head === "maybe") return { anyOf: [rest.length ? typeSchema(rest[0]) : {}, { type: "null" }] };
-    if (head === "one-of") return { enum: rest.map(value) };
-    return {};
-  }
-  const m = { str: "string", text: "string", word: "string", path: "string", int: "integer", float: "number", bool: "boolean", list: "array", dict: "object" };
-  return has(m, t.t) ? { type: m[t.t] } : {};
-}
-function inParts(n) {  // an "in" or "out" node -> [name, type token, text]
-  const args = n.head === "in" ? n.args.slice(1) : n.args;
-  const t = args.find(a => a.k !== "str") || null, s = args.find(a => a.k === "str");
-  return [n.head === "in" ? word(n, 0, null) : null, t, s ? str(s) : ""];
-}
-
-// - Levels: how much is known about the code behind a gate (as rig.py) --
-const lowest = ls => ls.length ? ls.reduce((a, b) => LEVELS.indexOf(b) < LEVELS.indexOf(a) ? b : a) : "none";
-function fileUnits(u) {  // the viewer reads one file: a unit in another file counts as code
-  const m = {};
-  for (const v of units(u.root || { children: [] })) if (!has(m, word(v, 0))) m[word(v, 0)] = v;
-  return m;
-}
-// Code outside the .rig file: "code [prefix] path", with an optional "test path" child (as rig.py).
-function codeLines(u) {
-  return kids(u, "code").map(c => { const own = c.args.length < 2, t = kids(c, "test");
-    return { prefix: own ? null : word(c, 0, null), file: word(c, own ? 0 : 1, null), test: t.length ? word(t[0], 0, null) : null, line: c.line }; });
-}
-function codeFor(b, u) {
-  for (const c of codeLines(u)) {
-    if (c.prefix === null && b === word(u, 0)) return c;
-    if (c.prefix && b.startsWith(c.prefix + ".") && b.length > c.prefix.length + 1) return c;
-  }
-  return null;
-}
-const boundLevel = (b, u) => (BOUND[word(u, 0)] || {})[b] || "code";  // the viewer cannot read the code files
-function unitLevel(name, ctx, seen) {
-  const u = ctx[name];
-  if (!u || seen.includes(name)) return "code";
-  const states = kids(u, "cast").map(c => castState(u, c).s);
-  for (const s of ["proved", "observed"]) if (states.includes(s)) return s;
-  if (codeFor(name, u)) return boundLevel(name, u);
-  const gates = kids(u, "gate");
-  if (!gates.length) return "code";
-  return lowest(gates.map(g => gateLevel(g, u, ctx, [...seen, name])).map(x => x === "judge" || x === "human" || x === "none" ? "code" : x));
-}
-function byTarget(b, u) {
-  if (b && codeFor(b, u)) return "bound";
-  if (b === word(u, 0)) return "self";
-  if (kids(u, "external").some(x => word(x, 0) === b)) return "external";
-  if (kids(u, "uses").some(x => word(x, 0) === b) || units(u.root || { children: [] }).some(v => word(v, 0) === b)) return "unit";
-  return null;
-}
-function gateLevel(g, u, ctx, seen) {
-  if (word(g, 1) === "judge" || word(g, 1) === "human") return word(g, 1);
-  return lowest(kids(g, "by").map(x => {
-    const b = word(x, 0), k = byTarget(b, u);
-    if (k === "bound") return boundLevel(b, u);
-    if (k === "self") { const st = kids(u, "cast").map(c => castState(u, c).s); return st.includes("proved") ? "proved" : st.includes("observed") ? "observed" : "code"; }
-    if (k === "external") return "code";
-    if (k === "unit") return unitLevel(b, ctx, seen);
-    return "none";
-  }));
-}
-function coverage(u) {
-  const ctx = fileUnits(u), d = { gates: 0, proved: 0, tested: 0, observed: 0, code: 0, judge: 0, human: 0, none: 0 };
-  for (const g of kids(u, "gate")) { d.gates++; d[gateLevel(g, u, ctx, [word(u, 0)])]++; }
-  return d;
-}
-function unitStatus(u) {
-  const out = kids(u, "cast").map(c => { const s = castState(u, c); return { t: s.t, cls: s.cls }; });
-  const cv = coverage(u);
-  const parts = ["proved", "tested", "observed", "code", "judge", "human", "none"].filter(k => cv[k] || k === "proved" || k === "judge").map(k => cv[k] + " " + k);
-  if (cv.gates) out.push({ t: `coverage ${Math.round(100 * (cv.proved + cv.tested) / cv.gates)}% (${parts.join(", ")})`, cls: cv.proved + cv.tested === cv.gates ? "ok" : cv.none ? "warn" : "" });
-  else if (kids(u, "step").length) out.push({ t: kids(u, "step").length + " steps, no gates", cls: "" });
-  const own = codeFor(word(u, 0, ""), u);
-  if (own) out.push({ t: `code ${own.file} (${boundLevel(word(u, 0), u)})`, cls: "" });
-  if (!kids(u, "cast").length && !own && u.children.some(c => MATRIX.includes(c.head)) && !cv.gates && !kids(u, "step").length) out.push({ t: "hole", cls: "warn" });
-  return out.length ? out : [{ t: "empty", cls: "" }];
-}
-
-// - Rules, placeholders, presets (as rig.py) -----------
-function walkStrings(n, skip = ["check", "example", "cast"]) {
-  const out = [];
-  const args = (node, aa) => aa.forEach(a => { if (a.k === "str") out.push([node, str(a)]); else if (a.k === "list") args(node, a.v); });
-  const walk = node => { if (skip.includes(node.head)) return; args(node, node.args); node.children.forEach(walk); };
-  walk(n);
-  return out;
-}
-function placeholders(n) {
-  const out = [];
-  for (const [, t] of walkStrings(n)) for (const m of t.matchAll(PLACE)) if (!out.includes(m[1])) out.push(m[1]);
-  return out;
-}
-function nodeReads(f) {
-  const out = [];
-  kids(f, "reads").forEach(c => c.args.forEach(a => { if (!out.includes(a.t)) out.push(a.t); }));
-  placeholders(f).forEach(id => { if (!out.includes(id)) out.push(id); });
-  return out;
-}
-function ruleType(r) {
-  const a = r.args[1];
-  if (kids(r, "options").length) return "choice";
-  if (!a) return "text";
-  if (a.k === "word" && (a.t === "on" || a.t === "off")) return "switch";
-  return { num: "number", re: "pattern", list: "list" }[a.k] || "text";
-}
-function ruleProblem(r, a) {
-  const t = ruleType(r);
-  if (!a) return "no value";
-  if (t === "switch" && !(a.k === "word" && (a.t === "on" || a.t === "off"))) return "use on or off";
-  if (t === "choice") {
-    const os = kids(r, "options")[0].args;
-    if (!os.map(ser).includes(ser(a)) && !os.map(value).includes(value(a))) return "use one of: " + os.map(ser).join(", ");
-  }
-  if (t === "number") {
-    if (a.k !== "num") return "use a number";
-    const v = value(a);
-    for (const k of ["min", "max"]) {
-      const lim = kids(r, k)[0];
-      if (lim && lim.args.length && lim.args[0].k === "num") {
-        const L = value(lim.args[0]);
-        if (k === "min" ? v < L : v > L) return `the value is ${k === "min" ? "below min" : "above max"} ${ser(lim.args[0])}`;
-      }
-    }
-  }
-  return null;
-}
-
-function check(root) {
-  const err = [], warn = [], names = new Set();
-  root.children.forEach(t => { if (t.head !== "unit") err.push([t.line, `"${t.head}" at the top level: only "unit" is allowed`]); });
-  for (const u of units(root)) {
-    const name = word(u, 0);
-    if (!name) err.push([u.line, "a unit without a name"]);
-    else if (names.has(name)) err.push([u.line, `unit "${name}" is defined twice`]);
-    names.add(name);
-    if (word(u, 1) && !SCOPES.includes(word(u, 1))) err.push([u.line, `scope "${word(u, 1)}": use snippet, tool or agent`]);
-    const walk = n => { const ok = CHILDREN[n.head]; n.children.forEach(c => { if (ok && !ok.includes(c.head)) warn.push([c.line, `"${c.head}" is not a known word inside "${n.head}"`]); walk(c); }); };
-    walk(u);
-    kids(u, "example").forEach(e => { if (!e.args.map(ser).includes("=>")) err.push([e.line, 'an example needs "=>"']); });
-    kids(u, "probe").forEach(p => { if (p.args.map(ser).includes("=>")) err.push([p.line, 'a probe has no expected value: write the condition in a "check" line']); });
-    for (const n of [...kids(u, "in"), ...kids(u, "out")]) { const t = inParts(n)[1], bad = t ? typeProblem(t) : null; if (bad) warn.push([n.line, bad]); }
-    const exts = kids(u, "external").map(x => word(x, 0));
-    kids(u, "external").forEach(x => {
-      if (!word(x, 0)) err.push([x.line, "an external needs a name"]);
-      else if (exts.filter(e => e === word(x, 0)).length > 1) err.push([x.line, `external "${word(x, 0)}" is defined twice`]);
-    });
-    const usedBy = new Set();
-    const prefixes = codeLines(u).map(c => c.prefix);
-    for (const c of codeLines(u)) {
-      if (!c.file) err.push([c.line, 'write "code <path>" or "code <prefix> <path>"']);
-      else if (prefixes.filter(x => x === c.prefix).length > 1) err.push([c.line, "two \"code\" lines for " + (c.prefix ? `"${c.prefix}"` : "the unit")]);
-    }
-    for (const f of u.children.filter(c => c.head === "step" || c.head === "gate")) for (const b of kids(f, "by")) {
-      usedBy.add(word(b, 0));
-      if (word(b, 0) && !byTarget(word(b, 0), u)) warn.push([b.line, `"by ${word(b, 0)}" names no unit, used unit, external or "code" line: add "code <prefix> <path>" for code in a file`]);
-    }
-    kids(u, "external").forEach(x => { if (word(x, 0) && !usedBy.has(word(x, 0))) warn.push([x.line, `external "${word(x, 0)}" is not named by any "by"`]); });
-    const langs = kids(u, "cast").map(c => castInfo(c).lang);
-    new Set(langs).forEach(l => { if (langs.filter(x => x === l).length > 1) err.push([u.line, `two casts in "${l}"`]); });
-    const rules = new Set(kids(u, "rule").map(r => word(r, 0)));
-    const byrule = Object.fromEntries(kids(u, "rule").map(r => [word(r, 0), r]));
-    for (const r of kids(u, "rule")) {
-      const rid = word(r, 0);
-      if (!rid || !RULE_ID.test(rid)) err.push([r.line, `rule id "${rid || ""}": write it as group.name`]);
-      else { const bad = ruleProblem(r, r.args[1]); if (bad) err.push([r.line, `rule "${rid}": ${bad}`]); }
-    }
-    for (const [n, t] of walkStrings(u)) for (const m of t.matchAll(PLACE)) if (!rules.has(m[1])) err.push([n.line, `{${m[1]}} names a rule that is not defined in this unit`]);
-    const pnames = new Set();
-    for (const p of kids(u, "preset")) {
-      const pn = word(p, 0);
-      if (!pn) err.push([p.line, "a preset needs a name"]);
-      else if (pnames.has(pn)) err.push([p.line, `preset "${pn}" is defined twice`]);
-      pnames.add(pn);
-      for (const s of kids(p, "set")) {
-        const rid = word(s, 0);
-        if (!has(byrule, rid)) err.push([s.line, `preset "${pn}" sets "${rid}", which is not a rule of this unit`]);
-        else { const bad = ruleProblem(byrule[rid], s.args[1]); if (bad) err.push([s.line, `preset "${pn}", rule "${rid}": ${bad}`]); }
-      }
-    }
-    const flow = flowOf(u), ids = {}, read = new Set(), edges = {};
-    flow.forEach(f => { const id = word(f, 0); if (!id) err.push([f.line, `"${f.head}" needs an id`]); else if (ids[id]) err.push([f.line, `id "${id}" is used twice`]); ids[id] = f; });
-    for (const f of flow) {
-      const id = word(f, 0); edges[id] = [];
-      nodeReads(f).forEach(x => read.add(x));
-      for (const c of f.children) {
-        if (c.head === "reads") c.args.forEach(a => { if (!rules.has(a.t)) err.push([c.line, `rule "${a.t}" is not defined in this unit`]); });
-        if (PROSE.includes(c.head)) {
-          for (const [, t] of walkStrings(c)) if (PROSE_NUMBER.test(t.replace(PLACE, ""))) { warn.push([c.line, `a number in the text of "${id}": make it a rule and write {group.name}`]); break; }
-        }
-        if (["next", "pass", "fail"].includes(c.head)) {
-          if (word(c, 0) !== "->" || !word(c, 1)) err.push([c.line, `write "${c.head} -> <id>"`]);
-          else if (!ids[word(c, 1)]) err.push([c.line, `"${id}" leads to "${word(c, 1)}", which does not exist`]);
-          else edges[id].push(word(c, 1));
-        }
-      }
-      if (f.head === "gate") {
-        const k = word(f, 1);
-        if (!KINDS.includes(k)) err.push([f.line, `gate "${id}": the kind must be hard, soft, judge or human`]);
-        else if ((k === "hard" || k === "soft") && !kids(f, "by").length) warn.push([f.line, `gate "${id}" is ${k} but no code decides it: add "by", or make it judge`]);
-        else if ((k === "judge" || k === "human") && !kids(f, "brief").length) warn.push([f.line, `${k} gate "${id}" has no brief`]);
-        if (!kids(f, "pass").length) warn.push([f.line, `gate "${id}" has no "pass"`]);
-      }
-    }
-    if (flow.length) {
-      const starts = flow.filter(f => f.head !== "end"), seen = new Set(), todo = starts.length ? [word(starts[0], 0)] : [];
-      while (todo.length) { const x = todo.pop(); if (seen.has(x)) continue; seen.add(x); todo.push(...(edges[x] || [])); }
-      flow.forEach(f => { if (!seen.has(word(f, 0))) warn.push([f.line, `"${word(f, 0)}" cannot be reached from the start`]); });
-      kids(u, "rule").forEach(r => { if (!read.has(word(r, 0))) warn.push([r.line, `rule "${word(r, 0)}" is not read by any step or gate`]); });
-    }
-  }
-  const by = (a, b) => a[0] - b[0];
-  return { err: err.sort(by), warn: warn.sort(by) };
-}
-
-// - Compile: catalogue and skill (as rig.py) -----------
-function nameOf(f) {
-  const a = f.head === "gate" ? f.args[2] : (f.head !== "gate" ? f.args[1] : null);
-  return a ? str(a) : "";
-}
-const notesOf = n => kids(n, "note").map(x => ({ text: textOf(x), evidence: kids(x, "evidence").map(textOf) }));
-function ruleInfo(r, tok) {
-  const a = r.args[1] || null, d = { id: word(r, 0), group: word(r, 0).split(".")[0], label: kids(r, "label").length ? textOf(kids(r, "label")[0]) : word(r, 0),
-    type: ruleType(r), value: (tok || a) ? value(tok || a) : null, default: a ? value(a) : null };
-  for (const k of ["min", "max"]) if (kids(r, k).length && kids(r, k)[0].args.length) d[k] = value(kids(r, k)[0].args[0]);
-  if (kids(r, "options").length) d.options = kids(r, "options")[0].args.map(value);
-  if (kids(r, "unit").length) d.unit = textOf(kids(r, "unit")[0]);
-  const ns = notesOf(r);
-  if (ns.length) {
-    d.note = ns.map(x => x.text).join(" ");
-    const ev = ns.flatMap(x => x.evidence);
-    if (ev.length) d.evidence = ev.join(", ");
-  }
-  return d;
-}
-const presetsOf = u => Object.fromEntries(kids(u, "preset").map(p => [word(p, 0), Object.fromEntries(kids(p, "set").filter(x => x.args.length > 1).map(x => [word(x, 0), value(x.args[1])]))]));
-function presetTokens(u, preset) {
-  if (!preset) return {};
-  const p = kids(u, "preset").find(x => word(x, 0) === preset);
-  if (!p) throw new Error(`unit "${word(u, 0)}" has no preset "${preset}"`);
-  return Object.fromEntries(kids(p, "set").filter(x => x.args.length > 1).map(x => [word(x, 0), x.args[1]]));
-}
-const links = (f, head) => kids(f, head).map(c => { const d = { to: word(c, 1) }; if (c.args.length > 2) d.when = str(c.args[2]); return d; });
-function flowInfo(f) {
-  const d = { id: word(f, 0), kind: f.head === "gate" ? word(f, 1) : f.head };
-  const nm = nameOf(f); if (nm) d.name = nm;
-  for (const k of PROSE) { const xs = kids(f, k); if (xs.length) d[k] = xs.map(textOf).join(" "); }
-  if (kids(f, "by").length) d.by = kids(f, "by").map(x => word(x, 0));
-  const rd = nodeReads(f); if (rd.length) d.reads = rd;
-  const sees = kids(f, "sees").flatMap(c => c.args.map(a => a.t)); if (sees.length) d.sees = sees;
-  for (const k of ["next", "pass", "fail"]) { const ls = links(f, k); if (ls.length) d[k] = ls; }
-  const ns = notesOf(f); if (ns.length) d.notes = ns;
-  return d;
-}
-function portInfo(n) {
-  const [name, t, text] = inParts(n), d = n.head === "in" ? { name } : {};
-  d.type = t ? ser(t) : null; d.text = text;
-  return d;
-}
-function catalog(u, preset) {
-  const toks = presetTokens(u, preset), flow = flowOf(u), starts = flow.filter(f => f.head !== "end");
-  return {
-    rig: 0, unit: word(u, 0), scope: word(u, 1, "snippet"), preset: preset || null,
-    intent: kids(u, "intent").map(textOf).join(" "),
-    notes: notesOf(u), uses: kids(u, "uses").map(x => { const d = { unit: word(x, 0) }; if (word(x, 1)) d.file = word(x, 1); return d; }),
-    external: kids(u, "external").map(x => ({ name: word(x, 0, null), text: x.args.slice(1).filter(a => a.k === "str").map(str).join(" ") })),
-    code: codeLines(u).map(c => ({ prefix: c.prefix, file: c.file, test: c.test })),
-    in: kids(u, "in").map(portInfo),
-    out: kids(u, "out").length ? portInfo(kids(u, "out")[0]) : null,
-    start: starts.length ? word(starts[0], 0) : null,
-    coverage: coverage(u),
-    presets: presetsOf(u),
-    rules: kids(u, "rule").map(r => ruleInfo(r, toks[word(r, 0)])),
-    flow: flow.map(flowInfo),
-  };
-}
-const show = tok => !tok ? "" : tok.k === "str" ? str(tok) : ser(tok);
-function fillValues(u, t, preset) {  // write the value of each rule in place of {group.name}
-  const toks = presetTokens(u, preset), byrule = Object.fromEntries(kids(u, "rule").map(r => [word(r, 0), r]));
-  return t.replace(PLACE, (m, id) => has(byrule, id) ? show(has(toks, id) ? toks[id] : byrule[id].args[1] || null) : m);
-}
-function toolDef(u, preset) {  // a unit as a tool definition: name, description, JSON Schema
-  const properties = {}, required = [];
-  for (const x of kids(u, "in")) {
-    const [name, t, text] = inParts(x), s = typeSchema(t);
-    if (text) s.description = text;
-    properties[name] = s;
-    if (!isMaybe(t)) required.push(name);
-  }
-  const d = { name: word(u, 0), description: fillValues(u, kids(u, "intent").map(textOf).join(" "), preset), parameters: { type: "object", properties, required } };
-  if (kids(u, "out").length) { const [, t, text] = inParts(kids(u, "out")[0]); d.returns = typeSchema(t); if (text) d.returns.description = text; }
-  return d;
-}
-function skill(u, rulesPath, preset) {
-  const toks = presetTokens(u, preset), byrule = Object.fromEntries(kids(u, "rule").map(r => [word(r, 0), r]));
-  const val = rid => show(has(toks, rid) ? toks[rid] : byrule[rid].args[1] || null);
-  const fill = t => rulesPath ? t.replace(PLACE, (m, id) => has(byrule, id) ? "`{" + id + "}`" : m) : fillValues(u, t, preset);
-  const cell = t => t.replace(/\|/g, "\\|");
-  const c = catalog(u, preset), intent = fill(c.intent);
-  let out = ["---", "name: " + word(u, 0), "description: " + intent, "---", "", "# " + word(u, 0), ""];
-  if (intent) out.push(intent, "");
-  for (const n of c.notes) out.push("Note: " + fill(n.text) + (n.evidence.length ? " (evidence: " + n.evidence.join(", ") + ")" : ""));
-  if (c.notes.length) out.push("");
-  if (c.rules.length) {
-    out.push("## Rules", "");
-    if (rulesPath) out.push("Read the value of each rule from `" + rulesPath + "`: the `rules` list, by `id`. Do not copy the values into your work. In the text below, `{group.name}` means the value of that rule.", "", "| Rule | Meaning |", "|---|---|");
-    else out.push("| Rule | Value | Meaning |", "|---|---|---|");
-    for (const r of kids(u, "rule")) {
-      const info = ruleInfo(r), lim = [];
-      for (const k of ["min", "max"]) if (kids(r, k).length && kids(r, k)[0].args.length) lim.push(k + " " + ser(kids(r, k)[0].args[0]));
-      if (kids(r, "options").length) lim.push("one of: " + kids(r, "options")[0].args.map(ser).join(", "));
-      let mean = info.label + (has(info, "unit") ? " (" + info.unit + ")" : "") + (lim.length ? "; " + lim.join(", ") : "");
-      if (has(info, "note")) mean += ". Note: " + info.note;
-      out.push(rulesPath ? `| \`${info.id}\` | ${cell(mean)} |` : `| \`${info.id}\` | \`${cell(val(info.id))}\` | ${cell(mean)} |`);
-    }
-    out.push("");
-  }
-  if (c.flow.length) {
-    out.push("## Flow", "", `Start at \`${c.start}\`. Go from node to node as written. Do not skip a gate.`, "");
-    const go = l => `go to \`${l.to}\`` + (has(l, "when") ? ` (${fill(l.when)})` : "");
-    for (const f of c.flow) {
-      const k = f.kind, label = { step: "step", end: "end" }[k] || k + " gate";
-      out.push(`### \`${f.id}\`${f.name ? " " + fill(f.name) : ""} (${label})`, "");
-      for (const [key, title] of [["when", "When"], ["do", "Do"], ["ensure", "Check"]]) if (has(f, key)) out.push(`- ${title}: ${fill(f[key])}`);
-      if (has(f, "reads")) out.push("- Rules: " + f.reads.map(r => rulesPath || !has(byrule, r) ? `\`${r}\`` : `\`${r}\` = ${val(r)}`).join(", "));
-      if (has(f, "sees")) out.push("- Sees: " + f.sees.map(x => `\`${x}\``).join(", "));
-      const by = (f.by || []).map(b => `\`${b}\``).join(", ");
-      const guess = "- No code decides this gate yet: decide it yourself and label the result as a guess.";
-      if (k === "step" && by) out.push(`- Code: run ${by}.`);
-      else if (k === "hard") out.push(by ? `- Decided by code: run ${by} and obey its result. Do not decide this gate yourself.` : guess);
-      else if (k === "soft") out.push(by ? `- Decided by code: run ${by}. If it fails, report it and go on as written below.` : guess);
-      else if (k === "judge") out.push(has(f, "brief") ? `- Judge: ${fill(f.brief)}. Label the result as a guess.` : "- Judge: decide it yourself. Label the result as a guess.");
-      else if (k === "human") out.push(has(f, "brief") ? `- A person decides: ${fill(f.brief)}. Stop and ask the person. Do not decide this gate yourself.` : "- A person decides. Stop and ask the person. Do not decide this gate yourself.");
-      for (const n of f.notes || []) out.push("- Note: " + fill(n.text));
-      for (const [key, title] of [["next", "Next"], ["pass", "Pass"], ["fail", "Fail"]]) for (const l of f[key] || []) out.push(`- ${title}: ${go(l)}.`);
-      if (k === "end") out.push("- Stop here.");
-      out.push("");
-    }
-    const guessed = c.flow.filter(f => f.kind === "judge" || ((f.kind === "hard" || f.kind === "soft") && !(f.by || []).length)).map(f => f.id);
-    if (guessed.length) out.push("## Report", "",
-      `You decide these gates yourself, not code: ${guessed.map(g => "`" + g + "`").join(", ")}. Their results are guesses.`,
-      "End your answer with one line that starts with `Guessed:` and names each of these gates that you decided, for example:", "",
-      "Guessed: " + guessed.join(", "), "",
-      "Do not leave this line out. A person must see which results are guesses.", "");
-  }
-  return out.join("\n").replace(/\n+$/, "") + "\n";
-}
-
-// - State ----------------------------------------------
 const params = new URLSearchParams(location.search);
 const S = {
-  text: null, name: "", root: null, error: null, diag: null, dirty: false, changed: new Set(),
+  B: null, text: null, dirty: false, changed: new Set(),
   tab: store.get("tab") || "units", unit: null, sel: null, view: null,
-  served: params.get("save") === "1" && location.protocol.startsWith("http"), src: params.get("src"),
+  served: params.get("serve") === "1" && location.protocol.startsWith("http"),
   skillRef: store.get("skillRef") === "1",
 };
 function msg(t, ok = true) { const m = $("#msg"); m.textContent = t; m.className = t ? (ok ? "ok" : "bad") : ""; }
-function load(text, name) {
-  S.text = text; S.name = name || "untitled.rig"; S.dirty = false; S.changed = new Set(); S.sel = null; S.view = null;
-  reparse();
-  const us = S.root ? units(S.root) : [];
-  const fl = us.filter(u => flowOf(u).length);
-  S.unit = fl.length ? word(fl[0], 0) : us.length ? word(us[0], 0) : null;
+const units = () => S.B ? S.B.units : [];
+const curUnit = () => units().find(u => u.name === S.unit) || units()[0] || null;
+const cat = U => U && U.catalogue;
+const ruleOf = (U, id) => cat(U) ? cat(U).rules.find(r => r.id === id) : null;
+function shown(U, id) {  // a rule value as the text a person reads
+  const s = U.rules_src[id];
+  if (s) return s.shown;
+  const r = ruleOf(U, id);
+  if (!r) return "?";
+  return typeof r.value === "boolean" ? (r.value ? "on" : "off") : Array.isArray(r.value) ? "(" + r.value.join(" ") + ")" : String(r.value);
+}
+const fillText = (U, t) => (t || "").replace(PLACE, (m, id) => ruleOf(U, id) ? shown(U, id) : m);
+const isChanged = (U, id) => S.changed.has(U.name + "/" + id);
+
+function load(B) {
+  S.B = B; S.text = B.text; S.dirty = false; S.changed = new Set(); S.sel = null; S.view = null;
+  const fl = units().filter(u => u.flow);
+  S.unit = fl.length ? fl[0].name : units().length ? units()[0].name : null;
   render();
 }
-function reparse() {
-  try { S.root = parse(S.text); S.error = null; S.diag = check(S.root); }
-  catch (e) { S.root = null; S.error = e.message; S.diag = null; }
+function fromCatalogue(c, name) {  // a compiled catalogue (gen/<unit>.json), opened without rig.py serve: read only
+  return { file: name, text: null, errors: [], warnings: [], units: [{ name: c.unit, scope: c.scope, status: [], flow: !!(c.flow || []).length,
+    catalogue: c, skill: null, skill_ref: null, tool: null, levels: {}, rules_src: {}, presets_src: {} }] };
 }
-const curUnit = () => S.root ? (units(S.root).find(u => word(u, 0) === S.unit) || units(S.root)[0] || null) : null;
-const ruleNode = (u, id) => kids(u, "rule").find(r => word(r, 0) === id);
+async function fetchBundle() {
+  try {
+    const r = await fetch("/bundle", { cache: "no-store" }); if (!r.ok) throw new Error(r.status);
+    load(await r.json()); loadRuns();
+  } catch (e) { msg("Could not load the file: " + e.message, false); render(); }
+}
+async function fetchCatalogue(url) {
+  try {
+    const r = await fetch(url, { cache: "no-store" }); if (!r.ok) throw new Error(r.status);
+    load(fromCatalogue(await r.json(), url.split("/").pop()));
+  } catch (e) { msg("Could not load " + url + ": " + e.message, false); }
+}
+async function recompile() {  // rig.py compiles the changed text; nothing is written
+  try {
+    const r = await fetch("/compile", { method: "POST", headers: { "Content-Type": "text/plain; charset=utf-8" }, body: S.text });
+    const B = await r.json(); B.text = S.text; S.B = B;
+  } catch (e) { msg("Could not compile: " + e.message, false); }
+  render();
+}
 
 // - Edits: rule values are written into the Rig text ---
-function editText(r, tokText) {
-  const ls = S.text.split("\n"), raw = ls[r.line - 1], a = r.args[1];
-  ls[r.line - 1] = a ? raw.slice(0, r.indent + a.a) + tokText + raw.slice(r.indent + a.b) : raw.replace(/\r?$/, m => " " + tokText + m);
+function editText(s, tokText) {
+  const ls = S.text.split("\n"), raw = ls[s.line - 1];
+  ls[s.line - 1] = raw.slice(0, s.a) + tokText + raw.slice(s.b);
   S.text = ls.join("\n"); S.dirty = true;
-  reparse();
 }
-function setRule(unitName, id, tokText) {
-  const u = units(S.root).find(x => word(x, 0) === unitName), r = u && ruleNode(u, id);
-  if (!r) return;
-  editText(r, tokText); S.changed.add(unitName + "/" + id);
+async function setRule(U, id, tokText) {
+  const s = U.rules_src[id];
+  if (!s || !S.served) return;
+  editText(s, tokText); S.changed.add(U.name + "/" + id);
+  await recompile();
+}
+async function applyPreset(U, pname) {
+  const sets = Object.entries(U.presets_src[pname] || {});
+  let n = 0;
+  for (const [id, tok] of sets) {  // each rule is on its own line: one edit does not move the columns of another
+    const cur = U.rules_src[id];
+    if (cur && cur.text !== tok) { editText(cur, tok); S.changed.add(U.name + "/" + id); n++; }
+  }
+  await recompile();
+  msg(`Preset ${pname} applied: ${n} value${n === 1 ? "" : "s"} changed. Save to keep it.`);
   render();
 }
-function applyPreset(unitName, pname) {
-  const u0 = units(S.root).find(x => word(x, 0) === unitName), p = u0 && kids(u0, "preset").find(x => word(x, 0) === pname);
-  if (!p) return;
-  const sets = kids(p, "set").filter(s => s.args.length > 1).map(s => [word(s, 0), ser(s.args[1])]);
-  for (const [id, tok] of sets) {
-    const u = units(S.root).find(x => word(x, 0) === unitName), r = u && ruleNode(u, id);
-    if (r && ser(r.args[1] || { k: "word", t: "" }) !== tok) { editText(r, tok); S.changed.add(unitName + "/" + id); }
+function editor(U, id) {
+  const r = ruleOf(U, id), s = U.rules_src[id], lab = r ? r.label : id, off = !S.served || !s;
+  if (!r) return el("span", {}, "?");
+  const title = off ? "Open the file with rig.py serve to change a value" : null;
+  if (r.type === "switch") { const e = el("input", { type: "checkbox", "aria-label": lab, disabled: off, title }); e.checked = !!r.value; e.onchange = () => setRule(U, id, e.checked ? "on" : "off"); return e; }
+  if (r.type === "choice") {
+    const e = el("select", { "aria-label": lab, disabled: off, title });
+    for (const o of r.options || []) e.add(new Option(String(o), String(o)));
+    e.value = String(r.value); e.onchange = () => setRule(U, id, e.value); return e;
   }
-  msg(`Preset ${pname} applied: ${sets.length} value${sets.length === 1 ? "" : "s"}. Save to keep it.`);
-  render();
-}
-const isChanged = (u, id) => S.changed.has(word(u, 0) + "/" + id);
-
-function editor(u, r, compact) {
-  const id = word(r, 0), a = r.args[1], t = ruleType(r), uname = word(u, 0), lab = kids(r, "label")[0] ? textOf(kids(r, "label")[0]) : id;
-  if (t === "switch") { const e = el("input", { type: "checkbox", "aria-label": lab }); e.checked = a && a.t === "on"; e.onchange = () => setRule(uname, id, e.checked ? "on" : "off"); return e; }
-  if (t === "choice") {
-    const e = el("select", { "aria-label": lab });
-    for (const o of kids(r, "options")[0].args) e.add(new Option(ser(o), ser(o)));
-    e.value = a ? ser(a) : ""; e.onchange = () => setRule(uname, id, e.value); return e;
-  }
-  if (t === "number") {
-    const mn = kids(r, "min")[0], mx = kids(r, "max")[0];
-    const e = el("input", { type: "number", class: "num", step: "any", value: a ? a.t : "", min: mn ? word(mn, 0) : null, max: mx ? word(mx, 0) : null, "aria-label": lab });
+  if (r.type === "number") {
+    const e = el("input", { type: "number", class: "num", step: "any", value: r.value, min: has(r, "min") ? r.min : null, max: has(r, "max") ? r.max : null, "aria-label": lab, disabled: off, title });
     e.addEventListener("change", () => {
-      const v = e.value.trim();
-      const bad = !NUMBER.test(v) || ruleProblem(r, { k: "num", t: v });
-      e.classList.toggle("invalid", !!bad); e.title = bad ? (bad === true ? "use a number" : bad) : "";
-      if (!bad) setRule(uname, id, v); else msg(`${id}: ${e.title}`, false);
+      const v = Number(e.value.trim()), bad = e.value.trim() === "" || isNaN(v) ? "use a number" : has(r, "min") && v < r.min ? "at least " + r.min : has(r, "max") && v > r.max ? "at most " + r.max : "";
+      e.classList.toggle("invalid", !!bad); e.title = bad;
+      if (!bad) setRule(U, id, e.value.trim()); else msg(`${id}: ${bad}`, false);
     });
     return e;
   }
-  const e = el("input", { type: "text", class: "txt", value: a ? ser(a) : "", title: "the value as written in the file (keep quotes and slashes)", "aria-label": lab });
-  e.addEventListener("change", () => {
-    try { const ts = tokenize(e.value.trim(), r.line); if (ts.length !== 1) throw new Error("write one value"); setRule(uname, id, e.value.trim()); }
-    catch (x) { e.classList.add("invalid"); msg(id + ": " + x.message, false); }
-  });
+  const e = el("input", { type: "text", class: "txt", value: s ? s.text : shown(U, id), title: title || "the value as written in the file (keep quotes and slashes)", "aria-label": lab, disabled: off });
+  e.addEventListener("change", () => setRule(U, id, e.value.trim()));
   return e;
 }
 
 // - Rendering: frame -----------------------------------
 function render() {
   document.body.className = document.body.className.replace(/\btab-\w+/g, "").trim() + " tab-" + S.tab;
-  $("#fname").textContent = S.text != null ? S.name : "";
+  $("#fname").textContent = S.B ? S.B.file : "";
   $("#dirty").textContent = S.dirty ? "• changed" : "";
-  $("#save").disabled = !S.dirty; $("#close").disabled = S.text == null;
-  $("#save").textContent = S.served ? "Save" : "Save…";
-  $("#save").title = S.served ? "Write the file and compile it again (rig.py serve)" : "Download the file with your changes";
+  $("#save").hidden = !S.served; $("#save").disabled = !S.dirty || !!(S.B && S.B.errors.length); $("#close").disabled = !S.B;
   $$(".tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab === S.tab)));
-  const us = S.root ? units(S.root) : [];
   const sel = $("#unit");
-  sel.hidden = us.length < 2 || S.tab === "units";
-  sel.replaceChildren(...us.map(u => new Option(word(u, 0) + " · " + word(u, 1, "snippet"), word(u, 0))));
+  sel.hidden = units().length < 2 || S.tab === "units";
+  sel.replaceChildren(...units().map(u => new Option(u.name + " · " + u.scope, u.name)));
   sel.value = S.unit || "";
-  const u = curUnit(), pr = $("#preset"), ps = u ? kids(u, "preset") : [];
-  pr.hidden = !ps.length;
-  pr.replaceChildren(new Option("preset…", ""), ...ps.map(p => new Option(word(p, 0), word(p, 0))));
-  $("#gbar").hidden = S.tab !== "graph" || !S.root;
+  const U = curUnit(), pr = $("#preset"), ps = U ? Object.keys(U.presets_src) : [];
+  pr.hidden = !ps.length || !S.served;
+  pr.replaceChildren(new Option("preset…", ""), ...ps.map(p => new Option(p, p)));
+  $("#gbar").hidden = S.tab !== "graph" || !U || !cat(U);
   const page = $("#page");
   page.replaceChildren();
-  if (S.text == null) { document.body.classList.remove("tab-graph"); page.append(emptyView()); return; }
-  if (S.error) { document.body.classList.remove("tab-graph"); page.append(el("main", {}, el("div", { class: "card" }, el("h2", {}, "The file does not parse"), el("p", { class: "dim" }, S.error)))); return; }
+  if (!S.B) { document.body.classList.remove("tab-graph"); page.append(emptyView()); return; }
+  if (!units().length || !units().some(cat)) { document.body.classList.remove("tab-graph"); page.append(el("main", {}, diagCard() || el("div", { class: "card" }, "The file has no unit."))); return; }
   if (S.tab === "graph") renderGraph();
   else page.append(el("main", {}, S.tab === "skill" ? skillView() : S.tab === "json" ? jsonView() : unitsView()));
 }
 function emptyView() {
-  const ta = el("textarea", { placeholder: "…or paste Rig text here", spellcheck: "false", "aria-label": "Rig text" });
-  const examples = ["release-tool/release.rig", "band-facts/band-facts.rig", "older/translate-ui.rig", "older/slugify.rig"];
+  const examples = ["release-tool/gen/release.json", "band-facts/gen/band-facts.json", "bookmarks/gen/bookmarks.json"];
   const http = location.protocol.startsWith("http");
   return el("div", { class: "empty" },
-    el("p", {}, "Drop a ", el("code", {}, ".rig"), " file here, or ", el("button", { onclick: () => $("#file").click() }, "open one"), "."),
-    ta, el("div", { class: "row" }, el("button", { class: "primary", onclick: () => ta.value.trim() && load(ta.value, "pasted.rig") }, "Show pasted text")),
-    http ? el("div", { class: "row" }, "Examples:", examples.map(x => el("button", { onclick: () => fetchFile("../examples/" + x) }, x))) :
-      el("p", { class: "dim" }, "Tip: run ", el("code", {}, "python skills/rig/rig.py serve FILE"), " to edit a file in place, or serve the repository over http to open the examples."));
-}
-async function fetchFile(url) {
-  try {
-    const r = await fetch(url, { cache: "no-store" }); if (!r.ok) throw new Error(r.status);
-    const text = await r.text();
-    BOUND = {};
-    if (r.headers.get("X-Rig-File")) { try { const b = await fetch("/levels", { cache: "no-store" }); if (b.ok) BOUND = await b.json(); } catch (e) { /* a plain file server has no levels */ } loadRuns(); }
-    load(text, r.headers.get("X-Rig-File") || url.split("/").pop());
-  }
-  catch (e) { msg("Could not load " + url + ": " + e.message, false); }
+    el("p", {}, "Run ", el("code", {}, "python3 skills/rig/rig.py serve FILE.rig"), " to see a file and change its rule values."),
+    el("p", {}, "Without the server, drop a compiled catalogue (", el("code", {}, "gen/<unit>.json"), ") here, or ", el("button", { onclick: () => $("#file").click() }, "open one"), ". It is read only."),
+    http ? el("div", { class: "row" }, "Examples:", examples.map(x => el("button", { onclick: () => fetchCatalogue("../examples/" + x) }, x.split("/")[0]))) : null);
 }
 
 // - Units tab ------------------------------------------
-function chips(u, text, onPick) {
+function chips(U, text, onPick) {
   const out = []; let last = 0;
-  for (const m of text.matchAll(PLACE)) {
+  for (const m of (text || "").matchAll(PLACE)) {
     out.push(text.slice(last, m.index)); last = m.index + m[0].length;
-    const r = ruleNode(u, m[1]);
+    const r = ruleOf(U, m[1]);
     if (!r) { out.push(m[0]); continue; }
-    out.push(el("span", { class: "chip" + (isChanged(u, m[1]) ? " changed" : ""), title: (kids(r, "label")[0] ? textOf(kids(r, "label")[0]) : m[1]) + ". Click to edit.",
+    out.push(el("span", { class: "chip" + (isChanged(U, m[1]) ? " changed" : ""), title: r.label + ". Click to edit.",
       onclick: () => onPick(m[1]), onpointerenter: () => onPick.hover && onPick.hover(m[1]), onpointerleave: () => onPick.hover && onPick.hover(null) },
-      el("span", { class: "rid" }, m[1]), el("b", {}, show(r.args[1]))));
+      el("span", { class: "rid" }, m[1]), el("b", {}, shown(U, m[1]))));
   }
-  out.push(text.slice(last));
+  out.push((text || "").slice(last));
   return out;
+}
+function diagCard() {
+  const B = S.B;
+  if (!B.errors.length && !B.warnings.length) return null;
+  return el("div", { class: "card" }, el("h3", { style: "margin-top:0" }, "Check"),
+    el("ul", { class: "diag" }, B.errors.map(([l, t]) => el("li", { class: "err" }, `error, line ${l}: ${t}`)), B.warnings.map(([l, t]) => el("li", { class: "warn" }, `warning, line ${l}: ${t}`))));
 }
 function unitsView() {
   const wrap = el("div");
-  if (S.diag && (S.diag.err.length || S.diag.warn.length)) wrap.append(el("div", { class: "card" }, el("h3", { style: "margin-top:0" }, "Check"),
-    el("ul", { class: "diag" }, S.diag.err.map(([l, t]) => el("li", { class: "err" }, `error, line ${l}: ${t}`)), S.diag.warn.map(([l, t]) => el("li", { class: "warn" }, `warning, line ${l}: ${t}`)))));
-  for (const u of units(S.root)) wrap.append(unitCard(u));
+  const d = diagCard(); if (d) wrap.append(d);
+  for (const U of units()) wrap.append(unitCard(U));
   return wrap;
 }
-function noteText(u, n) { return [chips(u, textOf(n), () => {}), ...kids(n, "evidence").map(e => el("span", { class: "dim" }, "  (evidence: " + textOf(e) + ")"))]; }
-function unitCard(u) {
-  const uid = "u-" + word(u, 0), intent = kids(u, "intent")[0];
-  const card = el("section", { class: "card", id: uid },
-    el("h2", {}, word(u, 0), el("span", { class: "scope" }, word(u, 1, "snippet")),
-      flowOf(u).length ? el("button", { style: "margin-left:auto;font-size:12px", onclick: () => { S.unit = word(u, 0); S.tab = "graph"; store.set("tab", "graph"); render(); } }, "Graph ↗") : null),
-    el("div", { class: "chips" }, unitStatus(u).map(s => el("span", { class: "st " + s.cls }, s.t)), kids(u, "uses").map(x => el("span", { class: "st" }, "uses " + word(x, 0) + (word(x, 1) ? " (" + word(x, 1) + ")" : "")))),
-    intent ? el("p", { class: "lead" }, el("b", {}, "intent"), chips(u, textOf(intent), () => {})) : null,
-    kids(u, "note").map(n => el("p", { class: "lead" }, el("b", {}, "note"), noteText(u, n))));
-  const ins = kids(u, "in"), out = kids(u, "out")[0], tx = t => t ? ser(t) : "?";
+function unitCard(U) {
+  const c = cat(U);
+  const card = el("section", { class: "card", id: "u-" + U.name },
+    el("h2", {}, U.name, el("span", { class: "scope" }, U.scope),
+      U.flow && c ? el("button", { style: "margin-left:auto;font-size:12px", onclick: () => { S.unit = U.name; S.tab = "graph"; store.set("tab", "graph"); render(); } }, "Graph ↗") : null),
+    el("div", { class: "chips" }, U.status.map(s => el("span", { class: "st" + (/hole|none|stale|remelted/.test(s) ? " warn" : "") }, s)), c ? c.uses.map(x => el("span", { class: "st" }, "uses " + x.unit + (x.file ? " (" + x.file + ")" : ""))) : null));
+  if (!c) { card.append(el("p", { class: "dim" }, U.problem || "This unit does not compile.")); return card; }
+  if (c.intent) card.append(el("p", { class: "lead" }, el("b", {}, "intent"), chips(U, c.intent, () => {})));
+  for (const n of c.notes || []) card.append(el("p", { class: "lead" }, el("b", {}, "note"), chips(U, n.text, () => {}), (n.evidence || []).map(e => el("span", { class: "dim" }, "  (evidence: " + e + ")"))));
+  const ins = c.in || [], out = c.out;
   if (ins.length || out) card.append(el("p", { class: "lead" }, el("b", {}, "signature"),
-    el("code", {}, "(" + ins.map(i => word(i, 0) + (inParts(i)[1] ? ": " + tx(inParts(i)[1]) : "")).join(", ") + ")" + (out ? " → " + tx(inParts(out)[1]) : ""))));
-  const described = [...ins, ...(out ? [out] : [])].filter(n => inParts(n)[2]);
-  if (described.length) card.append(el("div", { class: "tw" }, el("table", {},
-    described.map(n => el("tr", {}, el("td", { class: "mono" }, n.head === "in" ? word(n, 0) : "out"), el("td", {}, inParts(n)[2]))))));
-  const exts = kids(u, "external");
-  if (exts.length) card.append(el("h3", {}, "External code"), el("p", { class: "dim", style: "margin:0 0 6px;font-size:13px" }, "Rig does not prove this code."), el("div", { class: "tw" }, el("table", {},
-    exts.map(x => el("tr", {}, el("td", { class: "mono" }, word(x, 0)), el("td", {}, x.args.slice(1).filter(a => a.k === "str").map(str).join(" ")))))));
-  const ex = kids(u, "example");
-  if (ex.length) card.append(el("h3", {}, "Examples"), el("div", { class: "tw" }, el("table", {},
-    el("tr", {}, el("th", {}, "input"), el("th", {}, "result")),
-    ex.map(e => { const w = e.args.map(ser), k = w.indexOf("=>"); return el("tr", {}, el("td", { class: "mono" }, w.slice(0, k).join("  ")), el("td", { class: "mono" }, w.slice(k + 1).join(" "))); }))));
-  const ens = kids(u, "ensure");
-  if (ens.length) card.append(el("h3", {}, "Ensure"), el("div", { class: "tw" }, el("table", {},
-    ens.map(e => el("tr", {}, el("td", {}, textOf(e)), el("td", { class: "mono dim" }, kids(e, "check").map(c => el("div", {}, word(c, 0) + ": " + str(c.args[1])))))))));
-  const probes = kids(u, "probe");
-  if (probes.length) card.append(el("h3", {}, "Probes"), el("p", { class: "dim", style: "margin:0 0 6px;font-size:13px" }, "Live runs against the real world. A pass is observed, not proved."), el("div", { class: "tw" }, el("table", {},
-    el("tr", {}, el("th", {}, "input"), el("th", {}, "check")),
-    probes.map(p => el("tr", {}, el("td", { class: "mono" }, p.args.map(ser).join("  ")), el("td", { class: "mono dim" }, kids(p, "check").map(c => el("div", {}, word(c, 0) + ": " + str(c.args[1])))))))));
-  if (flowOf(u).length) card.append(flowTable(u));
-  if (kids(u, "rule").length) card.append(rulesTable(u));
-  if (kids(u, "preset").length) card.append(el("h3", {}, "Presets"), el("div", { class: "tw" }, el("table", {},
+    el("code", {}, "(" + ins.map(i => i.name + (i.type ? ": " + i.type : "")).join(", ") + ")" + (out ? " → " + (out.type || "?") : ""))));
+  const described = [...ins.map(i => [i.name, i.text]), ...(out ? [["out", out.text]] : [])].filter(x => x[1]);
+  if (described.length) card.append(el("div", { class: "tw" }, el("table", {}, described.map(([k, t]) => el("tr", {}, el("td", { class: "mono" }, k), el("td", {}, t))))));
+  if ((c.external || []).length) card.append(el("h3", {}, "External code"), el("div", { class: "tw" }, el("table", {}, c.external.map(x => el("tr", {}, el("td", { class: "mono" }, x.name), el("td", {}, x.text))))));
+  if ((c.flow || []).length) card.append(flowTable(U));
+  if (c.rules.length) card.append(rulesTable(U));
+  const ps = Object.entries(c.presets || {});
+  if (ps.length) card.append(el("h3", {}, "Presets"), el("div", { class: "tw" }, el("table", {},
     el("tr", {}, el("th", {}, "preset"), el("th", {}, "values"), el("th", {}, "")),
-    kids(u, "preset").map(p => el("tr", {}, el("td", {}, el("b", {}, word(p, 0))),
-      el("td", { class: "mono" }, kids(p, "set").map(s => el("div", {}, word(s, 0) + " = " + word(s, 1, "")))),
-      el("td", {}, el("button", { onclick: () => applyPreset(word(u, 0), word(p, 0)) }, "Apply")))))));
-  for (const c of kids(u, "cast")) {
-    const st = castState(u, c);
-    card.append(el("h3", {}, "Cast · " + st.i.lang), el("details", { open: !STAMPS.includes(st.s) },
-      el("summary", {}, el("span", { class: "st " + st.cls }, st.t), "  ", el("span", { class: "mono dim" }, [st.i.matrix, st.i.body].filter(Boolean).join(" "))),
-      el("pre", { class: "cast" }, bodyText(c.body))));
-  }
+    ps.map(([p, sets]) => el("tr", {}, el("td", {}, el("b", {}, p)),
+      el("td", { class: "mono" }, Object.keys(sets).map(id => el("div", {}, id + " = " + ((U.presets_src[p] || {})[id] ?? JSON.stringify(sets[id]))))),
+      el("td", {}, S.served ? el("button", { onclick: () => applyPreset(U, p) }, "Apply") : null))))));
   return card;
 }
-function nodeRef(u, id, onGo) {
-  const f = flowOf(u).find(x => word(x, 0) === id), k = f ? (f.head === "gate" ? word(f, 1) : f.head) : "step";
-  return el("a", { onclick: onGo, title: f ? nameOf(f) : "" }, el("span", { class: "gid " + k }, id), " ", f ? nameOf(f) : "?");
+const kindWord = k => k === "step" || k === "end" ? k : k + " gate";
+function nodeRef(U, id, onGo) {
+  const f = cat(U).flow.find(x => x.id === id);
+  return el("a", { onclick: onGo, title: f ? f.name || "" : "" }, el("span", { class: "gid " + (f ? f.kind : "step") }, id), " ", f ? f.name || "" : "?");
 }
-function flowTable(u) {
-  const c = catalog(u), uid = word(u, 0), rowId = id => "n-" + uid + "-" + id;
+function flowTable(U) {
+  const c = cat(U), rowId = id => "n-" + U.name + "-" + id;
   const go = id => () => { const tr = document.getElementById(rowId(id)); if (!tr) return; tr.scrollIntoView({ block: "center", behavior: "smooth" }); tr.classList.remove("flash"); void tr.offsetWidth; tr.classList.add("flash"); };
   const from = {};
   for (const f of c.flow) for (const l of [...(f.next || []), ...(f.pass || []), ...(f.fail || [])]) if (l.to !== f.id) (from[l.to] ||= []).includes(f.id) || from[l.to].push(f.id);
   const focusEd = (fid, rid) => { const e = $(`#${CSS.escape(rowId(fid))} [data-rule="${CSS.escape(rid)}"] input, #${CSS.escape(rowId(fid))} [data-rule="${CSS.escape(rid)}"] select`); e && e.focus(); };
   const strip = el("nav", { class: "flowstrip", "aria-label": "Flow" });
-  c.flow.forEach((f, i) => { if (i) strip.append(el("span", { class: "arrow" }, "›")); const a = nodeRef(u, f.id, go(f.id)); a.href = "#" + rowId(f.id); a.onclick = e => { e.preventDefault(); go(f.id)(); }; strip.append(a); });
+  c.flow.forEach((f, i) => { if (i) strip.append(el("span", { class: "arrow" }, "›")); const a = nodeRef(U, f.id, go(f.id)); a.href = "#" + rowId(f.id); a.onclick = e => { e.preventDefault(); go(f.id)(); }; strip.append(a); });
   const rows = c.flow.map(f => {
-    const node = flowOf(u).find(x => word(x, 0) === f.id);
     const leads = el("div", { class: "links" });
-    for (const l of [...(f.next || []), ...(f.pass || [])]) leads.append(el("div", { class: "lk pass" }, el("span", { class: "sym" }, "→"), el("span", {}, nodeRef(u, l.to, go(l.to)), l.when ? el("span", { class: "when" }, " — ", chips(u, l.when, () => {})) : null)));
-    for (const l of f.fail || []) leads.append(el("div", { class: "lk fail" }, el("span", { class: "sym" }, "✕"), el("span", {}, nodeRef(u, l.to, go(l.to)), l.when ? el("span", { class: "when" }, " — ", chips(u, l.when, () => {})) : null)));
+    for (const l of [...(f.next || []), ...(f.pass || [])]) leads.append(el("div", { class: "lk pass" }, el("span", { class: "sym" }, "→"), el("span", {}, nodeRef(U, l.to, go(l.to)), l.when ? el("span", { class: "when" }, " — ", chips(U, l.when, () => {})) : null)));
+    for (const l of f.fail || []) leads.append(el("div", { class: "lk fail" }, el("span", { class: "sym" }, "✕"), el("span", {}, nodeRef(U, l.to, go(l.to)), l.when ? el("span", { class: "when" }, " — ", chips(U, l.when, () => {})) : null)));
     if (f.kind === "end") leads.append(el("div", { class: "lk pass" }, el("span", { class: "sym" }, "■"), el("span", { class: "when" }, "the flow stops here")));
-    if ((from[f.id] || []).length) leads.append(el("div", { class: "lk from" }, el("span", { class: "sym" }, "←"), el("span", {}, from[f.id].map((id, i) => [i ? ", " : "", nodeRef(u, id, go(id))]))));
+    if ((from[f.id] || []).length) leads.append(el("div", { class: "lk from" }, el("span", { class: "sym" }, "←"), el("span", {}, from[f.id].map((id, i) => [i ? ", " : "", nodeRef(U, id, go(id))]))));
     const pick = rid => focusEd(f.id, rid);
-    const txt = (key, title) => has(f, key) ? el("div", {}, title ? el("span", { class: "faint" }, title + ": ") : null, chips(u, f[key], pick)) : null;
+    const txt = (key, title) => has(f, key) ? el("div", {}, title ? el("span", { class: "faint" }, title + ": ") : null, chips(U, f[key], pick)) : null;
     const eds = el("div", { class: "eds" }, (f.reads || []).map(rid => {
-      const r = ruleNode(u, rid);
-      return r ? el("div", { class: "ed" + (isChanged(u, rid) ? " changed" : ""), "data-rule": rid }, el("div", { class: "lab" }, kids(r, "label")[0] ? textOf(kids(r, "label")[0]) : rid, el("span", { class: "rid" }, rid)), el("div", {}, editor(u, r), kids(r, "unit")[0] ? el("span", { class: "unitx" }, " " + textOf(kids(r, "unit")[0])) : null)) : null;
+      const r = ruleOf(U, rid);
+      return r ? el("div", { class: "ed" + (isChanged(U, rid) ? " changed" : ""), "data-rule": rid }, el("div", { class: "lab" }, r.label, el("span", { class: "rid" }, rid)), el("div", {}, editor(U, rid), r.unit ? el("span", { class: "unitx" }, " " + r.unit) : null)) : null;
     }));
     if (!(f.reads || []).length) eds.append(el("span", { class: "none" }, "no rules"));
-    const by = (f.by || []).join(", ");
-    const level = node.head === "gate" && f.kind !== "judge" && f.kind !== "human" ? gateLevel(node, u, fileUnits(u), [word(u, 0)]) : null;
-    return el("tr", { id: rowId(f.id), class: (f.reads || []).some(r => isChanged(u, r)) ? "changed" : "" },
-      el("td", {}, el("div", {}, el("span", { class: "gid " + f.kind }, f.id), " ", el("span", { class: "kind" }, f.kind === "step" || f.kind === "end" ? f.kind : f.kind + " gate")),
+    const by = (f.by || []).join(", "), level = U.levels[f.id];
+    return el("tr", { id: rowId(f.id), class: (f.reads || []).some(r => isChanged(U, r)) ? "changed" : "" },
+      el("td", {}, el("div", {}, el("span", { class: "gid " + f.kind }, f.id), " ", el("span", { class: "kind" }, kindWord(f.kind))),
         f.name ? el("div", { style: "font-weight:600;margin-top:2px" }, f.name) : null,
         el("div", { class: "code" }, by ? "by " + by : f.kind === "judge" ? "decided by the model" : f.kind === "human" ? "decided by a person" : f.kind === "hard" || f.kind === "soft" ? "no code yet" : ""),
-        level && by ? el("div", {}, el("span", { class: "st " + (level === "proved" || level === "tested" ? "ok" : level === "none" ? "warn" : "") }, level)) : null,
-        (f.notes || []).map(n => el("div", { class: "dim", style: "font-size:12px;margin-top:4px" }, "note: ", chips(u, n.text, pick)))),
+        level && by && f.kind !== "judge" && f.kind !== "human" ? el("div", {}, el("span", { class: "st " + (level === "proved" || level === "tested" ? "ok" : level === "none" ? "warn" : "") }, level)) : null,
+        (f.notes || []).map(n => el("div", { class: "dim", style: "font-size:12px;margin-top:4px" }, "note: ", chips(U, n.text, pick)))),
       el("td", {}, txt("when", "when"), txt("ensure", f.kind === "step" ? "ensure" : "check")),
       el("td", {}, txt("do"), txt("brief", f.kind === "human" ? "ask" : "judge")),
       el("td", {}, leads), el("td", {}, eds));
@@ -1062,20 +502,19 @@ function flowTable(u) {
   return el("div", {}, el("h3", {}, "Flow"), strip, el("div", { class: "tw" }, el("table", {},
     el("tr", {}, el("th", { style: "width:17%" }, "Node"), el("th", { style: "width:24%" }, "When / check"), el("th", { style: "width:22%" }, "Do / judge"), el("th", { style: "width:19%" }, "Leads to"), el("th", { style: "width:18%" }, "Values")), rows)));
 }
-function rulesTable(u) {
-  const c = catalog(u), readers = {};
-  for (const f of c.flow) for (const rid of f.reads || []) (readers[rid] ||= []).push(f.id);
+function rulesTable(U) {
+  const c = cat(U), readers = {};
+  for (const f of c.flow || []) for (const rid of f.reads || []) (readers[rid] ||= []).push(f.id);
   let group = null;
   const rows = [];
-  for (const r of kids(u, "rule")) {
-    const info = ruleInfo(r);
-    if (info.group !== group) { group = info.group; rows.push(el("tr", {}, el("th", { colspan: 4, style: "text-transform:none" }, group))); }
-    const lim = [has(info, "min") && "min " + ser(kids(r, "min")[0].args[0]), has(info, "max") && "max " + ser(kids(r, "max")[0].args[0]), has(info, "options") && "options: " + kids(r, "options")[0].args.map(ser).join(", ")].filter(Boolean).join(" · ");
-    rows.push(el("tr", { class: isChanged(u, info.id) ? "changed" : "" },
-      el("td", { style: "width:40%" }, el("b", {}, info.label), el("div", { class: "code" }, info.id + (info.unit ? " · " + info.unit : "")),
-        info.note ? el("div", { class: "dim", style: "font-size:12px" }, info.note) : null, info.evidence ? el("div", { class: "faint", style: "font-size:12px" }, "evidence: " + info.evidence) : null),
-      el("td", {}, editor(u, r)), el("td", { class: "dim" }, lim || "—"),
-      el("td", { class: "mono" }, (readers[info.id] || []).join(", ") || el("span", { style: "color:var(--warn)" }, "unused"))));
+  for (const r of c.rules) {
+    if (r.group !== group) { group = r.group; rows.push(el("tr", {}, el("th", { colspan: 4, style: "text-transform:none" }, group))); }
+    const lim = [has(r, "min") && "min " + r.min, has(r, "max") && "max " + r.max, has(r, "options") && "options: " + r.options.join(", ")].filter(Boolean).join(" · ");
+    rows.push(el("tr", { class: isChanged(U, r.id) ? "changed" : "" },
+      el("td", { style: "width:40%" }, el("b", {}, r.label), el("div", { class: "code" }, r.id + (r.unit ? " · " + r.unit : "")),
+        r.note ? el("div", { class: "dim", style: "font-size:12px" }, r.note) : null, r.evidence ? el("div", { class: "faint", style: "font-size:12px" }, "evidence: " + r.evidence) : null),
+      el("td", {}, editor(U, r.id)), el("td", { class: "dim" }, lim || "—"),
+      el("td", { class: "mono" }, (readers[r.id] || []).join(", ") || el("span", { style: "color:var(--warn)" }, "unused"))));
   }
   return el("div", {}, el("h3", {}, "Rules"), el("div", { class: "tw" }, el("table", {}, el("tr", {}, el("th", {}, "rule"), el("th", {}, "value"), el("th", {}, "limits"), el("th", {}, "read by")), rows)));
 }
@@ -1089,37 +528,33 @@ function copyBtn(text) {
   return el("button", { onclick: async e => { try { await navigator.clipboard.writeText(text); e.target.textContent = "Copied"; } catch (x) { msg("Copy is blocked here: select the text instead.", false); } } }, "Copy");
 }
 function skillView() {
-  const u = curUnit();
-  if (!u) return el("div", { class: "card" }, "No unit.");
-  const path = store.get("rulesPath." + word(u, 0)) || word(u, 0) + ".json";
-  let text;
-  try { text = skill(u, S.skillRef ? path : null); } catch (e) { text = "Cannot compile: " + e.message; }
+  const U = curUnit();
+  if (!U || !U.skill) return el("div", { class: "card" }, "The skill is compiled by rig.py: open the file with rig.py serve.");
+  const text = S.skillRef ? U.skill_ref : U.skill;
   const ref = el("input", { type: "checkbox" }); ref.checked = S.skillRef;
   ref.onchange = () => { S.skillRef = ref.checked; store.set("skillRef", ref.checked ? "1" : "0"); render(); };
-  const p = el("input", { type: "text", value: path, "aria-label": "Path of the JSON file", disabled: !S.skillRef });
-  p.onchange = () => { store.set("rulesPath." + word(u, 0), p.value.trim() || word(u, 0) + ".json"); render(); };
   return el("div", { class: "card" },
-    el("h2", {}, "Skill", el("span", { class: "scope" }, word(u, 0))),
+    el("h2", {}, "Skill", el("span", { class: "scope" }, U.name)),
     el("p", { class: "dim", style: "margin:4px 0 10px;font-size:13px" }, "The unit as instructions for an agent (", el("code", {}, "rig.py compile skill"), "). Save it as ", el("code", {}, "SKILL.md"), " or paste it into a system prompt."),
-    el("div", { class: "tool" }, el("label", {}, ref, " read the values from the JSON file"), p, el("span", { class: "spacer" }), copyBtn(text),
-      el("button", { onclick: () => download(word(u, 0) + ".SKILL.md", text, "text/markdown") }, "Download")),
+    el("div", { class: "tool" }, el("label", {}, ref, " read the values from ", el("code", {}, U.name + ".json")), el("span", { class: "spacer" }), copyBtn(text),
+      el("button", { onclick: () => download(U.name + ".SKILL.md", text, "text/markdown") }, "Download")),
     el("pre", { class: "out" }, text));
 }
 function jsonView() {
-  const u = curUnit();
-  if (!u) return el("div", { class: "card" }, "No unit.");
-  const text = JSON.stringify(catalog(u), null, 1) + "\n";
+  const U = curUnit();
+  if (!U || !cat(U)) return el("div", { class: "card" }, "No unit.");
+  const text = JSON.stringify(cat(U), null, 1) + "\n";
   const wrap = el("div", {}, el("div", { class: "card" },
-    el("h2", {}, "Catalogue", el("span", { class: "scope" }, word(u, 0))),
-    el("p", { class: "dim", style: "margin:4px 0 10px;font-size:13px" }, "The unit as JSON for a code runner (", el("code", {}, "rig.py compile json"), "): rules, presets and flow. ", el("code", {}, "rig.py from-json"), " turns it back into Rig. Units in other files count as code here."),
-    el("div", { class: "tool" }, el("span", { class: "spacer" }), copyBtn(text), el("button", { onclick: () => download(word(u, 0) + ".json", text, "application/json") }, "Download")),
+    el("h2", {}, "Catalogue", el("span", { class: "scope" }, U.name)),
+    el("p", { class: "dim", style: "margin:4px 0 10px;font-size:13px" }, "The unit as JSON for a code runner (", el("code", {}, "rig.py compile json"), "): rules, presets and flow. ", el("code", {}, "rig.py from-json"), " turns it back into Rig."),
+    el("div", { class: "tool" }, el("span", { class: "spacer" }), copyBtn(text), el("button", { onclick: () => download(U.name + ".json", text, "application/json") }, "Download")),
     el("pre", { class: "out" }, text)));
-  if (kids(u, "in").length) {
-    const tool = JSON.stringify(toolDef(u), null, 1) + "\n";
+  if (U.tool) {
+    const tool = JSON.stringify(U.tool, null, 1) + "\n";
     wrap.append(el("div", { class: "card" },
-      el("h2", {}, "Tool definition", el("span", { class: "scope" }, word(u, 0))),
+      el("h2", {}, "Tool definition", el("span", { class: "scope" }, U.name)),
       el("p", { class: "dim", style: "margin:4px 0 10px;font-size:13px" }, "The unit as a tool for a model that calls tools (", el("code", {}, "rig.py compile tool"), "): name, description and the JSON Schema of the inputs."),
-      el("div", { class: "tool" }, el("span", { class: "spacer" }), copyBtn(tool), el("button", { onclick: () => download(word(u, 0) + ".tool.json", tool, "application/json") }, "Download")),
+      el("div", { class: "tool" }, el("span", { class: "spacer" }), copyBtn(tool), el("button", { onclick: () => download(U.name + ".tool.json", tool, "application/json") }, "Download")),
       el("pre", { class: "out" }, tool)));
   }
   return wrap;
@@ -1127,10 +562,10 @@ function jsonView() {
 
 // - Graph tab: a node graph of the flow ----------------
 // Nodes: one per step and gate, one per end, one per rule group. Wires: pass/next, fail, and rule -> node input.
-let G = { u: null, c: null, nodes: [], edges: [], layerOf: {}, byId: {}, pos: {} };
-const posKey = () => "pos." + S.name + "." + S.unit;
-function buildGraph(u) {
-  const c = catalog(u), byId = Object.fromEntries(c.flow.map(f => [f.id, f]));
+let G = { U: null, c: null, nodes: [], edges: [], layerOf: {}, byId: {}, pos: {} };
+const posKey = () => "pos." + S.B.file + "." + S.unit;
+function buildGraph(U) {
+  const c = cat(U), byId = Object.fromEntries(c.flow.map(f => [f.id, f]));
   const nodes = [], edges = [], terms = {};
   const outs = f => [...(f.next || []), ...(f.pass || []), ...(f.fail || [])].map(l => l.to).filter(t => byId[t] && byId[t].kind !== "end");
   const state = {}, order = [], back = new Set();
@@ -1149,25 +584,25 @@ function buildGraph(u) {
     for (const rid of f.reads || []) { const r = c.rules.find(x => x.id === rid); if (r) edges.push({ from: "R:" + rid, to: f.id + ":p:" + rid, cls: "param", src: "P:" + r.group, dst: f.id, rule: rid }); }
   }
   for (const gr of [...new Set(c.rules.map(r => r.group))]) nodes.push({ id: "P:" + gr, type: "params", group: gr, rules: c.rules.filter(r => r.group === gr) });
-  G = { u, c, nodes, edges, layerOf, byId, pos: G.pos };
+  G = { U, c, nodes, edges, layerOf, byId, pos: G.pos };
 }
 function port(cls, key) { return el("span", { class: "port " + cls, "data-port": key }); }
-function fmt(r) { const n = ruleNode(G.u, r); return n ? show(n.args[1]) : "?"; }
-function fillText(t) { return t.replace(PLACE, (m, id) => ruleNode(G.u, id) ? fmt(id) : m); }
+const fmt = rid => shown(G.U, rid);
+const fill = t => fillText(G.U, t);
 function nodeEl(n) {
   const drag = { onpointerdown: e => startDrag(e, n) };
-  const u = G.u;
+  const U = G.U;
   if (n.type === "term") return el("div", { class: "node term", "data-node": n.id, onclick: () => select(n.id) },
     el("div", { class: "hd", ...drag }, port("in flow f-fail", n.id + ":in"), el("span", { class: "t" }, n.f.name || n.id, " ", el("span", { class: "n" }, "■ " + n.id))));
   if (n.type === "params") {
     const used = new Set(G.c.flow.flatMap(f => f.reads || []));
     return el("div", { class: "node params", "data-node": n.id },
       el("div", { class: "hd", ...drag }, el("span", { class: "t" }, n.group), el("span", { class: "kind" }, "rules")),
-      n.rules.map(r => el("div", { class: "row" + (used.has(r.id) ? "" : " unused") + (isChanged(u, r.id) ? " changed" : ""), "data-rule": r.id,
+      n.rules.map(r => el("div", { class: "row" + (used.has(r.id) ? "" : " unused") + (isChanged(U, r.id) ? " changed" : ""), "data-rule": r.id,
           title: [r.note, r.unit ? "(" + r.unit + ")" : "", r.evidence ? "evidence: " + r.evidence : ""].filter(Boolean).join(" "),
           onpointerenter: () => hover({ rule: r.id }), onpointerleave: () => hover(null) },
         el("span", { class: "lab" }, el("span", { class: "l" }, r.label), el("span", { class: "rid" }, r.id)),
-        el("span", { class: "ctl" }, editor(u, ruleNode(u, r.id), true)),
+        el("span", { class: "ctl" }, editor(U, r.id)),
         used.has(r.id) ? port("out p-out", "R:" + r.id) : null)),
       el("div", { class: "foot" }));
   }
@@ -1176,31 +611,31 @@ function nodeEl(n) {
   return el("div", { class: "node " + k, "data-node": n.id, onclick: e => { if (!e.target.closest("input,select")) select(n.id); } },
     el("div", { class: "hd", ...drag }, port("in flow", f.id + ":in"), el("span", { class: "gid " + k }, f.id), el("span", { class: "t", title: f.name || "" }, f.name || ""), el("span", { class: "kind" }, k)),
     byLine ? el("div", { class: "by" }, byLine) : null,
-    txt ? el("div", { class: "txt", title: fillText(txt) }, fillText(txt)) : null,
+    txt ? el("div", { class: "txt", title: fill(txt) }, fill(txt)) : null,
     (f.reads || []).length ? el("div", { class: "sec" }, "inputs") : null,
-    (f.reads || []).map(rid => el("div", { class: "row" + (isChanged(u, rid) ? " changed" : ""), "data-rule": rid, onpointerenter: () => hover({ rule: rid }), onpointerleave: () => hover(null) },
+    (f.reads || []).map(rid => el("div", { class: "row" + (isChanged(U, rid) ? " changed" : ""), "data-rule": rid, onpointerenter: () => hover({ rule: rid }), onpointerleave: () => hover(null) },
       port("in p-in", f.id + ":p:" + rid), el("span", { class: "rid" }, rid), el("span", { class: "v" }, fmt(rid)))),
     [...(f.next || []), ...(f.pass || []), ...(f.fail || [])].length ? el("div", { class: "sec", style: "text-align:right" }, "outputs") : null,
-    [...(f.next || []), ...(f.pass || [])].map((l, i) => el("div", { class: "row out pass" }, el("span", { class: "when" }, l.when ? fillText(l.when) : "→ " + l.to), el("span", { class: "sym" }, "✓"), port("out flow", f.id + ":o:p" + i))),
-    (f.fail || []).map((l, i) => el("div", { class: "row out fail" }, el("span", { class: "when" }, l.when ? fillText(l.when) : "→ " + l.to), el("span", { class: "sym" }, "✕"), port("out flow f-fail", f.id + ":o:f" + i))),
+    [...(f.next || []), ...(f.pass || [])].map((l, i) => el("div", { class: "row out pass" }, el("span", { class: "when" }, l.when ? fill(l.when) : "→ " + l.to), el("span", { class: "sym" }, "✓"), port("out flow", f.id + ":o:p" + i))),
+    (f.fail || []).map((l, i) => el("div", { class: "row out fail" }, el("span", { class: "when" }, l.when ? fill(l.when) : "→ " + l.to), el("span", { class: "sym" }, "✕"), port("out flow f-fail", f.id + ":o:f" + i))),
     el("div", { class: "foot" }));
 }
 function renderGraph() {
-  const u = curUnit();
+  const U = curUnit(), c = cat(U);
   const world = $("#world");
   $$("#world .node").forEach(e => e.remove());
   $("#wires").replaceChildren();
-  if (!u || !flowOf(u).length) {
+  if (!c || !c.flow.length) {
     document.body.classList.remove("tab-graph");
     $("#page").append(el("main", {}, el("div", { class: "card" }, el("p", {}, "This unit has no flow. The graph shows the steps, gates, ends and rules of tool and agent units."),
-      units(S.root).filter(x => flowOf(x).length).map(x => el("button", { style: "margin-right:6px", onclick: () => { S.unit = word(x, 0); render(); } }, word(x, 0))))));
+      units().filter(x => x.flow).map(x => el("button", { style: "margin-right:6px", onclick: () => { S.unit = x.name; render(); } }, x.name)))));
     $("#gbar").hidden = true;
     return;
   }
-  const cv = coverage(u);
-  $("#cov").replaceChildren(el("b", {}, word(u, 0)), " · ", ...(cv.gates ? [el("b", {}, Math.round(100 * (cv.proved + cv.tested) / cv.gates) + "%"), ` coverage · ${cv.proved + cv.tested} of ${cv.gates} gates by proved or tested code` + (cv.observed ? `, ${cv.observed} observed` : "") + (cv.code ? `, ${cv.code} by code with no test` : "") + (cv.judge ? `, ${cv.judge} by the model` : "") + (cv.human ? `, ${cv.human} by a person` : "")] : ["no gates"]));
-  if (!G.u || word(G.u, 0) !== word(u, 0) || G.name !== S.name) { try { G.pos = JSON.parse(store.get(posKey()) || "{}") || {}; } catch (e) { G.pos = {}; } }
-  buildGraph(u); G.name = S.name;
+  const cv = c.coverage;
+  $("#cov").replaceChildren(el("b", {}, U.name), " · ", ...(cv.gates ? [el("b", {}, Math.round(100 * (cv.proved + cv.tested) / cv.gates) + "%"), ` coverage · ${cv.proved + cv.tested} of ${cv.gates} gates by proved or tested code` + (cv.observed ? `, ${cv.observed} observed` : "") + (cv.code ? `, ${cv.code} by code with no test` : "") + (cv.judge ? `, ${cv.judge} by the model` : "") + (cv.human ? `, ${cv.human} by a person` : "")] : ["no gates"]));
+  if (!G.U || G.U.name !== U.name || G.name !== S.B.file) { try { G.pos = JSON.parse(store.get(posKey()) || "{}") || {}; } catch (e) { G.pos = {}; } }
+  buildGraph(U); G.name = S.B.file;
   if (S.sel && !G.nodes.some(n => n.id === S.sel)) S.sel = null;
   for (const n of G.nodes) { n.el = nodeEl(n); world.append(n.el); }
   layout();
@@ -1264,7 +699,7 @@ function drawWires() {
     if (e.cls !== "param" && e.label) {
       const t = document.createElementNS(NS, "text"), L = e.path.getTotalLength(), m = e.path.getPointAtLength(L / 2);
       t.setAttribute("x", m.x); t.setAttribute("y", m.y - 6); t.setAttribute("text-anchor", "middle"); t.setAttribute("class", "wl");
-      const lab = fillText(e.label); t.textContent = lab.length > 42 ? lab.slice(0, 40) + "…" : lab;
+      const lab = fill(e.label); t.textContent = lab.length > 42 ? lab.slice(0, 40) + "…" : lab;
       e.text = t; svg.append(t);
     } else e.text = null;
   }
@@ -1330,7 +765,7 @@ async function loadRuns() {  // only rig.py serve has runs
 async function pickRun(id) {
   TRACE = null;
   if (id) { try { const r = await fetch("/runs/" + encodeURIComponent(id), { cache: "no-store" }); if (r.ok) TRACE = await r.json(); } catch (e) { /* no run */ } }
-  if (G.u) { inspector(); applyFocus(); }
+  if (G.U) { inspector(); applyFocus(); }
 }
 function hover(h) { hov = h; applyFocus(); }
 function applyFocus() {
@@ -1358,12 +793,12 @@ function svgLegend(color, dash) {
   l.setAttribute("stroke", color); l.setAttribute("stroke-width", 2); if (dash) l.setAttribute("stroke-dasharray", dash); s.append(l); return s;
 }
 function inspector() {
-  const a = $("#insp"), u = G.u, f = S.sel && G.byId[S.sel];
+  const a = $("#insp"), U = G.U, f = S.sel && G.byId[S.sel];
   const pickRule = rid => { const r = G.c.rules.find(x => x.id === rid); if (r) goTo("P:" + r.group, rid); };
   pickRule.hover = rid => hover(rid ? { rule: rid } : null);
   const link = id => el("a", { style: "cursor:pointer;text-decoration:none", onclick: () => { select(id); goTo(id); } }, el("span", { class: "gid " + (G.byId[id] ? G.byId[id].kind : "") }, id), " ", G.byId[id] ? G.byId[id].name || "" : "");
   if (!f) {
-    a.replaceChildren(el("h2", {}, word(u, 0)), el("p", { class: "dim" }, chips(u, G.c.intent || "", pickRule)),
+    a.replaceChildren(el("h2", {}, U.name), el("p", { class: "dim" }, chips(U, G.c.intent || "", pickRule)),
       el("div", { class: "legend" }, svgLegend("var(--pass)", ""), "pass / next", svgLegend("var(--fail)", "6 5"), "fail", svgLegend("var(--pass)", "2 5"), "back to an earlier node", svgLegend("var(--wire-p)", ""), "rule → node input"),
       el("div", { class: "k" }, "Kinds"),
       el("p", { class: "hint" }, el("span", { class: "gid hard" }, "hard"), " code decides; a fail blocks. ", el("span", { class: "gid soft" }, "soft"), " code decides; a fail is reported. ", el("span", { class: "gid judge" }, "judge"), " the model decides; the result is a guess. ", el("span", { class: "gid human" }, "human"), " a person decides; the flow waits. ", el("span", { class: "gid" }, "step"), " work. ", el("span", { class: "gid end" }, "end"), " the flow stops."),
@@ -1380,14 +815,14 @@ function inspector() {
     el("div", {}, el("span", { class: "gid " + f.kind }, f.id), " ", el("span", { class: "kind" }, f.kind === "step" || f.kind === "end" ? f.kind : f.kind + " gate")),
     el("h2", {}, f.name || f.id),
     (f.by || []).length ? el("p", { class: "code" }, "by " + f.by.join(", ")) : f.kind === "judge" ? el("p", { class: "code" }, "decided by the model: the result is a guess") : f.kind === "human" ? el("p", { class: "code" }, "decided by a person: the flow waits for the answer") : null,
-    sec("When", f.when && chips(u, f.when, pickRule)), sec("Do", f.do && chips(u, f.do, pickRule)),
-    sec(f.kind === "step" ? "Ensure" : "Check", f.ensure && chips(u, f.ensure, pickRule)), sec(f.kind === "human" ? "Ask the person" : "Judge", f.brief && chips(u, f.brief, pickRule)),
-    (f.notes || []).length ? [el("div", { class: "k" }, "Notes"), f.notes.map(n => el("p", { class: "hint" }, chips(u, n.text, pickRule), n.evidence.length ? " (evidence: " + n.evidence.join(", ") + ")" : ""))] : null,
+    sec("When", f.when && chips(U, f.when, pickRule)), sec("Do", f.do && chips(U, f.do, pickRule)),
+    sec(f.kind === "step" ? "Ensure" : "Check", f.ensure && chips(U, f.ensure, pickRule)), sec(f.kind === "human" ? "Ask the person" : "Judge", f.brief && chips(U, f.brief, pickRule)),
+    (f.notes || []).length ? [el("div", { class: "k" }, "Notes"), f.notes.map(n => el("p", { class: "hint" }, chips(U, n.text, pickRule), n.evidence.length ? " (evidence: " + n.evidence.join(", ") + ")" : ""))] : null,
     (f.sees || []).length ? [el("div", { class: "k" }, "Sees"), el("p", { class: "code" }, f.sees.join(", "))] : null,
-    (f.reads || []).length ? [el("div", { class: "k" }, "Reads"), el("p", {}, f.reads.map(rid => [chips(u, "{" + rid + "}", pickRule), " "]))] : null,
+    (f.reads || []).length ? [el("div", { class: "k" }, "Reads"), el("p", {}, f.reads.map(rid => [chips(U, "{" + rid + "}", pickRule), " "]))] : null,
     [...(f.next || []), ...(f.pass || [])].length || (f.fail || []).length ? el("div", { class: "k" }, "Leads to") : null,
-    [...(f.next || []), ...(f.pass || [])].map(l => el("div", { class: "lk pass" }, el("span", { class: "sym" }, "✓"), link(l.to), l.when ? el("span", { class: "when" }, fillText(l.when)) : null)),
-    (f.fail || []).map(l => el("div", { class: "lk fail" }, el("span", { class: "sym" }, "✕"), link(l.to), l.when ? el("span", { class: "when" }, fillText(l.when)) : null)),
+    [...(f.next || []), ...(f.pass || [])].map(l => el("div", { class: "lk pass" }, el("span", { class: "sym" }, "✓"), link(l.to), l.when ? el("span", { class: "when" }, fill(l.when)) : null)),
+    (f.fail || []).map(l => el("div", { class: "lk fail" }, el("span", { class: "sym" }, "✕"), link(l.to), l.when ? el("span", { class: "when" }, fill(l.when)) : null)),
     f.kind === "end" ? el("p", { class: "hint" }, "The flow stops here.") : null,
     from.length ? [el("div", { class: "k" }, "Reached from"), [...new Set(from)].map(id => el("div", { class: "lk" }, link(id)))] : null));
   if (TRACE) a.append(traceInfo(f));
@@ -1443,26 +878,30 @@ function goTo(id, rule) {
 })();
 
 // - Events ---------------------------------------------
-function readFile(file) { const fr = new FileReader(); fr.onload = () => load(String(fr.result), file.name); fr.readAsText(file); }
+function readFile(file) {
+  const fr = new FileReader();
+  fr.onload = () => {
+    try { const c = JSON.parse(String(fr.result)); if (!c.flow && !c.rules) throw new Error("not a catalogue"); load(fromCatalogue(c, file.name)); }
+    catch (e) { msg(file.name + ": open a compiled catalogue (gen/<unit>.json). For a .rig file, run rig.py serve.", false); }
+  };
+  fr.readAsText(file);
+}
 $("#open").addEventListener("click", () => $("#file").click());
 $("#file").addEventListener("change", e => { if (e.target.files[0]) readFile(e.target.files[0]); e.target.value = ""; });
-$("#close").addEventListener("click", () => { if (S.dirty && !confirm("Close without saving your changes?")) return; S.text = null; S.served = false; render(); });
+$("#close").addEventListener("click", () => { if (S.dirty && !confirm("Close without saving your changes?")) return; S.B = null; S.served = false; render(); });
 $("#save").addEventListener("click", async () => {
-  if (S.served) {
-    try {
-      const res = await fetch(S.src, { method: "POST", headers: { "Content-Type": "text/plain; charset=utf-8" }, body: S.text });
-      const j = await res.json();
-      if (!res.ok) { msg(j.error || "not saved", false); return; }
-      S.dirty = false; S.changed = new Set(); render();
-      msg(`Saved ${j.saved}` + (j.wrote && j.wrote.length ? `; compiled ${j.wrote.map(p => p.split(/[\\/]/).pop()).join(", ")}` : "") + ".");
-    } catch (e) { msg("Not saved: " + e.message, false); }
-    return;
-  }
-  download(S.name, S.text, "text/plain"); S.dirty = false; S.changed = new Set(); render();
+  if (!S.served) return;
+  try {
+    const res = await fetch("/file", { method: "POST", headers: { "Content-Type": "text/plain; charset=utf-8" }, body: S.text });
+    const j = await res.json();
+    if (!res.ok) { msg(j.error || "not saved", false); return; }
+    S.B = j.bundle; S.text = j.bundle.text; S.dirty = false; S.changed = new Set(); render();
+    msg(`Saved ${j.saved}` + (j.wrote && j.wrote.length ? `; compiled ${j.wrote.map(p => p.split(/[\\/]/).pop()).join(", ")}` : "") + ".");
+  } catch (e) { msg("Not saved: " + e.message, false); }
 });
 $$(".tabs button").forEach(b => b.addEventListener("click", () => { S.tab = b.dataset.tab; store.set("tab", S.tab); render(); }));
 $("#unit").addEventListener("change", e => { S.unit = e.target.value; S.sel = null; S.view = null; render(); });
-$("#preset").addEventListener("change", e => { if (e.target.value && S.unit) applyPreset(curUnit() ? word(curUnit(), 0) : S.unit, e.target.value); e.target.value = ""; });
+$("#preset").addEventListener("change", e => { if (e.target.value && curUnit()) applyPreset(curUnit(), e.target.value); e.target.value = ""; });
 $("#t-param").onchange = e => document.body.classList.toggle("no-param", !e.target.checked);
 $("#t-fail").onchange = e => { document.body.classList.toggle("no-fail", !e.target.checked); drawWires(); };
 $("#t-anim").onchange = e => document.body.classList.toggle("anim", e.target.checked);
@@ -1479,10 +918,10 @@ document.addEventListener("dragover", e => { e.preventDefault(); document.body.c
 document.addEventListener("dragleave", e => { if (!e.relatedTarget) document.body.classList.remove("drag"); });
 document.addEventListener("drop", e => { e.preventDefault(); document.body.classList.remove("drag"); const f = e.dataTransfer.files[0]; if (f) readFile(f); });
 addEventListener("beforeunload", e => { if (S.dirty) { e.preventDefault(); e.returnValue = ""; } });
-let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (S.tab === "graph" && S.root) drawWires(); }, 120); });
+let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(() => { if (S.tab === "graph" && S.B) drawWires(); }, 120); });
 
 if (!["units", "graph", "skill", "json"].includes(S.tab)) S.tab = "units";
-if (S.src && location.protocol.startsWith("http")) fetchFile(S.src); else render();
+if (S.served) fetchBundle(); else if (params.get("src")) fetchCatalogue(params.get("src")); else render();
 </script>
 </body>
 </html>

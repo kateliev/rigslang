@@ -93,6 +93,7 @@ class Node(object):
 	def __init__(self, head, args, line, indent):
 		self.head, self.args, self.line, self.indent = head, args, line, indent
 		self.children = []
+		self.spans = []
 		self.body = None  # raw lines, cast only
 
 	def word(self, i, default=None):
@@ -103,10 +104,16 @@ class Node(object):
 
 
 # - Parsing ------------------------------------------
-def tokenize(s, line):
-	'''One line (without its indentation) -> a list of args: (kind, text) or ('list', [...]).'''
+def tokenize(s, line, spans=None):
+	'''One line (without its indentation) -> a list of args: (kind, text) or ('list', [...]).
+	spans: a list that gets (start, end) of each top-level arg in s.'''
 	out, stack, i, n = [], [], 0, len(s)
+	start = 0
 	while i < n:
+		if spans is not None and not stack and len(spans) < len(out):
+			spans.append((start, i))
+		if not stack and s[i] not in ' \t':
+			start = i
 		c = s[i]
 		if c in ' \t':
 			i += 1
@@ -150,6 +157,8 @@ def tokenize(s, line):
 		i = j
 	if stack:
 		raise RigError(line, 'a "(" is not closed')
+	if spans is not None and len(spans) < len(out):
+		spans.append((start, i))
 	return out
 
 
@@ -176,13 +185,15 @@ def parse(text):
 		indent = len(lead)
 		while stack[-1].indent >= indent:
 			stack.pop()
-		toks = tokenize(body, line)
+		sp = []
+		toks = tokenize(body, line, sp)
 		if not toks:
 			i += 1
 			continue
 		if toks[0][0] != 'word':
 			raise RigError(line, 'a line must start with a word')
 		node = Node(toks[0][1], toks[1:], line, indent)
+		node.spans = [(indent + a, indent + b) for a, b in sp[1:]]  # the columns of each argument, for the viewer
 		stack[-1].children.append(node)
 		i += 1
 		if node.head == 'cast':
@@ -1598,6 +1609,41 @@ def run_list(folder):
 	return out
 
 
+def bundle(text, path=None):
+	'''Everything the viewer shows for one file, compiled here: the viewer has no parser of its own.
+	-> {"file", "text", "errors", "warnings", "units": [...]}; each unit has its catalogue, skill,
+	tool definition, status, the levels of its gates, and where each rule value is in the text.'''
+	out = {'rig': 0, 'file': os.path.basename(path) if path else 'untitled.rig', 'text': text, 'errors': [], 'warnings': [], 'units': []}
+	try:
+		root = parse(text)
+	except RigError as e:
+		out['errors'] = [[e.line, str(e).split(': ', 1)[-1]]]
+		return out
+	err, warn = check(root, path)
+	out['errors'], out['warnings'] = [list(x) for x in sorted(err)], [list(x) for x in sorted(warn)]
+	ctx = Ctx(root, path) if path else Ctx(root)
+	for u in units(root):
+		name = u.word(0) or '?'
+		d = {'name': name, 'scope': u.word(1, 'snippet'), 'status': unit_status(u, ctx), 'flow': any(c.head in FLOW for c in u.children)}
+		try:
+			d['catalogue'] = catalog(u, None, ctx)
+			d['skill'] = skill(u)
+			d['skill_ref'] = skill(u, name + '.json')
+			d['tool'] = tool_def(u) if u.kids('in') else None
+		except Exception as e:  # a unit with errors may not compile; the errors say why
+			d['catalogue'], d['problem'] = None, '{}: {}'.format(type(e).__name__, e)
+		d['levels'] = dict((g.word(0), gate_level(g, u, ctx, (name,))) for g in u.kids('gate') if g.word(0))
+		src = {}
+		for r in u.kids('rule'):
+			if r.word(0) and len(r.args) > 1 and len(r.spans) > 1:
+				a, b = r.spans[1]
+				src[r.word(0)] = {'line': r.line, 'a': a, 'b': b, 'text': ser(r.args[1]), 'shown': show(r.args[1])}
+		d['rules_src'] = src
+		d['presets_src'] = dict((p.word(0), dict((x.word(0), ser(x.args[1])) for x in p.kids('set') if len(x.args) > 1)) for p in u.kids('preset'))
+		out['units'].append(d)
+	return out
+
+
 def serve(path, port, runs=None, **outs):
 	'''Serve the viewer for one file on 127.0.0.1. Save writes the file and compiles it again.
 	runs: the folder of the run files of the tool (default: "runs" next to the file); the graph shows the path of a run.'''
@@ -1624,7 +1670,7 @@ def serve(path, port, runs=None, **outs):
 		def do_GET(self):
 			if self.path in ('/', '/index.html'):
 				self.send_response(302)
-				self.send_header('Location', '/viewer?src=/file&save=1')
+				self.send_header('Location', '/viewer?serve=1')
 				self.end_headers()
 			elif self.path.startswith('/viewer'):
 				with open(page, encoding='utf-8') as f:
@@ -1632,6 +1678,9 @@ def serve(path, port, runs=None, **outs):
 			elif self.path == '/file':
 				with open(path, encoding='utf-8', newline='') as f:
 					self.reply(200, f.read(), 'text/plain; charset=utf-8')
+			elif self.path == '/bundle':
+				with open(path, encoding='utf-8', newline='') as f:
+					self.reply(200, json.dumps(bundle(f.read(), path), ensure_ascii=False))
 			elif self.path == '/levels':
 				self.reply(200, json.dumps(bound_levels(path)))
 			elif self.path == '/runs':
@@ -1643,9 +1692,11 @@ def serve(path, port, runs=None, **outs):
 				self.reply(404, json.dumps({'error': 'not found'}))
 
 		def do_POST(self):
-			if self.path != '/file':
+			if self.path not in ('/file', '/compile'):
 				return self.reply(404, json.dumps({'error': 'not found'}))
 			text = self.rfile.read(int(self.headers.get('Content-Length', 0))).decode('utf-8')
+			if self.path == '/compile':  # compile changed text for the viewer; write nothing
+				return self.reply(200, json.dumps(bundle(text, path), ensure_ascii=False))
 			try:
 				err, _ = check(parse(text))
 			except RigError as e:
@@ -1658,7 +1709,7 @@ def serve(path, port, runs=None, **outs):
 				done = outputs(path, **outs)
 			except SystemExit as e:
 				return self.reply(400, json.dumps({'error': str(e)}))
-			self.reply(200, json.dumps({'saved': os.path.basename(path), 'wrote': done}))
+			self.reply(200, json.dumps({'saved': os.path.basename(path), 'wrote': done, 'bundle': bundle(text, path)}, ensure_ascii=False))
 
 		def log_message(self, *a):
 			pass

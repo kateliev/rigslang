@@ -389,6 +389,7 @@ class Projects(unittest.TestCase):
 							time.sleep(0.1)
 					self.fail('the server did not answer')
 				self.assertEqual(get('/levels')['demo-tool']['gates.long_enough'], 'tested')
+				self.assertEqual(get('/bundle')['units'][0]['levels']['long-enough'], 'tested')
 				runs = get('/runs')
 				self.assertEqual(runs[0]['state'], 'waits at sensible')
 				self.assertEqual([t['node'] for t in get('/runs/' + runs[0]['id'])['trace']], ['look', 'long-enough'])

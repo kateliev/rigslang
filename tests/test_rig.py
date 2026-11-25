@@ -275,21 +275,26 @@ class Runs(unittest.TestCase):
 		self.assertFalse(ok)
 
 
-@unittest.skipUnless(shutil.which('node'), 'node is not installed')
-class ViewerParity(unittest.TestCase):
-	def test_viewer_matches_rig_py(self):
-		self.maxDiff = 4000
-		got = json.loads(subprocess.check_output(['node', os.path.join(ROOT, 'tests', 'parity.js')] + EXAMPLES + [MISTAKES]).decode('utf-8'))
-		want = []
-		for path in EXAMPLES + [MISTAKES]:
-			root = load(path)
-			for u in rig.units(root):
-				want.append([u.word(0), rig.matrix_hash(u), [rig.body_hash(c) for c in u.kids('cast')],
-					rig.catalog(u), rig.skill(u), rig.skill(u, 'rules.json'),
-					[[p.word(0), rig.catalog(u, p.word(0)), rig.skill(u, None, p.word(0))] for p in u.kids('preset')],
-					rig.tool_def(u)])
-			want.append(['errors', sorted(line for line, _ in rig.check(root)[0])])
-		self.assertEqual(got, want)
+class Viewer(unittest.TestCase):
+	def test_the_viewer_has_no_parser(self):
+		with open(os.path.join(ROOT, 'viewer', 'index.html'), encoding='utf-8') as f:
+			page = f.read()
+		for name in ('function parse(', 'function tokenize(', 'function check(', 'function catalog('):
+			self.assertNotIn(name, page)
+
+	def test_bundle_gives_what_the_viewer_draws(self):
+		path = os.path.join(ROOT, 'examples', 'release-tool', 'release.rig')
+		with open(path, encoding='utf-8') as f:
+			text = f.read()
+		b = rig.bundle(text, path)
+		self.assertEqual(b['errors'], [])
+		u = b['units'][0]
+		self.assertEqual(u['catalogue'], rig.catalog(rig.units(rig.parse(text))[0], None, rig.Ctx(rig.parse(text), path)))
+		s = u['rules_src']['notes.min_words']
+		line = text.split('\n')[s['line'] - 1]
+		self.assertEqual(line[s['a']:s['b']], s['text'])
+		self.assertEqual(u['levels']['approve'], 'human')
+		self.assertTrue(rig.bundle('unit x\n  in "a', None)['errors'])
 
 
 class EditorGrammars(unittest.TestCase):
