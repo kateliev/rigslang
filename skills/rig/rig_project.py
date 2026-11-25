@@ -101,7 +101,26 @@ def outputs(folder, m):
 		out[os.path.join(sub, 'src', 'gen', 'front.json')] = json.dumps(front(m, files, main), ensure_ascii=False, indent=1) + '\n'
 		for rel in ('src/bridge.ts', 'src/index.ts', 'src/tools.ts', 'src/worker.ts', 'try.ts', 'agent.ts', 'work.ts', 'tsconfig.json'):  # the same code for every tool: keep each copy current
 			out[os.path.join(sub, *rel.split('/'))] = read(os.path.join(TEMPLATES, 'plugin', *rel.split('/')))
+		out[os.path.join(sub, 'README.md')] = plugin_words(folder, m, read(os.path.join(TEMPLATES, 'plugin', 'README.md')))
 	return out
+
+
+def plugin_words(folder, m, text, owner=None):
+	'''A template file of the plugin with the words of this tool: its name, its owner, and the inputs of
+	the first regression case as the example of a start_run call (else a placeholder for each input).'''
+	inputs = None
+	reg = m.get('regression')
+	if reg and os.path.exists(os.path.join(folder, reg)):
+		with open(os.path.join(folder, reg), encoding='utf-8') as f:
+			cases = json.load(f)
+		inputs = cases[0].get('inputs') if cases else None
+	if inputs is None:
+		main = main_unit(m, loaded(folder, m))
+		inputs = dict((x.word(0), '...') for x in main.kids('in')) if main is not None else {}
+	words = {'__NAME__': m.get('name', 'tool'), '__OWNER__': owner or (m.get('plugin') or {}).get('owner', 'local'), '__INPUTS__': json.dumps(inputs, ensure_ascii=False)}
+	for k, v in words.items():
+		text = text.replace(k, v)
+	return text
 
 
 # - The front for a model that calls tools (the plugin) ---
@@ -183,16 +202,13 @@ def plugin(folder, owner):
 	if os.path.exists(target) and os.listdir(target):
 		raise SystemExit('{} exists and is not empty'.format(target))
 	base = os.path.join(TEMPLATES, 'plugin')
-	words = {'__NAME__': m.get('name', 'tool'), '__OWNER__': owner}
 	for dirpath, _, names in os.walk(base):
 		for n in sorted(names):
 			src = os.path.join(dirpath, n)
 			rel = os.path.relpath(src, base)
 			if rel.endswith('.tmpl'):
 				rel = os.path.join(os.path.dirname(rel), '.' + os.path.basename(rel)[:-5])
-			text = read(src)
-			for k, v in words.items():
-				text = text.replace(k, v)
+			text = plugin_words(folder, m, read(src), owner)
 			os.makedirs(os.path.dirname(os.path.join(target, rel)), exist_ok=True)
 			rig.write(os.path.join(target, rel), text)
 	with open(os.path.join(folder, 'rig.json'), encoding='utf-8') as f:

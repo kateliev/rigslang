@@ -62,7 +62,7 @@ for _b in BLOCKS:
 	CHILDREN[_b] = set(ITEMS) | BLOCK_OPTIONS.get(_b, set()) | {'note'}
 INLINE = {'step': ('by',), 'gate': ('by', 'fail')}  # children that can stand on the line of their node
 RESERVED = ('continue', 'error')  # "fail -> continue" and the built-in outcome "error": not ids
-# The words of version 0 that version 1 refuses, with what to write instead (handout, Section 3).
+# The words of version 0 that version 1 refuses, with what to write instead (docs/history/handout-language-v1.md, Section 3).
 REMOVED = {
 	'next': 'remove it: the next line is the next node',
 	'pass': 'remove it: a gate that passes goes on to the next line',

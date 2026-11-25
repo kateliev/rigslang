@@ -241,22 +241,7 @@ A gate with more than one `by` has the lowest level of them. A unit in another f
 
 ## 3. Words of version 0
 
-Version 1 refuses these words. The error names the replacement.
-
-| Word | Write instead |
-|---|---|
-| `next -> <id>` | Nothing: the next line is the next node. |
-| `pass -> <id>` | Nothing: a gate that passes goes on to the next line. |
-| `when "text"` (child of a gate) | `if <path>`. The reason of a fail line stays: `fail -> held "why"`. |
-| `brief "text"`, `ensure "text"` | `check "text"`. |
-| `gate … judge` | `gate … model`. |
-| `min`, `max` (rule) | `range <min> <max>`. |
-| `label "text"` (rule) | The string after the value: `rule sort.batch 60 "Bookmarks in one batch"`. |
-| `unit` (child of `rule`) | Put the unit in the label. The word `unit` is only the container. |
-| `external` | `by` names a function of a `code` file, or a unit. |
-| `cast`, `probe`, `evidence`, the scope `snippet` | The code lives in a file (`code <path>`); its test file proves it. Write evidence in the text of a note. |
-
-The commands `prove`, `probe`, `stamp`, `emit` and `hash` are gone. The older examples and the page about them are in `docs/history/`.
+Version 1 refuses the words of language version 0. The error of `rig.py check` names what to write instead.
 
 ## 4. Runs
 
@@ -278,17 +263,7 @@ The **runner** is `rigkit.py` (folder `kit/`). It reads the catalogue (Section 6
 | `answers.json` | **Record**: each answer of the model and of the person, in order. |
 | `marks.json` | The state of the run before each line outside a loop. `rerun` starts there. |
 
-**Commands of the runner** (the `driver` of a project, for example `python3 tool.py`):
-
-| Command | What it does |
-|---|---|
-| `run JSON [--preset N] [--set id=value]` | Start a run. |
-| `answer RUN JSON [--node ID]` | The model answers what the run waits for: `{"result": …}` for a step, `{"pass": true\|false, "why": …}` for a gate. |
-| `approve RUN [WORDS]` | The person answers a human gate: `yes` or `no`, or the words of the answer at a gate with options. |
-| `status RUN`, `resume RUN`, `queues` | Show a run; walk on after a stop of the process; list what waits for the model and for a person. |
-| `rerun RUN --from ID [--set id=value]` | **Rerun**: a new run with the state of the old run before the line ID, and changed rules. |
-| `replay RUN` | **Replay**: run the whole flow again with the current code and the answers recorded in RUN, with no model. It prints the differences of the end and the path. `rig.py test DIR --replay RUN` does the same. |
-| `batch ITEMS [--report PATH]`, `regress FILE [--baseline]`, `rules`, `flow`, `call TOOL JSON` | Many items; the regression set; the rules; the flow; one tool unit. |
+**Commands of the runner.** The `driver` of a project (for example `python3 tool.py`) has the commands `run`, `batch`, `queues`, `answer`, `approve`, `resume`, `status`, `rerun`, `replay`, `rules`, `flow`, `call` and `regress`. Each prints one JSON line. The table of the commands and the keys of a result are in [guide/fronts.md](guide/fronts.md), section 1. `rerun` starts a new run from the state before a line (**rerun**); `replay` plays the recorded answers again with the current code (**replay**).
 
 ## 5. Timeouts and errors
 

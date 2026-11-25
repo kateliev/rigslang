@@ -563,6 +563,27 @@ class Projects(unittest.TestCase):
 		finally:
 			shutil.rmtree(tmp)
 
+	def test_build_writes_the_plugin_readme(self):
+		'''The README of the plugin is compiled too: a hand copy of it went out of step.'''
+		tmp = tempfile.mkdtemp()
+		try:
+			folder = os.path.join(tmp, 'p')
+			self.quiet(rig_project.new, folder, 'demo-tool', 4)
+			self.quiet(rig_project.plugin, folder, 'tester')
+			path = os.path.join(folder, 'plugin', 'README.md')
+			with open(path, encoding='utf-8') as f:
+				text = f.read()
+			self.assertIn('# demo-tool: the LM Studio front', text)
+			with open(os.path.join(folder, 'tests', 'regression-set.json'), encoding='utf-8') as f:
+				first = json.load(f)[0]['inputs']
+			self.assertIn("start_run '{}'".format(json.dumps(first)), text)  # the inputs of a real case
+			self.assertNotIn('__', text)
+			with open(path, 'a', encoding='utf-8') as f:
+				f.write('a change by hand\n')
+			self.assertEqual(self.quiet(rig_project.build, folder, True)[0], 1)  # --check sees it
+		finally:
+			shutil.rmtree(tmp)
+
 	@unittest.skipUnless(shutil.which('node'), 'node is not installed')
 	def test_plugin_front_calls_the_driver(self):
 		tmp = tempfile.mkdtemp()

@@ -77,7 +77,7 @@ python3 ../../skills/rig/rig.py serve release.rig --json gen/release.json
 | [examples/bookmarks/](examples/bookmarks/) | A real tool, level 4: clean up a bookmarks export. Loops over pages of choices and batches to sort, with `for`. |
 | [editors/](editors/) | Syntax highlighting for VS Code and Sublime Text, built from one table. |
 | [tests/](tests/) | Tests of `rig.py`, the runtime, the project commands and the templates. |
-| [docs/](docs/) | [status.md](docs/status.md): the state of the work. [logic.md](docs/logic.md): the ideas of the language. [history/](docs/history/): the first memos, the research notes, and the examples and the snippet scale of language version 0. |
+| [docs/](docs/) | [status.md](docs/status.md): the state of the work. [logic.md](docs/logic.md): the ideas of the language. [history/](docs/history/): the first memos, the research notes, the finished work orders and the dated notes. |
 
 ## The source file
 

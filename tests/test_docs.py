@@ -1,4 +1,4 @@
-"""Guards against drift between the texts and the code (docs/handout-docs-review.md, Section 7).
+"""Guards against drift between the texts and the code (docs/history/handout-docs-review.md, Section 7).
 Run: python3 -m unittest discover -s tests
 
 Each check is its own test, so that a fail names the problem."""
@@ -17,7 +17,7 @@ import rig  # noqa: E402
 import rigkit  # noqa: E402
 
 # Records of their time: they may name old words and old files.
-RECORDS = re.compile(r'^(docs/history/|docs/handout-|docs/review-|\.claude/)')
+RECORDS = re.compile(r'^(docs/history/|\.claude/)')
 COMMANDS_GONE = ('prove', 'probe', 'stamp', 'emit', 'hash')
 # A line that says that a word is gone may name it.
 SAYS_GONE = re.compile(r'\b(gone|removed|version 0|refuses?|Then:)\b', re.I)

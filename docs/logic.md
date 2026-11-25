@@ -68,8 +68,8 @@ A run has a folder. The runner keeps four things there:
 Two limits hold:
 
 1. **Rig is not a general programming language.** It says the order of the work and who decides. Code computes everything.
-2. **One word has one meaning, and a word comes in only when it removes nodes from real flows.** Version 1 has about as many words as version 0 (33), but it says more. The words that went out, and what replaces them, are in the spec, Section 3.
+2. **One word has one meaning, and a word comes in only when it removes nodes from real flows.** Version 1 has about as many words as version 0 (33), but it says more. `rig.py check` refuses each word that went out, and names what replaces it.
 
 ## 8. Where Rig came from
 
-Rig began as a language for single functions: a unit held its code inside the `.rig` file as a **cast**, proved against its examples and pinned by hashes. That idea worked for small pure functions, but a tool needs normal code files, tests and a runner. Since the kit (2026-11-15), the code lives in files and the tests prove it. Version 1 (2026-11-25) removed the snippet scale from the language. Its examples and its task file are in [history/](history/).
+Rig began as a language for single functions: a unit held its code inside the `.rig` file as a **cast**, proved against its examples and pinned by hashes. That idea worked for small pure functions, but a tool needs normal code files, tests and a runner. Since the kit (2026-11-15), the code lives in files and the tests prove it. Version 1 (2026-11-25) removed the snippet scale from the language. Its examples and its task file are only in git (`git show 5337e26:docs/history/`). The first memos are in [history/](history/).

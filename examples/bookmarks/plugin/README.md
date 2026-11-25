@@ -2,7 +2,7 @@
 
 The plugin gives a local model the tools of `bookmarks`. It has no knowledge of its own: the tools and the rules text come from `src/gen/front.json`, which `rig.py build` compiles from the source of the tool. Each tool call goes to the driver of the tool, the same command line that Claude and a person use.
 
-Do not edit `src/bridge.ts`, `src/index.ts`, `src/tools.ts`, `src/worker.ts` or `src/gen/`. Change the tool, then build.
+Do not edit this README, `src/bridge.ts`, `src/index.ts`, `src/tools.ts`, `src/worker.ts` or `src/gen/`: `rig.py build` writes them. Change the tool, then build.
 
 ## Set up
 

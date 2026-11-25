@@ -55,7 +55,7 @@ Each call prints one JSON line. The keys to read:
 
 Two settings of the runner can be rules of the source: `run.errors_stop` (a batch stops after this many errors in a row; default 2) and `run.sees_max` (the longest text in `sees`; default 6000 characters).
 
-Each run has a folder, `runs/<run id>/`: `run.json` (the run), `flow.json` and `rules.json` (the flow and the rule values when the run started), `answers.json` (every answer of the model and of the person, in order) and `marks.json` (the state before each line outside a loop, for `rerun`).
+Each run has a folder, `runs/<run id>/`, with a pinned copy of the flow and the rules, every answer, and the state before each line ([spec.md](../spec.md), section 4).
 
 ## 2. The front for Claude: a skill
 
@@ -71,7 +71,7 @@ A large tool needs more than the compiled file: how to set up the host, how to r
 python3 RIG plugin DIR --owner NAME
 ```
 
-This adds the folder `plugin/`: an LM Studio plugin. Its code is the same for every tool. Everything about the tool comes from `plugin/src/gen/front.json`, which the build compiles:
+This adds the folder `plugin/`: an LM Studio plugin. Its code is the same for every tool. `rig.py build` keeps the code and the README current; do not edit them. Everything about the tool comes from `plugin/src/gen/front.json`, which the build compiles:
 
 - **The tools.** `start_run` (with the inputs of the unit), `answer_gate` (only when the flow has a gate for the model), `work_run` when the flow has a step of the model with an `out` type (the worker, below), `finish_step` for the other steps of the model, `run_status`, `start_batch`, `queues`, and one tool for each tool unit.
 - **The rules text.** About ten short numbered lines. The plugin puts it before the first message of a chat.
