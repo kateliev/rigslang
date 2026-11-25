@@ -29,15 +29,15 @@ More instruction text does not fix this. The fix is to move work out of the text
 | **Rules** | Every number, switch and name of the tool. One place. | The person. A change is a change of one value, with a reason. |
 | **Steps** | The work. The only code that touches the world. | Code. |
 | **Gates** | The decisions. | Code where code can decide. Else the model, marked as a guess. Else a person. |
-| **Flow** | Which node comes after which, and where a run can end. | The source file. Code walks it. |
+| **Flow** | The order of the lines, the blocks (`for`, `until`, `if`, `finally`), and where a run can end. | The source file. Code walks it. |
 
 A gate has one of four kinds:
 
 | Kind | Who decides | What it means |
 |---|---|---|
-| `hard` | code | A fact. A fail blocks. |
-| `soft` | code | A fact. A fail is reported, and the run can go on. |
-| `judge` | the model | A guess. The result says so. |
+| `hard` | code | A fact. A fail goes to an end. |
+| `soft` | code | A fact. A fail is reported, and the run goes on. |
+| `model` | the model | A guess. The result says so. |
 | `human` | a person | The run waits. The model cannot answer. |
 
 The model keeps the work it is good at: a judgment that no rule can hold, a step that needs language, a case that the flow did not expect. Everything else is code.
@@ -49,7 +49,7 @@ The model keeps the work it is good at: a judgment that no rule can hold, a step
    (Claude, a plugin,   ──►  walks the flow            ──►  steps.py   does the work
     a person)                of the catalogue               gates.py   decides
         ▲                         │
-        │   waiting: a judge      │   it stops only where code
+        │   waiting: a model      │   it stops only where code
         │   gate, a human gate,   │   cannot go on
         └── or a step with ───────┘
             no code

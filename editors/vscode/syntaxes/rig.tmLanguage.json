@@ -11,200 +11,7 @@
 			"include": "#comment"
 		},
 		{
-			"begin": "^(\\s*)(cast)\\s+(py)(?=[\\s;]|$)(?:\\s+(#[^\\s;]*))?(?:\\s+(#[^\\s;]*))?(?:\\s+(proved|observed)(?:\\s+(\\d{4}-\\d{2}-\\d{2}))?)?\\s*(;.*)?$",
-			"beginCaptures": {
-				"2": {
-					"name": "storage.type.cast.rig"
-				},
-				"3": {
-					"name": "storage.type.language.rig"
-				},
-				"4": {
-					"name": "constant.other.hash.rig"
-				},
-				"5": {
-					"name": "constant.other.hash.rig"
-				},
-				"6": {
-					"name": "keyword.other.proved.rig"
-				},
-				"7": {
-					"name": "constant.numeric.date.rig"
-				},
-				"8": {
-					"name": "comment.line.semicolon.rig"
-				}
-			},
-			"while": "^(?=\\1[ \\t]+\\S|[ \\t]*$)",
-			"contentName": "meta.embedded.block.py.rig",
-			"patterns": [
-				{
-					"include": "source.python"
-				}
-			]
-		},
-		{
-			"begin": "^(\\s*)(cast)\\s+(js)(?=[\\s;]|$)(?:\\s+(#[^\\s;]*))?(?:\\s+(#[^\\s;]*))?(?:\\s+(proved|observed)(?:\\s+(\\d{4}-\\d{2}-\\d{2}))?)?\\s*(;.*)?$",
-			"beginCaptures": {
-				"2": {
-					"name": "storage.type.cast.rig"
-				},
-				"3": {
-					"name": "storage.type.language.rig"
-				},
-				"4": {
-					"name": "constant.other.hash.rig"
-				},
-				"5": {
-					"name": "constant.other.hash.rig"
-				},
-				"6": {
-					"name": "keyword.other.proved.rig"
-				},
-				"7": {
-					"name": "constant.numeric.date.rig"
-				},
-				"8": {
-					"name": "comment.line.semicolon.rig"
-				}
-			},
-			"while": "^(?=\\1[ \\t]+\\S|[ \\t]*$)",
-			"contentName": "meta.embedded.block.js.rig",
-			"patterns": [
-				{
-					"include": "source.js"
-				}
-			]
-		},
-		{
-			"begin": "^(\\s*)(cast)\\s+(ts)(?=[\\s;]|$)(?:\\s+(#[^\\s;]*))?(?:\\s+(#[^\\s;]*))?(?:\\s+(proved|observed)(?:\\s+(\\d{4}-\\d{2}-\\d{2}))?)?\\s*(;.*)?$",
-			"beginCaptures": {
-				"2": {
-					"name": "storage.type.cast.rig"
-				},
-				"3": {
-					"name": "storage.type.language.rig"
-				},
-				"4": {
-					"name": "constant.other.hash.rig"
-				},
-				"5": {
-					"name": "constant.other.hash.rig"
-				},
-				"6": {
-					"name": "keyword.other.proved.rig"
-				},
-				"7": {
-					"name": "constant.numeric.date.rig"
-				},
-				"8": {
-					"name": "comment.line.semicolon.rig"
-				}
-			},
-			"while": "^(?=\\1[ \\t]+\\S|[ \\t]*$)",
-			"contentName": "meta.embedded.block.ts.rig",
-			"patterns": [
-				{
-					"include": "source.ts"
-				}
-			]
-		},
-		{
-			"begin": "^(\\s*)(cast)\\s+(sh)(?=[\\s;]|$)(?:\\s+(#[^\\s;]*))?(?:\\s+(#[^\\s;]*))?(?:\\s+(proved|observed)(?:\\s+(\\d{4}-\\d{2}-\\d{2}))?)?\\s*(;.*)?$",
-			"beginCaptures": {
-				"2": {
-					"name": "storage.type.cast.rig"
-				},
-				"3": {
-					"name": "storage.type.language.rig"
-				},
-				"4": {
-					"name": "constant.other.hash.rig"
-				},
-				"5": {
-					"name": "constant.other.hash.rig"
-				},
-				"6": {
-					"name": "keyword.other.proved.rig"
-				},
-				"7": {
-					"name": "constant.numeric.date.rig"
-				},
-				"8": {
-					"name": "comment.line.semicolon.rig"
-				}
-			},
-			"while": "^(?=\\1[ \\t]+\\S|[ \\t]*$)",
-			"contentName": "meta.embedded.block.sh.rig",
-			"patterns": [
-				{
-					"include": "source.shell"
-				}
-			]
-		},
-		{
-			"begin": "^(\\s*)(cast)\\s+(rust)(?=[\\s;]|$)(?:\\s+(#[^\\s;]*))?(?:\\s+(#[^\\s;]*))?(?:\\s+(proved|observed)(?:\\s+(\\d{4}-\\d{2}-\\d{2}))?)?\\s*(;.*)?$",
-			"beginCaptures": {
-				"2": {
-					"name": "storage.type.cast.rig"
-				},
-				"3": {
-					"name": "storage.type.language.rig"
-				},
-				"4": {
-					"name": "constant.other.hash.rig"
-				},
-				"5": {
-					"name": "constant.other.hash.rig"
-				},
-				"6": {
-					"name": "keyword.other.proved.rig"
-				},
-				"7": {
-					"name": "constant.numeric.date.rig"
-				},
-				"8": {
-					"name": "comment.line.semicolon.rig"
-				}
-			},
-			"while": "^(?=\\1[ \\t]+\\S|[ \\t]*$)",
-			"contentName": "meta.embedded.block.rust.rig",
-			"patterns": [
-				{
-					"include": "source.rust"
-				}
-			]
-		},
-		{
-			"begin": "^(\\s*)(cast)\\s+([^\\s();\"][^\\s();]*)(?=[\\s;]|$)(?:\\s+(#[^\\s;]*))?(?:\\s+(#[^\\s;]*))?(?:\\s+(proved|observed)(?:\\s+(\\d{4}-\\d{2}-\\d{2}))?)?\\s*(;.*)?$",
-			"beginCaptures": {
-				"2": {
-					"name": "storage.type.cast.rig"
-				},
-				"3": {
-					"name": "storage.type.language.rig"
-				},
-				"4": {
-					"name": "constant.other.hash.rig"
-				},
-				"5": {
-					"name": "constant.other.hash.rig"
-				},
-				"6": {
-					"name": "keyword.other.proved.rig"
-				},
-				"7": {
-					"name": "constant.numeric.date.rig"
-				},
-				"8": {
-					"name": "comment.line.semicolon.rig"
-				}
-			},
-			"while": "^(?=\\1[ \\t]+\\S|[ \\t]*$)",
-			"contentName": "markup.raw.block.rig"
-		},
-		{
-			"match": "^(unit)\\s+([^\\s();\"][^\\s();]*)(?:\\s+(snippet|tool|agent)(?=[\\s;]|$))?",
+			"match": "^(unit)\\s+([^\\s();\"][^\\s();]*)(?:\\s+(tool|agent)(?=[\\s;]|$))?",
 			"captures": {
 				"1": {
 					"name": "storage.type.unit.rig"
@@ -243,40 +50,10 @@
 			}
 		},
 		{
-			"match": "^\\s*(intent|example|ensure)(?=[\\s;]|$)",
+			"match": "^\\s*(intent|example|check)(?=[\\s;]|$)",
 			"captures": {
 				"1": {
 					"name": "keyword.other.matrix.rig"
-				}
-			}
-		},
-		{
-			"match": "^\\s*(probe)(?=[\\s;]|$)",
-			"captures": {
-				"1": {
-					"name": "keyword.other.context.rig"
-				}
-			}
-		},
-		{
-			"match": "^\\s*(check)(?=[\\s;]|$)(?:\\s+([^\\s();\"][^\\s();]*))?",
-			"captures": {
-				"1": {
-					"name": "keyword.other.matrix.rig"
-				},
-				"2": {
-					"name": "storage.type.language.rig"
-				}
-			}
-		},
-		{
-			"match": "^\\s*(evidence)(?=[\\s;]|$)(?:\\s+([^\\s();\"][^\\s();]*))?",
-			"captures": {
-				"1": {
-					"name": "keyword.other.context.rig"
-				},
-				"2": {
-					"name": "markup.underline.link.rig"
 				}
 			}
 		},
@@ -288,17 +65,6 @@
 				},
 				"2": {
 					"name": "entity.other.inherited-class.rig"
-				}
-			}
-		},
-		{
-			"match": "^\\s*(external)(?=[\\s;]|$)(?:\\s+([^\\s();\"][^\\s();]*))?",
-			"captures": {
-				"1": {
-					"name": "keyword.other.context.rig"
-				},
-				"2": {
-					"name": "support.function.rig"
 				}
 			}
 		},
@@ -344,7 +110,7 @@
 			}
 		},
 		{
-			"match": "^\\s*(note|label|options|min|max|unit)(?=[\\s;]|$)",
+			"match": "^\\s*(note|options|range)(?=[\\s;]|$)",
 			"captures": {
 				"1": {
 					"name": "keyword.other.context.rig"
@@ -363,7 +129,7 @@
 			}
 		},
 		{
-			"match": "^\\s*(gate)(?=[\\s;]|$)(?:\\s+([^\\s();\"][^\\s();]*))?(?:\\s+(hard|soft|judge|human)(?=[\\s;]|$))?",
+			"match": "^\\s*(gate)(?=[\\s;]|$)(?:\\s+([^\\s();\"][^\\s();]*))?(?:\\s+(hard|soft|model|human)(?=[\\s;]|$))?",
 			"captures": {
 				"1": {
 					"name": "storage.type.node.rig"
@@ -373,6 +139,42 @@
 				},
 				"3": {
 					"name": "storage.modifier.gate.rig"
+				}
+			}
+		},
+		{
+			"match": "^\\s*(for)(?=[\\s;]|$)(?:\\s+([^\\s();\"][^\\s();]*))?(?:\\s+(in)(?=[\\s;]|$))?(?:\\s+([^\\s();\"][^\\s();]*))?",
+			"captures": {
+				"1": {
+					"name": "keyword.control.block.rig"
+				},
+				"2": {
+					"name": "variable.other.item.rig"
+				},
+				"3": {
+					"name": "keyword.control.block.rig"
+				},
+				"4": {
+					"name": "variable.other.path.rig"
+				}
+			}
+		},
+		{
+			"match": "^\\s*(until|if)(?=[\\s;]|$)(?:\\s+([^\\s();\"][^\\s();]*))?",
+			"captures": {
+				"1": {
+					"name": "keyword.control.block.rig"
+				},
+				"2": {
+					"name": "variable.other.path.rig"
+				}
+			}
+		},
+		{
+			"match": "^\\s*(else|section|finally)(?=[\\s;]|$)",
+			"captures": {
+				"1": {
+					"name": "keyword.control.block.rig"
 				}
 			}
 		},
@@ -388,7 +190,7 @@
 			}
 		},
 		{
-			"match": "^\\s*(when|do|brief|next|pass|fail)(?=[\\s;]|$)",
+			"match": "^\\s*(do|fail|retry|timeout|tolerate)(?=[\\s;]|$)",
 			"captures": {
 				"1": {
 					"name": "keyword.control.flow.rig"
@@ -464,13 +266,21 @@
 			"match": "(?<![^\\s(])=>(?=[\\s();]|$)",
 			"name": "keyword.operator.arrow.rig"
 		},
-		"date": {
-			"match": "(?<![^\\s(])\\d{4}-\\d{2}-\\d{2}(?=[\\s();]|$)",
-			"name": "constant.numeric.date.rig"
+		"inline": {
+			"match": "(?<![^\\s(])(?:by|fail)(?=[\\s();]|$)",
+			"name": "keyword.control.flow.rig"
 		},
-		"hash": {
-			"match": "(?<![^\\s(])#[0-9a-fA-F]+(?=[\\s();]|$)",
-			"name": "constant.other.hash.rig"
+		"percent": {
+			"match": "(?<![^\\s(])\\d+(?:\\.\\d+)?%(?=[\\s();]|$)",
+			"name": "constant.numeric.rig"
+		},
+		"time": {
+			"match": "(?<![^\\s(])\\d+[smhd](?=[\\s();]|$)",
+			"name": "constant.numeric.rig"
+		},
+		"bar": {
+			"match": "(?<![^\\s(])\\|(?=[\\s();]|$)",
+			"name": "punctuation.separator.rig"
 		},
 		"number": {
 			"match": "(?<![^\\s(])[-+]?\\d+(?:\\.\\d+)?(?=[\\s();]|$)",
@@ -510,10 +320,16 @@
 					"include": "#example"
 				},
 				{
-					"include": "#date"
+					"include": "#inline"
 				},
 				{
-					"include": "#hash"
+					"include": "#percent"
+				},
+				{
+					"include": "#time"
+				},
+				{
+					"include": "#bar"
 				},
 				{
 					"include": "#number"

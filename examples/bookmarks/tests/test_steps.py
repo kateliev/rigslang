@@ -27,8 +27,10 @@ class Steps(unittest.TestCase):
 		shutil.rmtree(self.tmp)
 
 	def go(self, state, name):
-		state[name] = getattr(steps, name)(state, self.R)
-		return state[name]
+		'''Run one step as the runner does: its value goes to the state, under the id of its node.'''
+		node = {'page': 'show', 'dupes': 'similar', 'group': 'similar'}.get(name, name)
+		state[node] = getattr(steps, name)(state, self.R)
+		return state[node]
 
 	def test_read(self):
 		self.assertFalse(steps.read({'file': os.path.join(self.tmp, 'none.html')}, self.R)['ok'])
@@ -44,34 +46,35 @@ class Steps(unittest.TestCase):
 		s = {'file': FIXTURE}
 		self.go(s, 'read')
 		self.assertEqual(self.go(s, 'dupes'), {'removed': 3})
-		self.assertEqual(self.go(s, 'group'), {'folded': 2, 'groups': 2, 'pages': 1, 'too_big': 0})
+		self.assertEqual(self.go(s, 'group'), {'folded': 2, 'groups': 2, 'pages': [1], 'too_big': 0})
+		s['page'] = 1  # the item of the loop "for page in similar.pages"
 		p = self.go(s, 'page')
-		self.assertEqual((p['page'], p['of'], len(p['groups'])), (1, 1, 2))
+		self.assertEqual((p['page'], p['of'], len(p['groups']), p['ask']), (1, 1, 2, True))
 		self.assertTrue(os.path.exists(p['file']))
-		s['choose'] = {'pass': True, 'why': '1=7'}
-		self.assertFalse(self.go(s, 'apply')['ok'])
-		self.assertEqual(self.go(s, 'page')['page'], 1)  # nothing was saved
-		s['choose'] = {'pass': True, 'why': '1=2'}
+		s['choose'] = {'answer': 'yes 1=7'}
+		self.assertFalse(self.go(s, 'apply')['pass'])
+		self.assertTrue(self.go(s, 'page')['ask'])  # nothing was saved
+		s['choose'] = {'answer': 'yes 1=2'}
 		self.assertEqual(self.go(s, 'apply')['removed'], 3)  # group 1 keeps URL 2; group 2 keeps the shortest
-		self.assertIsNone(self.go(s, 'page')['page'])
-		self.assertEqual(self.go(s, 'loose'), {'fit': 22, 'loose': 11, 'misfiled': 1, 'batches': 2})
-		b = self.go(s, 'batch')
+		self.assertFalse(self.go(s, 'page')['ask'])  # decided before: a restart does not ask again
+		self.assertEqual(self.go(s, 'loose'), {'fit': 22, 'loose': 11, 'misfiled': 1, 'batches': [1, 2]})
+		s['batch'] = 1  # the item of the loop "for batch in loose.batches"
+		b = self.go(s, 'prepare')
 		self.assertEqual((b['batch'], b['of'], len(b['bookmarks'])), (1, 2, 10))
 		self.assertNotIn('Favorites bar', b['folders'])  # keep.bar
 		s['sort'] = [{'id': x['id'], 'folder': 'Other favorites > Hobbies', 'new': True} for x in b['bookmarks']]
-		self.assertEqual(self.go(s, 'keep'), {'batch': 1, 'moved': 10, 'new': ['Other favorites > Hobbies']})
-		b = self.go(s, 'batch')
+		self.assertEqual(self.go(s, 'keep'), {'pass': True, 'batch': 1, 'moved': 10, 'new': ['Other favorites > Hobbies']})
+		s['batch'] = 2
+		b = self.go(s, 'prepare')
 		self.assertEqual((b['batch'], b['new_so_far']), (2, ['Other favorites > Hobbies']))
-		self.assertIn('Other favorites > Hobbies', b['folders'])
-		self.go(s, 'skip')
-		self.assertIsNone(self.go(s, 'batch')['batch'])
+		self.assertIn('Other favorites > Hobbies', b['folders'])  # batch 2 gets no saved answer: it stays unsorted
 		f = self.go(s, 'folders')
 		self.assertEqual([(x['n'], x['bookmarks']) for x in f['new']], [(1, 10)])
-		s['new-ok'] = {'pass': True, 'why': '2=no'}
-		self.assertFalse(self.go(s, 'accept')['ok'])
-		s['new-ok'] = {'pass': True, 'why': None}
+		s['new-ok'] = {'answer': 'yes 2=no'}
+		self.assertFalse(self.go(s, 'accept')['pass'])
+		s['new-ok'] = {'answer': 'yes'}
 		self.assertEqual(self.go(s, 'accept')['made'], ['Other favorites > Hobbies'])
-		self.assertEqual(self.go(s, 'links'), {'checked': False, 'dead': 0})
+		self.assertEqual(steps.dead_links(s, self.R), [])
 		r = self.go(s, 'report')
 		self.assertEqual((r['bookmarks_before'], r['bookmarks_after'], r['moved'], r['new_folders'], r['unsorted_batches']), (42, 34, 10, 1, 1))
 		with open(r['report'], encoding='utf-8') as fh:
@@ -94,17 +97,17 @@ class Steps(unittest.TestCase):
 		s = {'file': FIXTURE}
 		for name in ('read', 'dupes', 'group'):
 			self.go(s, name)
-		s['choose'] = {'pass': False}
+		s['choose'], s['page'], s['batch'] = {'answer': 'no'}, 1, 1
 		self.go(s, 'page')
 		self.assertTrue(self.go(s, 'apply')['rest'])
 		self.go(s, 'loose')
-		b = self.go(s, 'batch')
+		b = self.go(s, 'prepare')
 		ids = [x['id'] for x in b['bookmarks']]
 		s['sort'] = [{'id': ids[0], 'folder': 'Other favorites > A', 'new': True}, {'id': ids[1], 'folder': 'Other favorites > A > B', 'new': True}] + \
 			[{'id': i, 'folder': 'Other favorites > Travel'} for i in ids[2:]]
 		self.go(s, 'keep')
 		self.go(s, 'folders')
-		s['new-ok'] = {'pass': True, 'why': '1=no'}
+		s['new-ok'] = {'answer': 'yes 1=no'}
 		a = self.go(s, 'accept')
 		self.assertEqual((a['made'], a['left_out']), ([], ['Other favorites > A', 'Other favorites > A > B']))  # B was in A
 		plan = steps.plan_of(s, self.R)
@@ -114,19 +117,19 @@ class Steps(unittest.TestCase):
 		s = {'file': FIXTURE}
 		for name in ('read', 'dupes', 'group'):
 			self.go(s, name)
-		s['choose'] = {'pass': False}
+		s['choose'], s['page'] = {'answer': 'no'}, 1
 		for name in ('page', 'apply', 'loose', 'folders'):
 			self.go(s, name)
-		s['new-ok'] = {'pass': False}
+		s['new-ok'] = {'answer': 'no'}
 		self.go(s, 'accept')
 		steps.save(s['read']['work'], 'dead.json', [0, 20])  # what a later link checker writes
-		self.assertEqual(self.go(s, 'links')['dead'], 2)
+		self.assertEqual(steps.dead_links(s, self.R), [0, 20])
 		r = self.go(s, 'report')
 		self.assertEqual((r['dead'], r['new_folders']), (2, 1))
 		b = self.go(s, 'build')
 		self.assertEqual((b['same_bookmarks'], b['moves_astray']), (True, []))
 		with self.assertRaises(NotImplementedError):
-			steps.links(s, rigkit.Rules(CATALOGUE, {'links.check': True}))
+			steps.dead_links(s, rigkit.Rules(CATALOGUE, {'links.check': True}))
 
 
 class Resume(unittest.TestCase):
@@ -137,16 +140,16 @@ class Resume(unittest.TestCase):
 			runs = os.path.join(tmp, 'runs')
 			r = tool.kit(runs).run({'file': FIXTURE}, rules=changes)
 			self.assertEqual(r['waiting']['node'], 'choose')
-			r = tool.kit(runs).answer(r['run'], {'pass': True}, who='person')
-			self.assertEqual(r['waiting']['sees']['batch']['batch'], 1)
-			first = [{'id': x['id'], 'folder': x['folder']} for x in r['waiting']['sees']['batch']['bookmarks']]
+			r = tool.kit(runs).approve(r['run'], ['yes'])
+			self.assertEqual(r['waiting']['sees']['prepare']['batch'], 1)
+			first = [{'id': x['id'], 'folder': x['folder']} for x in r['waiting']['sees']['prepare']['bookmarks']]
 			r = tool.kit(runs).answer(r['run'], {'result': first})
-			self.assertEqual(r['waiting']['sees']['batch']['batch'], 2)
+			self.assertEqual(r['waiting']['sees']['prepare']['batch'], 2)
 			# a new process: the saved batch is not asked again
 			again = tool.kit(runs)
-			self.assertEqual(again.status(r['run'])['waiting']['sees']['batch']['batch'], 2)
+			self.assertEqual(again.status(r['run'])['waiting']['sees']['prepare']['batch'], 2)
 			self.assertEqual(again.queues()['left_for_model'][0]['run'], r['run'])
-			r = again.answer(r['run'], {'result': [{'id': x['id'], 'folder': x['folder']} for x in r['waiting']['sees']['batch']['bookmarks']]})
+			r = again.answer(r['run'], {'result': [{'id': x['id'], 'folder': x['folder']} for x in r['waiting']['sees']['prepare']['bookmarks']]})
 			self.assertEqual(r['waiting']['node'], 'approve')
 			self.assertEqual(tool.kit(runs).queues()['waits_for_person'][0]['run'], r['run'])
 			self.assertIn('refused', json.dumps(_refused(lambda: tool.kit(runs).answer(r['run'], {'pass': True}))))  # the model cannot answer for the person

@@ -1,7 +1,8 @@
 ; band-facts: for a band name, one paragraph and the list of albums, from English Wikipedia.
 ; Made with "rig.py new", level 3. It is the earlier example bandsearch, built again with the kit:
 ; code finds and reads the article and lists the albums; the model writes one paragraph and
-; judges two things; a gate in code holds the word limit.
+; decides two gates; a gate in code holds the word limit. Each gate that checks the paragraph sends it
+; back to the model at most answer.rounds times (retry).
 
 unit band-facts agent
   intent "for a band name, write one paragraph about the band and list its albums, with the facts of its English Wikipedia article only"
@@ -12,96 +13,66 @@ unit band-facts agent
   code steps steps.py
     test tests/test_steps.py
 
-  rule answer.max_words 120
-    min 40
-    max 300
-    label "Longest paragraph"
-    unit "words"
+  rule answer.max_words 120 "Longest paragraph, in words"
+    range 40 300
     note "an earlier form of this tool had the limit only in the text of a step; the model wrote 142 words for a limit of 120"
-  rule answer.rounds 2
-    min 0
-    max 5
-    label "Most rewrites of the paragraph"
+  rule answer.rounds 2 "Most rewrites of the paragraph, for each gate that checks it"
+    range 0 5
     note "the regression set has a case that needs one rewrite; no case needed more than two"
-  rule albums.max 25
-    min 1
-    max 100
-    label "Most albums in the list"
+  rule albums.max 25 "Most albums in the list"
+    range 1 100
     note "longer lists were mostly singles and live albums"
-  rule search.results 5
-    min 1
-    max 20
-    label "Search results to look at"
-    note "a live run for a famous band gave a list page as the first result; the step now prefers the title that is the name"
-      evidence README.md
-  rule http.timeout 10
-    min 1
-    max 60
-    unit "seconds"
-    label "Time to wait for each request"
+  rule search.results 5 "Search results to look at"
+    range 1 20
+    note "a live run for a famous band gave a list page as the first result; the step now prefers the title that is the name (README.md)"
+  rule http.timeout 10 "Time to wait for each request, in seconds"
+    range 1 60
     note "the two services answered in under two seconds; ten leaves room for a slow day"
 
-  step find "Find the article"
+  step find "Find the article" by steps.find
     do "search English Wikipedia for the band name; take the result with the name of the band, else the first result"
-    by steps.find
     reads http.timeout search.results
-    next -> article
   gate article hard "Article found"
-    ensure "the search answered, and it found an article in at most {search.results} results"
+    check "the search answered, and it found an article in at most {search.results} results"
     by gates.article_found
-    pass -> read
     fail -> none "the search found no article"
     fail -> offline "the search did not answer"
-  step read "Read the article"
+  step read "Read the article" by steps.read
     do "read the summary and the Discography section of the article; if the page only lists the meanings of the name, read the article name (band)"
-    by steps.read
     reads http.timeout
-    next -> summary
   gate summary hard "Summary received"
-    ensure "the article has a summary"
+    check "the article has a summary"
     by gates.summary_ok
-    pass -> title
     fail -> none "the article has no summary"
   gate title hard "The article has the name of the band"
-    ensure "the title of the article is the name of the band, with or without a word in brackets"
+    check "the title of the article is the name of the band, with or without a word in brackets"
     by gates.title_matches
-    note "a run with a real model: a search for a name that is no band gave the article of a politician; the judge gate saw it, and now code sees it first"
-    pass -> is-band
+    note "a run with a real model: a search for a name that is no band gave the article of a politician; the model gate saw it, and now code sees it first"
     fail -> none "the article has another name"
-  gate is-band judge "The article is about the band"
-    brief "pass if the description and the summary are about a music group with this name; fail if they are about a person, a place, a film or another thing"
+  gate is-band model "The article is about the band"
+    check "pass if the description and the summary are about a music group with this name; fail if they are about a person, a place, a film or another thing"
     sees band read.title read.description read.summary
     note "candidate for code: the description of the article often has the word band"
-    pass -> albums
     fail -> none "the article is not about the band"
   gate albums soft "Albums found"
-    ensure "the Discography section lists at least one album"
+    check "the Discography section lists at least one album; a fail is reported"
     by gates.albums_found
-    pass -> write
-    fail -> write "the article lists no albums"
-  step write "Write the paragraph"
+  step write "Write the paragraph" by model
     do "write one paragraph about the band, of at most {answer.max_words} words, with facts of the summary only; if you see problems, fix them; give the paragraph as the result"
     sees read.summary write
-    next -> short
+    out text
   gate short hard "Short enough"
-    ensure "the paragraph has at most {answer.max_words} words, and it is not empty"
+    check "the paragraph has at most {answer.max_words} words, and it is not empty"
     by gates.short_enough
-    pass -> grounded
-    fail -> rounds "the paragraph is too long or empty"
-  gate grounded judge "Only facts of the article"
-    brief "compare the paragraph with the summary; fail if the paragraph states a fact that the summary does not have, and name that fact in why"
+    retry answer.rounds
+    fail -> unfinished "the paragraph is too long or empty"
+  gate grounded model "Only facts of the article"
+    check "compare the paragraph with the summary; fail if the paragraph states a fact that the summary does not have, and name that fact in why"
     sees write read.summary
-    pass -> compose
-    fail -> rounds "the paragraph has a fact that is not in the summary"
-  gate rounds hard "A rewrite is left"
-    ensure "the paragraph was written at most {answer.rounds} times after the first"
-    by gates.rounds_left
-    pass -> write
-    fail -> unfinished "no rewrite left"
-  step compose "Compose the answer"
+    retry answer.rounds
+    fail -> unfinished "the paragraph has a fact that is not in the summary"
+  step compose "Compose the answer" by steps.compose
     do "join the paragraph, at most {albums.max} albums as title (year), and the URL of the article"
-    by steps.compose
-    next -> done
   end done "Answered"
   end none "No article"
   end offline "The service did not answer"

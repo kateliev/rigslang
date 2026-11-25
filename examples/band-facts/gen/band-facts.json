@@ -1,12 +1,11 @@
 {
- "rig": 0,
+ "rig": 1,
  "unit": "band-facts",
  "scope": "agent",
  "preset": null,
  "intent": "for a band name, write one paragraph about the band and list its albums, with the facts of its English Wikipedia article only",
  "notes": [],
  "uses": [],
- "external": [],
  "code": [
   {
    "prefix": "gates",
@@ -30,14 +29,32 @@
   "type": "text",
   "text": "one paragraph, the albums as title (year), and the URL of the article"
  },
+ "examples": [],
+ "checks": [],
  "start": "find",
+ "finally": null,
+ "body": [
+  "find",
+  "article",
+  "read",
+  "summary",
+  "title",
+  "is-band",
+  "albums",
+  "write",
+  "short",
+  "grounded",
+  "compose",
+  "done",
+  "none",
+  "offline",
+  "unfinished"
+ ],
  "coverage": {
-  "gates": 8,
-  "proved": 0,
-  "tested": 6,
-  "observed": 0,
+  "gates": 7,
+  "tested": 5,
   "code": 0,
-  "judge": 2,
+  "model": 2,
   "human": 0,
   "none": 0
  },
@@ -46,19 +63,18 @@
   {
    "id": "answer.max_words",
    "group": "answer",
-   "label": "Longest paragraph",
+   "label": "Longest paragraph, in words",
    "type": "number",
    "value": 120,
    "default": 120,
    "min": 40,
    "max": 300,
-   "unit": "words",
    "note": "an earlier form of this tool had the limit only in the text of a step; the model wrote 142 words for a limit of 120"
   },
   {
    "id": "answer.rounds",
    "group": "answer",
-   "label": "Most rewrites of the paragraph",
+   "label": "Most rewrites of the paragraph, for each gate that checks it",
    "type": "number",
    "value": 2,
    "default": 2,
@@ -86,19 +102,17 @@
    "default": 5,
    "min": 1,
    "max": 20,
-   "note": "a live run for a famous band gave a list page as the first result; the step now prefers the title that is the name",
-   "evidence": "README.md"
+   "note": "a live run for a famous band gave a list page as the first result; the step now prefers the title that is the name (README.md)"
   },
   {
    "id": "http.timeout",
    "group": "http",
-   "label": "Time to wait for each request",
+   "label": "Time to wait for each request, in seconds",
    "type": "number",
    "value": 10,
    "default": 10,
    "min": 1,
    "max": 60,
-   "unit": "seconds",
    "note": "the two services answered in under two seconds; ten leaves room for a slow day"
   }
  ],
@@ -106,6 +120,7 @@
   {
    "id": "find",
    "kind": "step",
+   "lane": "code",
    "name": "Find the article",
    "do": "search English Wikipedia for the band name; take the result with the name of the band, else the first result",
    "by": [
@@ -115,27 +130,19 @@
     "http.timeout",
     "search.results"
    ],
-   "next": [
-    {
-     "to": "article"
-    }
-   ]
+   "next": "article"
   },
   {
    "id": "article",
    "kind": "hard",
+   "lane": "code",
    "name": "Article found",
-   "ensure": "the search answered, and it found an article in at most {search.results} results",
+   "check": "the search answered, and it found an article in at most {search.results} results",
    "by": [
     "gates.article_found"
    ],
    "reads": [
     "search.results"
-   ],
-   "pass": [
-    {
-     "to": "read"
-    }
    ],
    "fail": [
     {
@@ -146,11 +153,13 @@
      "to": "offline",
      "when": "the search did not answer"
     }
-   ]
+   ],
+   "next": "read"
   },
   {
    "id": "read",
    "kind": "step",
+   "lane": "code",
    "name": "Read the article",
    "do": "read the summary and the Discography section of the article; if the page only lists the meanings of the name, read the article name (band)",
    "by": [
@@ -159,44 +168,33 @@
    "reads": [
     "http.timeout"
    ],
-   "next": [
-    {
-     "to": "summary"
-    }
-   ]
+   "next": "summary"
   },
   {
    "id": "summary",
    "kind": "hard",
+   "lane": "code",
    "name": "Summary received",
-   "ensure": "the article has a summary",
+   "check": "the article has a summary",
    "by": [
     "gates.summary_ok"
-   ],
-   "pass": [
-    {
-     "to": "title"
-    }
    ],
    "fail": [
     {
      "to": "none",
      "when": "the article has no summary"
     }
-   ]
+   ],
+   "next": "title"
   },
   {
    "id": "title",
    "kind": "hard",
+   "lane": "code",
    "name": "The article has the name of the band",
-   "ensure": "the title of the article is the name of the band, with or without a word in brackets",
+   "check": "the title of the article is the name of the band, with or without a word in brackets",
    "by": [
     "gates.title_matches"
-   ],
-   "pass": [
-    {
-     "to": "is-band"
-    }
    ],
    "fail": [
     {
@@ -204,28 +202,24 @@
      "when": "the article has another name"
     }
    ],
+   "next": "is-band",
    "notes": [
     {
-     "text": "a run with a real model: a search for a name that is no band gave the article of a politician; the judge gate saw it, and now code sees it first",
-     "evidence": []
+     "text": "a run with a real model: a search for a name that is no band gave the article of a politician; the model gate saw it, and now code sees it first"
     }
    ]
   },
   {
    "id": "is-band",
-   "kind": "judge",
+   "kind": "model",
+   "lane": "model",
    "name": "The article is about the band",
-   "brief": "pass if the description and the summary are about a music group with this name; fail if they are about a person, a place, a film or another thing",
+   "check": "pass if the description and the summary are about a music group with this name; fail if they are about a person, a place, a film or another thing",
    "sees": [
     "band",
     "read.title",
     "read.description",
     "read.summary"
-   ],
-   "pass": [
-    {
-     "to": "albums"
-    }
    ],
    "fail": [
     {
@@ -233,36 +227,28 @@
      "when": "the article is not about the band"
     }
    ],
+   "next": "albums",
    "notes": [
     {
-     "text": "candidate for code: the description of the article often has the word band",
-     "evidence": []
+     "text": "candidate for code: the description of the article often has the word band"
     }
    ]
   },
   {
    "id": "albums",
    "kind": "soft",
+   "lane": "code",
    "name": "Albums found",
-   "ensure": "the Discography section lists at least one album",
+   "check": "the Discography section lists at least one album; a fail is reported",
    "by": [
     "gates.albums_found"
    ],
-   "pass": [
-    {
-     "to": "write"
-    }
-   ],
-   "fail": [
-    {
-     "to": "write",
-     "when": "the article lists no albums"
-    }
-   ]
+   "next": "write"
   },
   {
    "id": "write",
    "kind": "step",
+   "lane": "model",
    "name": "Write the paragraph",
    "do": "write one paragraph about the band, of at most {answer.max_words} words, with facts of the summary only; if you see problems, fix them; give the paragraph as the result",
    "reads": [
@@ -272,82 +258,62 @@
     "read.summary",
     "write"
    ],
-   "next": [
-    {
-     "to": "short"
-    }
-   ]
+   "out": "text",
+   "schema": {
+    "type": "string"
+   },
+   "next": "short"
   },
   {
    "id": "short",
    "kind": "hard",
+   "lane": "code",
    "name": "Short enough",
-   "ensure": "the paragraph has at most {answer.max_words} words, and it is not empty",
+   "check": "the paragraph has at most {answer.max_words} words, and it is not empty",
    "by": [
     "gates.short_enough"
    ],
    "reads": [
-    "answer.max_words"
+    "answer.max_words",
+    "answer.rounds"
    ],
-   "pass": [
-    {
-     "to": "grounded"
-    }
-   ],
+   "retry": "answer.rounds",
    "fail": [
     {
-     "to": "rounds",
+     "to": "unfinished",
      "when": "the paragraph is too long or empty"
     }
-   ]
+   ],
+   "next": "grounded",
+   "back": "write"
   },
   {
    "id": "grounded",
-   "kind": "judge",
+   "kind": "model",
+   "lane": "model",
    "name": "Only facts of the article",
-   "brief": "compare the paragraph with the summary; fail if the paragraph states a fact that the summary does not have, and name that fact in why",
+   "check": "compare the paragraph with the summary; fail if the paragraph states a fact that the summary does not have, and name that fact in why",
+   "reads": [
+    "answer.rounds"
+   ],
    "sees": [
     "write",
     "read.summary"
    ],
-   "pass": [
-    {
-     "to": "compose"
-    }
-   ],
-   "fail": [
-    {
-     "to": "rounds",
-     "when": "the paragraph has a fact that is not in the summary"
-    }
-   ]
-  },
-  {
-   "id": "rounds",
-   "kind": "hard",
-   "name": "A rewrite is left",
-   "ensure": "the paragraph was written at most {answer.rounds} times after the first",
-   "by": [
-    "gates.rounds_left"
-   ],
-   "reads": [
-    "answer.rounds"
-   ],
-   "pass": [
-    {
-     "to": "write"
-    }
-   ],
+   "retry": "answer.rounds",
    "fail": [
     {
      "to": "unfinished",
-     "when": "no rewrite left"
+     "when": "the paragraph has a fact that is not in the summary"
     }
-   ]
+   ],
+   "next": "compose",
+   "back": "write"
   },
   {
    "id": "compose",
    "kind": "step",
+   "lane": "code",
    "name": "Compose the answer",
    "do": "join the paragraph, at most {albums.max} albums as title (year), and the URL of the article",
    "by": [
@@ -356,31 +322,32 @@
    "reads": [
     "albums.max"
    ],
-   "next": [
-    {
-     "to": "done"
-    }
-   ]
+   "next": "done"
   },
   {
    "id": "done",
    "kind": "end",
+   "lane": "end",
    "name": "Answered"
   },
   {
    "id": "none",
    "kind": "end",
+   "lane": "end",
    "name": "No article"
   },
   {
    "id": "offline",
    "kind": "end",
+   "lane": "end",
    "name": "The service did not answer"
   },
   {
    "id": "unfinished",
    "kind": "end",
+   "lane": "end",
    "name": "No good paragraph"
   }
- ]
+ ],
+ "blocks": []
 }

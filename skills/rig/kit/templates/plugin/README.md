@@ -36,6 +36,6 @@ node --no-warnings agent.ts "the task" --then "approve yes"
 
 ## What the model cannot do
 
-- It cannot answer a `human` gate: there is no tool for that. The operator answers with a chat message that starts with `approve`: `approve yes`, `approve no`, or `approve RUN yes WORDS` when more than one run waits. The plugin runs that message before the model sees it, and the model reads only the result. The command in `waiting.command` does the same in a terminal.
+- It cannot answer a `human` gate: there is no tool for that. The operator answers with a chat message that starts with `approve`: `approve yes`, `approve no`, or, at a gate with options, `approve` and the words of the answer (`approve yes` takes the first option). Write `approve RUN ...` when more than one run waits. The plugin runs that message before the model sees it, and the model reads only the result. The command in `waiting.command` does the same in a terminal.
 - It cannot decide a gate that code decides: the driver refuses.
 - It cannot send code: the bridge passes JSON only, and starts the driver without a shell.

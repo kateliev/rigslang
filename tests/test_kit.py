@@ -1,5 +1,5 @@
 """Tests for the runtime kit (skills/rig/kit/rigkit.py) and the project commands of rig.py
-(new, build, doctor). Run: python -m unittest discover tests"""
+(new, build, doctor, test). Run: python3 -m unittest discover -s tests"""
 import contextlib
 import io
 import json
@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -23,52 +24,108 @@ BOOKMARKS = os.path.join(ROOT, 'examples', 'bookmarks')
 
 FLOW = '''unit demo agent
   in n int "a number"
-  rule limits.max 10
-    min 1
-    max 100
-  rule limits.rounds 2
-  step double "Double"
+  code code code.py
+  rule limits.max 10 "Largest number"
+    range 1 100
+  step double "Double" by code.double
     do "double the number"
-    by code.double
-    next -> small
   gate small hard "Small"
-    ensure "the number is at most {limits.max}"
+    check "the number is at most {limits.max}"
     by code.small
-    pass -> nice
     fail -> big "too big"
     fail -> huge "much too big"
-  gate nice judge "Nice"
-    brief "is {limits.max} a nice limit?"
-    pass -> sure
-    fail -> fix
-  step fix "Fix"
-    do "give a better number"
-    next -> small
-  gate sure human "Sure"
-    brief "ask the person"
-    pass -> done
+  gate nice model "Nice"
+    check "is {limits.max} a nice limit?"
+    fail -> big
+  gate sure human "Sure?"
+    check "ask the person"
     fail -> big
   end done "Done"
   end big "Big"
   end huge "Huge"
 '''
 
+LOOPS = '''unit loops agent
+  in n int "a number"
+  code code code.py
+  rule loop.rounds 1 "Retries"
+    range 0 5
+  step make by code.make
+  for x in make.items
+    tolerate 50%
+    fail -> held "too many left"
+    step draft by model
+      do "give a number"
+      out (record v int)
+      timeout 1h
+    gate even hard
+      check "the number is even"
+      by code.even
+      retry loop.rounds
+      fail -> continue "odd"
+  if make.big
+    gate big human "Big?"
+      timeout 1h
+      fail -> no "timeout"
+  else
+    step small by code.small
+  until make.done
+    retry 2
+    fail -> held
+    step tick by code.tick
+  gate pick human "Which?"
+    options a | b c
+    by code.pick
+  end done "Done"
+  end held "Held"
+  end no "No"
+  finally
+    step summary by code.summary
+'''
+
 
 def catalogue(text=FLOW):
-	root = rig.parse(text)
-	return rig.catalog(rig.units(root)[0])
+	return rig.catalog(rig.units(rig.parse(text))[0])
 
 
 def kit(runs=None, **code):
 	k = rigkit.Kit(catalogue(), runs=runs)
-	fns = {'double': lambda s, R: s['n'] * 2 if 'fix' not in s else s['fix'],
-		'small': lambda s, R: (s.get('fix') or s['double']) <= R('limits.max') or {'pass': False, 'when': 'much too big' if s['double'] > 50 else 'too big', 'problems': ['{} is over limits.max'.format(s['double'])]}}
+	fns = {'double': lambda s, R: s['n'] * 2,
+		'small': lambda s, R: s['double'] <= R('limits.max') or {'pass': False, 'when': 'much too big' if s['double'] > 50 else 'too big', 'problems': ['{} is over limits.max'.format(s['double'])]}}
 	fns.update(code)
 	return k.bind('code', fns)
 
 
+def make(s, R):
+	return {'items': list(range(s['n'])), 'big': s['n'] > 5, 'done': False}
+
+
+def tick(s, R):
+	s['make']['done'] = (s.get('tick') or 0) >= 1
+	return (s.get('tick') or 0) + 1
+
+
+def pick(s, R):
+	return s['pick']['answer'] in ('a', 'b c') or {'pass': False, 'problems': ['say a, or b c']}
+
+
+def loops(runs=None, text=LOOPS, **code):
+	k = rigkit.Kit(catalogue(text), runs=runs)
+	fns = {'make': make, 'even': lambda s, R: s['draft']['v'] % 2 == 0, 'small': lambda s, R: 'small',
+		'tick': tick, 'pick': pick, 'summary': lambda s, R: 'summary'}
+	fns.update(code)
+	return k.bind('code', fns)
+
+
+def ago(run_file, seconds):
+	'''Move the start of the wait of a run back in time, as if the time had passed.'''
+	run = rigkit.read_json(run_file)
+	run['since'] = (__import__('datetime').datetime.now() - __import__('datetime').timedelta(seconds=seconds)).isoformat(timespec='seconds')
+	rigkit.write_json(run_file, run)
+
+
 class Rules(unittest.TestCase):
-	def test_values_and_limits(self):
+	def test_values_and_range(self):
 		R = rigkit.Rules(catalogue())
 		self.assertEqual(R('limits.max'), 10)
 		R.set('limits.max', '20')
@@ -79,13 +136,17 @@ class Rules(unittest.TestCase):
 			R('limits.nothing')
 		self.assertEqual(R.fill('at most {limits.max}, {not.a.rule} {word}'), 'at most 20, {not.a.rule} {word}')
 
+	def test_a_catalogue_of_version_0_is_refused(self):
+		with self.assertRaises(ValueError):
+			rigkit.Kit({'rig': 0, 'flow': []})
+
 
 class Runs(unittest.TestCase):
 	def test_code_walks_until_the_model(self):
 		r = kit().run({'n': 2})
 		self.assertEqual(r['path'], ['double', 'small'])
-		self.assertEqual(r['waiting']['kind'], 'judge')
-		self.assertEqual(r['waiting']['brief'], 'is 10 a nice limit?')
+		self.assertEqual(r['waiting']['kind'], 'model')
+		self.assertEqual(r['waiting']['check'], 'is 10 a nice limit?')
 
 	def test_a_fail_follows_the_line_that_the_gate_names(self):
 		self.assertEqual(kit().run({'n': 8})['outcome']['end'], 'big')
@@ -114,95 +175,239 @@ class Runs(unittest.TestCase):
 		self.assertEqual(r['waiting']['kind'], 'human')
 		with self.assertRaises(rigkit.Refused):
 			k.answer(r['run'], {'pass': True})         # the model cannot answer for the person
-		r = k.answer(r['run'], {'pass': True}, who='person')
+		r = k.approve(r['run'], ['yes'])
 		self.assertEqual(r['outcome']['end'], 'done')
 		self.assertEqual(r['guessed'], ['nice'])
 		with self.assertRaises(rigkit.Refused):
 			k.answer(r['run'], {'pass': True})         # the run ended
 
-	def test_the_model_does_a_step_with_no_code(self):
-		k = kit()
-		r = k.run({'n': 2})
-		r = k.answer(r['run'], {'pass': False})
-		self.assertEqual((r['waiting']['node'], r['waiting']['kind']), ('fix', 'step'))
-		r = k.answer(r['run'], {'result': 3})
-		self.assertEqual(r['waiting']['node'], 'nice')
-		self.assertEqual(r['path'], ['double', 'small', 'nice', 'fix', 'small'])
-
-	def test_a_route_fail_is_not_a_problem(self):
-		k = kit(small=lambda s, R: {'pass': False, 'when': 'too big', 'route': True})
-		r = k.run({'n': 2})
-		self.assertEqual(r['outcome']['end'], 'big')
-		self.assertEqual(r['problems'], [])
-		run = k.load(r['run'])
-		self.assertTrue(run['trace'][1]['route'])  # the trace keeps it
-		r = kit(small=lambda s, R: {'pass': False, 'when': 'too big'}).run({'n': 2})
-		self.assertEqual(r['problems'], ['small: too big'])
-
-	def test_waiting_shows_the_problems_since_the_last_answer(self):
-		k = kit(small=lambda s, R: s.get('fix', 1) <= R('limits.max') or {'pass': False, 'when': 'too big', 'problems': ['{} is over limits.max'.format(s['fix'])]})
-		k.flow['small']['fail'] = [{'to': 'fix', 'when': 'too big'}]  # a correction loop
-		r = k.run({'n': 2})
-		r = k.answer(r['run'], {'pass': False})
-		self.assertNotIn('problems', r['waiting'])  # the first visit of fix
-		r = k.answer(r['run'], {'result': 11})
-		self.assertEqual((r['waiting']['node'], r['waiting']['problems']), ('fix', ['small: 11 is over limits.max']))
-		r = k.answer(r['run'], {'result': 12})
-		self.assertEqual(r['waiting']['problems'], ['small: 12 is over limits.max'])  # only what failed after the last answer
-		r = k.answer(r['run'], {'result': 3})
-		self.assertEqual(r['waiting']['node'], 'nice')
-
-	def test_a_loop_stops(self):
-		k = rigkit.Kit(catalogue(), max_visits=3).bind('code', {'double': lambda s, R: 1, 'small': lambda s, R: True})
-		r = k.run({'n': 1})
-		for _ in range(10):
-			if 'outcome' in r:
-				break
-			r = k.answer(r['run'], {'pass': False} if r['waiting']['kind'] == 'judge' else {'result': 1})
-		self.assertIsNone(r['outcome']['end'])
-		self.assertIn('more than 3 times', r['outcome']['label'])
-
-	def test_an_error_is_a_result_and_the_run_can_resume(self):
-		state = {'broken': True}
-
-		def double(s, R):
-			if state['broken']:
-				raise ValueError('the host is not ready')
-			return 2
-		k = kit(double=double)
-		r = k.run({'n': 1})
-		self.assertIn('the host is not ready', r['error']['error'])
-		with self.assertRaises(rigkit.Refused):
-			k.answer(r['run'], {'result': 2})          # code does this step
-		state['broken'] = False
-		self.assertEqual(k.resume(r['run'])['waiting']['node'], 'nice')
-
-	def test_a_run_survives_a_restart(self):
-		tmp = tempfile.mkdtemp()
-		try:
-			r = kit(runs=tmp).run({'n': 2})
-			r = kit(runs=tmp).answer(r['run'], {'pass': True})   # a new Kit, as after a restart
-			self.assertEqual(r['waiting']['node'], 'sure')
-			self.assertEqual(r['path'], ['double', 'small', 'nice'])
-		finally:
-			shutil.rmtree(tmp)
-
 	def test_a_gate_with_no_code_is_a_guess(self):
 		k = rigkit.Kit(catalogue()).bind('code', {'double': lambda s, R: 2})
 		r = k.run({'n': 1})
-		self.assertEqual((r['waiting']['node'], r['waiting']['kind']), ('small', 'judge'))
+		self.assertEqual((r['waiting']['node'], r['waiting']['kind']), ('small', 'model'))
 		self.assertIn('no_code', r['waiting'])
 		self.assertEqual(k.answer(r['run'], {'pass': True})['guessed'], ['small'])
 
+	def test_an_error_ends_the_run_and_finally_runs(self):
+		def broken(s, R):
+			raise ValueError('the host is not ready')
+		r = loops(make=broken).run({'n': 2})
+		self.assertEqual(r['outcome']['end'], 'error')
+		self.assertIn('the host is not ready', r['error']['error'])
+		self.assertEqual(r['path'], ['make', 'summary'])  # finally ran after the error
+
+	def test_a_code_step_that_runs_too_long(self):
+		text = 'unit t agent\n  code code code.py\n  step slow by code.slow\n    timeout 1s\n  end done\n'
+		k = rigkit.Kit(catalogue(text)).bind('code', {'slow': lambda s, R: time.sleep(3)})
+		r = k.run({})
+		self.assertEqual(r['outcome']['end'], 'error')
+		self.assertIn('Timeout', r['error']['error'])
+
+	def test_the_result_is_the_value_of_the_step_before_the_end(self):
+		text = 'unit t agent\n  code code code.py\n  step make by code.make\n  end done\n'
+		k = rigkit.Kit(catalogue(text)).bind('code', {'make': lambda s, R: 'made'})
+		self.assertEqual(k.run({})['result'], 'made')
+
+	def test_sees(self):
+		text = FLOW.replace('    check "is {limits.max} a nice limit?"', '    check "is {limits.max} a nice limit?"\n    sees n double nothing.here')
+		k = rigkit.Kit(catalogue(text)).bind('code', {'double': lambda s, R: {'value': s['n'] * 2}, 'small': lambda s, R: True})
+		r = k.run({'n': 2})
+		self.assertEqual(r['waiting']['sees'], {'n': 2, 'double': {'value': 4}})   # a path that is not there is left out
+		r = k.answer(r['run'], {'pass': True})
+		r = k.approve(r['run'], ['yes'])
+		self.assertNotIn('result', r)                                              # a gate came last: no result
+
+
+class Blocks(unittest.TestCase):
+	def test_for_with_retry_and_continue(self):
+		k = loops()
+		r = k.run({'n': 3})
+		self.assertEqual((r['waiting']['node'], r['waiting']['item']), ('draft', {'for:x': 0}))
+		self.assertEqual(r['waiting']['schema']['required'], ['v'])
+		r = k.answer(r['run'], {'result': {'v': 1}})           # odd: retry goes back to draft
+		self.assertEqual((r['waiting']['node'], r['waiting']['problems']), ('draft', ['even: odd']))
+		r = k.answer(r['run'], {'result': {'v': 3}})           # odd again: no retry left, the item is left
+		self.assertEqual(r['waiting']['item'], {'for:x': 1})
+		self.assertEqual(r['left'], [{'block': 'for:x', 'item': 0, 'gate': 'even', 'why': 'odd'}])
+		r = k.answer(r['run'], {'result': {'v': 2}})
+		r = k.answer(r['run'], {'result': {'v': 4}})
+		self.assertEqual(r['waiting']['node'], 'pick')          # 1 of 3 left: within tolerate 50%
+		self.assertIn('small', r['path'])                       # n <= 5: the else body
+		self.assertEqual(r['path'].count('tick'), 2)            # until: the body, then once more
+
+	def test_tolerate(self):
+		k = loops(even=lambda s, R: False)
+		r = k.run({'n': 2})
+		for _ in range(4):
+			r = k.answer(r['run'], {'result': {'v': 1}})
+		self.assertEqual(r['outcome']['end'], 'held')           # 2 of 2 left: more than 50%
+		self.assertIn('2 of 2 items were left', r['problems'][-1])
+		self.assertEqual(r['path'][-1], 'summary')
+
+	def test_the_answer_must_have_the_form_of_out(self):
+		k = loops()
+		r = k.run({'n': 1})
+		r = k.answer(r['run'], {'result': {'v': 'two'}})
+		self.assertEqual(r['waiting']['node'], 'draft')
+		self.assertIn('result.v: a whole number', r['waiting']['problems'][0])
+
+	def test_options_ask_again_and_the_default(self):
+		k = loops()
+		r = k.run({'n': 1})
+		r = k.answer(r['run'], {'result': {'v': 2}})
+		self.assertEqual((r['waiting']['options'], r['waiting']['default']), (['a', 'b c'], 'a'))
+		with self.assertRaises(rigkit.Refused):
+			k.answer(r['run'], {'answer': 'a'})                  # only a person
+		r = k.approve(r['run'], ['zz'])
+		self.assertEqual(r['waiting']['problems'], ['pick: the answer "zz" is not understood: say a, or b c'])
+		r = k.approve(r['run'], ['b', 'c'])
+		self.assertEqual(r['outcome']['end'], 'done')
+		r2 = k.answer(k.run({'n': 1})['run'], {'result': {'v': 2}})
+		self.assertEqual(k.approve(r2['run'], [])['outcome']['end'], 'done')  # only accept: the default "a"
+
+	def test_if(self):
+		k = loops(make=lambda s, R: {'items': [], 'big': True, 'done': True})
+		r = k.run({'n': 6})
+		self.assertEqual(r['waiting']['node'], 'big')
+		r = k.approve(r['run'], ['no'])
+		self.assertEqual(r['outcome']['end'], 'no')
+
+	def test_until_gives_up(self):
+		k = loops(make=lambda s, R: {'items': [], 'big': False, 'done': False}, tick=lambda s, R: 1)
+		r = k.run({'n': 0})
+		self.assertEqual(r['outcome']['end'], 'held')
+		self.assertEqual(r['path'].count('tick'), 3)          # the body, then retry 2
+
+	def test_an_if_on_one_node(self):
+		text = 'unit t agent\n  code code code.py\n  step a by code.a\n  step b by code.b\n    if a.go\n  end done\n'
+		k = rigkit.Kit(catalogue(text)).bind('code', {'a': lambda s, R: {'go': False}, 'b': lambda s, R: 'b'})
+		self.assertEqual(k.run({})['path'], ['a', 'done'])
+
+	def test_timeouts(self):
+		tmp = tempfile.mkdtemp()
+		try:
+			k = loops(runs=tmp, make=lambda s, R: {'items': [1], 'big': True, 'done': True})
+			r = k.run({'n': 1})
+			ago(os.path.join(tmp, r['run'], 'run.json'), 7200)    # the model step waited two hours
+			with self.assertRaises(rigkit.Refused):
+				k.answer(r['run'], {'result': {'v': 2}})            # too late
+			r = k.status(r['run'])
+			self.assertEqual(r['waiting']['node'], 'draft')       # no result: the gate after it failed, and its retry asks again
+			self.assertIn('gave no result in time', r['waiting']['problems'][-1])
+			ago(os.path.join(tmp, r['run'], 'run.json'), 7200)    # no result again: no retry is left, the item is left
+			r = k.status(r['run'])
+			self.assertIn('gave no result in time', r['left'][0]['why'])
+			self.assertEqual(r['outcome']['end'], 'held')         # 1 of 1 item left: more than tolerate 50%
+			k = loops(runs=tmp, make=lambda s, R: {'items': [], 'big': True, 'done': True})
+			r = k.run({'n': 1})
+			self.assertEqual(r['waiting']['node'], 'big')
+			ago(os.path.join(tmp, r['run'], 'run.json'), 7200)    # the person did not answer in time
+			r = k.status(r['run'])
+			self.assertEqual(r['outcome']['end'], 'no')
+			self.assertIn('no answer in 1h', r['problems'][0])
+		finally:
+			shutil.rmtree(tmp)
+
+	def test_progress_is_saved_after_each_item(self):
+		tmp = tempfile.mkdtemp()
+		try:
+			seen = []
+
+			def even(s, R):
+				seen.append(s['x'])
+				if s['x'] == 2 and len(seen) < 4:
+					raise KeyboardInterrupt  # the process stops in the middle of item 2
+				return True
+			text = LOOPS.replace('    step draft by model\n      do "give a number"\n      out (record v int)\n      timeout 1h\n', '')
+			text = text.replace('      retry loop.rounds\n', '')
+			with self.assertRaises(KeyboardInterrupt):
+				loops(runs=tmp, text=text, even=even).run({'n': 4})
+			run_id = os.listdir(tmp)[0]
+			r = loops(runs=tmp, text=text, even=even).resume(run_id)   # a new process
+			self.assertEqual(seen, [0, 1, 2, 2, 3])                     # items 0 and 1 are not done again
+			self.assertEqual(r['waiting']['node'], 'pick')
+		finally:
+			shutil.rmtree(tmp)
+
+
+class Pinned(unittest.TestCase):
+	def setUp(self):
+		self.tmp = tempfile.mkdtemp()
+
+	def tearDown(self):
+		shutil.rmtree(self.tmp)
+
+	def test_a_run_keeps_its_flow_and_rules(self):
+		r = kit(runs=self.tmp).run({'n': 2}, rules={'limits.max': 20})
+		folder = os.path.join(self.tmp, r['run'])
+		self.assertEqual(sorted(os.listdir(folder)), ['answers.json', 'flow.json', 'marks.json', 'rules.json', 'run.json'])
+		self.assertEqual(rigkit.read_json(os.path.join(folder, 'rules.json'))['limits.max'], 20)
+		changed = catalogue(FLOW.replace('  gate sure human "Sure?"\n    check "ask the person"\n    fail -> big\n', ''))
+		k = rigkit.Kit(changed, runs=self.tmp).bind('code', {'double': lambda s, R: s['n'] * 2, 'small': lambda s, R: True})
+		r = k.status(r['run'])
+		self.assertIn('The flow changed', r['note'])
+		r = k.answer(r['run'], {'pass': True})
+		self.assertEqual(r['waiting']['node'], 'sure')        # the pinned flow still has the gate
+
+	def test_answers_are_recorded(self):
+		k = kit(runs=self.tmp)
+		r = k.run({'n': 2})
+		r = k.answer(r['run'], {'pass': True, 'why': 'round'})
+		k.approve(r['run'], ['yes'])
+		log = rigkit.read_json(os.path.join(self.tmp, r['run'], 'answers.json'))
+		self.assertEqual([(a['node'], a['who'], a['answer']) for a in log], [('nice', 'model', {'pass': True, 'why': 'round'}), ('sure', 'person', {'pass': True})])
+
+	def test_rerun_from_a_node(self):
+		k = kit(runs=self.tmp)
+		r = k.run({'n': 2})
+		r = k.answer(r['run'], {'pass': True})
+		r = k.approve(r['run'], ['no'])
+		self.assertEqual(r['outcome']['end'], 'big')
+		again = k.rerun(r['run'], 'small', {'limits.max': 3})
+		self.assertEqual(again['from'], {'run': r['run'], 'from': 'small'})
+		self.assertEqual((again['outcome']['end'], again['path']), ('big', ['small', 'big']))  # double is not done again; 4 > 3
+		with self.assertRaises(rigkit.Refused):
+			k.rerun(r['run'], 'nowhere')
+
+	def test_replay(self):
+		k = loops(runs=self.tmp)
+		r = k.run({'n': 2})
+		r = k.answer(r['run'], {'result': {'v': 1}})
+		r = k.answer(r['run'], {'result': {'v': 2}})
+		r = k.answer(r['run'], {'result': {'v': 4}})
+		r = k.approve(r['run'], ['zz'])
+		r = k.approve(r['run'], ['a'])
+		self.assertEqual(r['outcome']['end'], 'done')
+		got = loops(runs=self.tmp).replay(r['run'])
+		self.assertEqual((got['end'], got['answers'], got['differences']), ('done', 5, []))
+		self.assertEqual(os.listdir(self.tmp), [r['run']])     # a replay writes no run
+		got = loops(runs=self.tmp, even=lambda s, R: False).replay(r['run'])  # the code changed
+		self.assertTrue(got['differences'])
+
+
+class CommandLine(unittest.TestCase):
 	def test_command_line(self):
-		lines = []
-		k = kit()
-		self.assertEqual(k.cli(['run', '{"n": 2}', '--set', 'limits.max=30'], lines.append), 0)
-		self.assertEqual(k.cli(['answer', 'no-such-run', '{"pass": true}'], lines.append), 0)
-		self.assertIn('waiting', lines[0])
-		self.assertIn('refused', lines[1])
-		self.assertEqual(k.cli(['run', 'not json'], lines.append), 0)
-		self.assertIn('refused', lines[2])
+		tmp = tempfile.mkdtemp()
+		try:
+			lines = []
+			k = kit(runs=tmp)
+			self.assertEqual(k.cli(['run', '{"n": 2}', '--set', 'limits.max=30'], lines.append), 0)
+			run = json.loads(lines[0])['run']
+			self.assertEqual(k.cli(['answer', 'no-such-run', '{"pass": true}'], lines.append), 0)
+			self.assertIn('refused', lines[1])
+			self.assertEqual(k.cli(['answer', run, '{"pass": true}', '--node', 'small'], lines.append), 0)
+			self.assertIn('waits at \\"nice\\"', lines[2])
+			k.cli(['answer', run, '{"pass": true}'], lines.append)
+			k.cli(['approve', run, 'no', 'not', 'now'], lines.append)
+			self.assertEqual(json.loads(lines[-1])['outcome']['end'], 'big')
+			k.cli(['rerun', run, '--from', 'nice', '--set', 'limits.max=40'], lines.append)
+			self.assertEqual(json.loads(lines[-1])['waiting']['node'], 'nice')
+			self.assertEqual(k.cli(['replay', run], lines.append), 0)
+			self.assertEqual(json.loads(lines[-1])['differences'], [])
+			self.assertEqual(k.cli(['run', 'not json'], lines.append), 0)
+			self.assertIn('refused', lines[-1])
+		finally:
+			shutil.rmtree(tmp)
 
 	def test_batch_and_queues(self):
 		tmp = tempfile.mkdtemp()
@@ -220,8 +425,8 @@ class Runs(unittest.TestCase):
 			self.assertEqual([e['node'] for e in q['left_for_model']], ['nice'])
 			r = k.answer(q['left_for_model'][0]['run'], {'pass': True})
 			self.assertEqual([e['node'] for e in k.queues()['waits_for_person']], ['sure'])
-			k.answer(r['run'], {'pass': True}, who='person')
-			self.assertEqual(k.queues(), {'left_for_model': [], 'waits_for_person': [], 'errors': []})
+			k.approve(r['run'], ['yes'])
+			self.assertEqual(k.queues(), {'left_for_model': [], 'waits_for_person': []})
 		finally:
 			shutil.rmtree(tmp)
 
@@ -231,20 +436,6 @@ class Runs(unittest.TestCase):
 		got = kit(double=double).batch([{'n': 1}] * 5)
 		self.assertEqual(got['started'], 2)
 		self.assertIn('2 errors in a row', got['stopped'])
-
-	def test_sees(self):
-		text = FLOW.replace('    brief "is {limits.max} a nice limit?"', '    brief "is {limits.max} a nice limit?"\n    sees n double nothing.here')
-		k = rigkit.Kit(catalogue(text)).bind('code', {'double': lambda s, R: {'value': s['n'] * 2}, 'small': lambda s, R: True})
-		r = k.run({'n': 2})
-		self.assertEqual(r['waiting']['sees'], {'n': 2, 'double': {'value': 4}})   # a path that is not there is left out
-		r = k.answer(r['run'], {'pass': True})
-		r = k.answer(r['run'], {'pass': True}, who='person')
-		self.assertNotIn('result', r)                                              # a gate ended the run: no result
-
-	def test_the_result_is_the_value_of_the_step_before_the_end(self):
-		text = 'unit t agent\n  step make\n    by code.make\n    next -> done\n  end done\n'
-		k = rigkit.Kit(catalogue(text)).bind('code', {'make': lambda s, R: 'made'})
-		self.assertEqual(k.run({})['result'], 'made')
 
 	def test_regress(self):
 		cases = [{'name': 'a', 'inputs': {'n': 2}, 'answers': {'nice': {'pass': True}, 'sure': {'person': True, 'pass': True}}, 'expect': {'end': 'done'}},
@@ -271,9 +462,9 @@ class Binding(unittest.TestCase):
 		with open(path, encoding='utf-8') as f:
 			root = rig.parse(f.read())
 		u = rig.units(root)[0]
-		self.assertEqual(rig.coverage(u, rig.Ctx(root, path))['tested'], 5)
-		cv = rig.coverage(u)  # without the folder (as the viewer): the code cannot be read
-		self.assertEqual((cv['tested'], cv['code'], cv['judge'], cv['human']), (0, 5, 1, 1))
+		self.assertEqual(rig.coverage(u, rig.Ctx(root, path))['tested'], 6)
+		cv = rig.coverage(u)  # without the folder: the code cannot be read
+		self.assertEqual((cv['tested'], cv['code'], cv['model'], cv['human']), (0, 6, 1, 1))
 		self.assertEqual(rig.check(root, path)[0], [])
 
 	def test_a_missing_function_is_an_error(self):
@@ -282,17 +473,17 @@ class Binding(unittest.TestCase):
 			with open(os.path.join(tmp, 'g.py'), 'w') as f:
 				f.write('def here(state, R):\n\treturn True\n')
 			path = os.path.join(tmp, 'x.rig')
-			text = 'unit x agent\n  code g g.py\n  gate a hard\n    by g.here\n    pass -> e\n  gate b hard\n    by g.gone\n    pass -> e\n    fail -> e\n  end e\n'
+			text = 'unit x agent\n  code g g.py\n  gate a hard by g.here\n    fail -> e\n  gate b hard by g.gone\n    fail -> e\n  end e\n'
 			err, warn = rig.check(rig.parse(text), path)
 			self.assertEqual([t for _, t in err], ['"g.py" has no function "gone"'])
 			self.assertTrue(any('no test names "here"' in t for _, t in warn))
 		finally:
 			shutil.rmtree(tmp)
 
-	def test_human_gate(self):
+	def test_human_gate_in_the_skill(self):
 		u = rig.units(rig.parse(FLOW))[0]
 		text = rig.skill(u)
-		self.assertIn('A person decides: ask the person. Stop and ask the person.', text)
+		self.assertIn('A person decides. Stop and ask the person.', text)
 		self.assertIn('Guessed: nice', text)
 		self.assertNotIn('Guessed: nice, sure', text)
 		driven = rig.skill(u, driver='python3 tool.py')
@@ -316,6 +507,8 @@ class Projects(unittest.TestCase):
 				code, out = self.quiet(rig_project.doctor, folder)
 				self.assertEqual(code, 0, out)
 				self.assertEqual(self.quiet(rig_project.build, folder, True)[0], 0)
+				with open(os.path.join(folder, 'rig.json'), encoding='utf-8') as f:
+					self.assertEqual(json.load(f)['rig'], 1)
 		finally:
 			shutil.rmtree(tmp)
 
@@ -332,6 +525,25 @@ class Projects(unittest.TestCase):
 			code, out = self.quiet(rig_project.doctor, folder, False)
 			self.assertEqual(code, 1)
 			self.assertIn('has no function "not_written"', out)
+		finally:
+			shutil.rmtree(tmp)
+
+	def test_replay_a_recorded_run(self):
+		tmp = tempfile.mkdtemp()
+		try:
+			folder = os.path.join(tmp, 'p')
+			self.quiet(rig_project.new, folder, 'demo-tool', 4)
+
+			def tool(*args):
+				r = subprocess.run([sys.executable, 'tool.py'] + list(args), cwd=folder, capture_output=True, text=True)
+				return json.loads(r.stdout.strip().splitlines()[-1])
+			r = tool('run', '{"item": "a longer item"}')
+			r = tool('answer', r['run'], '{"pass": true}')
+			r = tool('approve', r['run'], 'yes')
+			self.assertEqual(r['outcome']['end'], 'ready')
+			code, out = self.quiet(rig_project.test, folder, r['run'])
+			self.assertEqual(code, 0, out)
+			self.assertEqual(json.loads(out)['differences'], [])
 		finally:
 			shutil.rmtree(tmp)
 
@@ -360,15 +572,28 @@ class Projects(unittest.TestCase):
 		finally:
 			shutil.rmtree(tmp)
 
+	def test_a_step_with_out_gets_its_own_tool(self):
+		with open(os.path.join(BOOKMARKS, 'plugin', 'src', 'gen', 'front.json'), encoding='utf-8') as f:
+			front = json.load(f)
+		self.assertEqual([t['name'] for t in front['tools']], ['start_run', 'finish_sort', 'run_status', 'start_batch', 'queues'])  # no gate for the model
+		finish = front['tools'][1]
+		self.assertEqual((finish['kind'], finish['node']), ('finish_step', 'sort'))
+		self.assertEqual(finish['parameters']['properties']['result']['items']['required'], ['id', 'folder'])
+		self.assertNotIn('answer_gate', front['prompt'])
+		self.assertIn('options', front['prompt'])
+
 	def test_examples_are_current_and_complete(self):
 		for folder in (RELEASE, BAND, BOOKMARKS):
 			self.assertEqual(self.quiet(rig_project.build, folder, True)[0], 0, 'run: rig.py build ' + folder)
 			code, out = self.quiet(rig_project.doctor, folder)
 			self.assertEqual(code, 0, out)
 
-	def test_serve_gives_the_levels_and_the_runs(self):
+	def test_the_bookmarks_flow_has_at_most_22_nodes(self):
+		c = rigkit.read_json(os.path.join(BOOKMARKS, 'gen', 'bookmarks.json'))
+		self.assertLessEqual(len(c['flow']), 22)
+
+	def test_serve_gives_the_bundle_and_the_runs(self):
 		import socket
-		import time
 		import urllib.request
 		tmp = tempfile.mkdtemp()
 		with socket.socket() as sock:
@@ -398,12 +623,6 @@ class Projects(unittest.TestCase):
 				srv.wait(timeout=5)
 		finally:
 			shutil.rmtree(tmp)
-
-	def test_no_gate_tool_for_a_flow_with_no_gate_for_the_model(self):
-		with open(os.path.join(BOOKMARKS, 'plugin', 'src', 'gen', 'front.json'), encoding='utf-8') as f:
-			front = json.load(f)
-		self.assertEqual([t['name'] for t in front['tools']], ['start_run', 'finish_step', 'run_status', 'start_batch', 'queues'])
-		self.assertNotIn('answer_gate', front['prompt'])
 
 	def test_release_example_from_the_command_line(self):
 		r = subprocess.run([sys.executable, os.path.join(RELEASE, 'tool.py'), 'rules'], capture_output=True, text=True)

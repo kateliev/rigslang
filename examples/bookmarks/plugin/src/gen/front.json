@@ -1,6 +1,6 @@
 {
  "name": "bookmarks",
- "prompt": "Rules for the tool bookmarks (clean up a bookmarks HTML file that Edge exported: remove exact duplicates, fold similar URLs as the person chooses, sort loose bookmarks into folders, and write a new file to import):\n1. To work on one item, call start_run (file). Work on one item at a time.\n2. Read each result. It is JSON.\n3. \"outcome\": the run ended. Tell the operator the end and the \"problems\". Then go to the next item.\n4. \"waiting\" with kind \"step\": do what \"do\" says. Call finish_step with the run id and the result.\n5. \"waiting\" has \"problems\": your last answer at that node failed for these reasons. Fix them in the new answer.\n6. \"waiting\" with kind \"human\": you cannot answer. Show the operator what \"brief\" asks. The operator answers with a chat message: approve yes (or no), and the words of the answer, if any. In a terminal, the command in \"command\" does the same. Stop, and wait for the result of that answer.\n7. More than one item: call start_batch with the list. Show only its summary and the report path. Then, for each run in \"left_for_model\": call run_status, and answer it as in the rules above. Tell the operator the list \"waits_for_person\". To continue earlier work, call queues.\n8. \"refused\": the call was wrong. It is final. Do not repeat it. Call run_status to see where the run is.\n9. \"error\": tell the operator the error text. Do not answer the run.\n10. Do not invent names or numbers. Use only values from a result.\n11. When a run ends and its \"guessed\" list is not empty, write one last line: Guessed: and the names in that list.",
+ "prompt": "Rules for the tool bookmarks (clean up a bookmarks HTML file that Edge exported: remove exact duplicates, fold similar URLs as the person chooses, sort loose bookmarks into folders, and write a new file to import):\n1. To work on one item, call start_run (file). Work on one item at a time.\n2. Read each result. It is JSON.\n3. \"outcome\": the run ended. Tell the operator the end and the \"problems\". The end \"error\" means that code failed: tell the error text. Then go to the next item.\n4. \"waiting\" with kind \"step\": do what \"do\" says. Call the finish tool of that node (finish_sort for sort) with the run id and the result.\n5. \"waiting\" has \"problems\": your last answer at that node failed for these reasons. Fix them in the new answer.\n6. \"waiting\" with kind \"human\": you cannot answer. Show the operator the question (\"name\", \"check\") and \"sees\". The operator answers with a chat message: approve yes (or no). In a terminal, the command in \"command\" does the same. Stop, and wait for the result of that answer. When \"waiting\" has \"options\", show them: the operator answers approve and the words of the answer, for example approve yes. The first option is the default: approve yes takes it.\n7. More than one item: call start_batch with the list. Show only its summary and the report path. Then, for each run in \"left_for_model\": call run_status, and answer it as in the rules above. Tell the operator the list \"waits_for_person\". To continue earlier work, call queues.\n8. \"refused\": the call was wrong. It is final. Do not repeat it. Call run_status to see where the run is.\n9. Do not invent names or numbers. Use only values from a result.\n10. When a run ends and its \"guessed\" list is not empty, write one last line: Guessed: and the names in that list.",
  "driver": [
   "python3",
   "tool.py"
@@ -25,9 +25,10 @@
    "description": "Start a run for one item: clean up a bookmarks HTML file that Edge exported: remove exact duplicates, fold similar URLs as the person chooses, sort loose bookmarks into folders, and write a new file to import. Code does the work and stops when it needs you."
   },
   {
-   "name": "finish_step",
+   "name": "finish_sort",
    "kind": "finish_step",
-   "description": "Give the result of the step that a run waits at, when \"waiting\" has kind \"step\". Do what its \"do\" says first.",
+   "node": "sort",
+   "description": "Give the result of the step \"sort\" when a run waits there (\"waiting\" has node \"sort\"). Do what its \"do\" says first.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -36,7 +37,34 @@
       "description": "The run id: \"run\" in the result of start_run."
      },
      "result": {
-      "description": "What the step gave: a text, a number or an object."
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "integer"
+        },
+        "folder": {
+         "type": "string"
+        },
+        "new": {
+         "anyOf": [
+          {
+           "type": "boolean"
+          },
+          {
+           "type": "null"
+          }
+         ]
+        }
+       },
+       "required": [
+        "id",
+        "folder"
+       ],
+       "additionalProperties": false
+      },
+      "description": "The result, in this form: (list (record id int folder str new (maybe bool)))"
      }
     },
     "required": [
@@ -94,7 +122,7 @@
   {
    "name": "queues",
    "kind": "queues",
-   "description": "The runs that did not end: left_for_model (you answer them), waits_for_person (the operator answers), errors.",
+   "description": "The runs that did not end: left_for_model (you answer them) and waits_for_person (the operator answers).",
    "parameters": {
     "type": "object",
     "properties": {},

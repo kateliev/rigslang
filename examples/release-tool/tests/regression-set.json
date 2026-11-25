@@ -19,6 +19,7 @@
     "collect",
     "notes",
     "version",
+    "tests-required",
     "tests",
     "tone",
     "approve",
@@ -47,6 +48,7 @@
     "collect",
     "notes",
     "version",
+    "tests-required",
     "tests",
     "tone",
     "approve",
@@ -83,13 +85,11 @@
     "collect",
     "notes",
     "version",
+    "tests-required",
     "tests",
     "tone",
-    "rounds",
     "rewrite",
-    "notes",
-    "version",
-    "tests",
+    "rewritten",
     "tone",
     "approve",
     "allowed",
@@ -116,11 +116,11 @@
     "collect",
     "notes",
     "version",
+    "tests-required",
     "tests",
     "tone",
-    "rounds",
     "rewrite",
-    "notes",
+    "rewritten",
     "stop"
    ]
   }
@@ -142,9 +142,9 @@
     "collect",
     "notes",
     "version",
+    "tests-required",
     "tests",
     "tone",
-    "rounds",
     "stop"
    ]
   }
@@ -204,7 +204,7 @@
     "collect",
     "notes",
     "version",
-    "tests",
+    "tests-required",
     "stop"
    ]
   }
@@ -232,6 +232,7 @@
     "collect",
     "notes",
     "version",
+    "tests-required",
     "tests",
     "tone",
     "approve",
@@ -256,6 +257,7 @@
     "collect",
     "notes",
     "version",
+    "tests-required",
     "tests",
     "tone"
    ],
@@ -285,6 +287,7 @@
     "collect",
     "notes",
     "version",
+    "tests-required",
     "tests",
     "tone",
     "approve",

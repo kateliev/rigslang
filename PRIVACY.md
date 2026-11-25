@@ -26,7 +26,7 @@ If you open an issue or a pull request, your user name and what you write become
 
 ## 5. No warranty
 
-The software is provided as is, without warranty and without liability, as far as the law allows. See [LICENSE](LICENSE), sections 7 and 8. Generated code can be wrong. A cast is only as good as its examples and checks.
+The software is provided as is, without warranty and without liability, as far as the law allows. See [LICENSE](LICENSE), sections 7 and 8. Generated code can be wrong. A test is only as good as its cases.
 
 ## 6. Contact
 

@@ -2,7 +2,7 @@
 
 For a band name, the tool writes one paragraph about the band and lists its albums. The facts come from English Wikipedia, through its public API.
 
-It is a level 3 tool (flow), made with `rig.py new` and the build order of the guide. It is the earlier example [bandsearch](../older/bandsearch/) built again, and the differences show what the kit is for.
+It is a level 3 tool (flow), made with `rig.py new` and the build order of the guide. It is the earlier example [bandsearch](../../docs/history/older-examples/bandsearch/) built again, and the differences show what the kit is for.
 
 | | bandsearch (before) | band-facts (with the kit) |
 |---|---|---|
@@ -17,9 +17,9 @@ It is a level 3 tool (flow), made with `rig.py new` and the build order of the g
 
 | Node | Kind | Who |
 |---|---|---|
-| `article`, `summary`, `title`, `short`, `rounds` | hard gate | code |
+| `article`, `summary`, `title`, `short` | hard gate | code. `short` sends the paragraph back to `write` at most `answer.rounds` times (`retry`) |
 | `albums` | soft gate | code; no albums is reported, and the run goes on |
-| `is-band`, `grounded` | judge gate | the model; a guess |
+| `is-band`, `grounded` | model gate | the model; a guess. `grounded` sends the paragraph back to `write` at most `answer.rounds` times |
 | `write` | step | the model |
 | `find`, `read`, `compose` | step | code |
 
@@ -68,7 +68,7 @@ The tests and the regression set use the pages of `tests/fixtures` (a band that 
 This is stage 8 of the build order, on a small scale.
 
 - **The search page of a web search engine is not an API.** The first form of `find` read such a page, as bandsearch did. The service answered with a check for robots, and the step got no results. The step now uses the search API of Wikipedia. The gate `article` also tells "the service did not answer" from "no article", and each has its own end.
-- **The first result is not the article.** A live run for a famous band gave "List of ... band members" first. `parse.pick_title` now prefers the title that is the name of the band, then "name (band)", then the first result. The judge gate `is-band` stays as the check behind it.
+- **The first result is not the article.** A live run for a famous band gave "List of ... band members" first. `parse.pick_title` now prefers the title that is the name of the band, then "name (band)", then the first result. The model gate `is-band` stays as the check behind it.
 - **A model that judges needs the facts.** The first form gave the model only the text of the gate. The language got the word `sees` for this: a node names the parts of the state that go with the question.
 
 ## Runs with real models (2026-11-15)
@@ -85,11 +85,15 @@ No call was refused and no call was wrong. The paragraphs had 63 to 106 words, s
 
 What these runs changed:
 
-- **A name that is no band got the article of a politician.** A full-text search gives a result for any words. The judge gate saw it, but that is a guess doing the work of a fact. The gate `title` in code now ends such a run: the article must have the name of the band.
+- **A name that is no band got the article of a politician.** A full-text search gives a result for any words. The model gate (then called a judge gate) saw it, but that is a guess doing the work of a fact. The gate `title` in code now ends such a run: the article must have the name of the band.
 - **A name with many meanings got the page that lists them.** `steps.read` now goes past such a page to the article "name (band)".
 - **A run that a gate ended carried the data of its last step as its "result".** Now only a run whose end follows a step has a result.
 - After these changes the local model needed 6 calls for three names, not 14: the two traps ended in code, with no model call.
 - The skill text now says "more than one item" where it said "many items", and says to write the `Guessed:` line for a run that ended early too. The first model had asked about both.
+
+## Language version 1
+
+The flow is written in version 1: the lines run in order, and the rewrite loop is `retry answer.rounds` on the gates `short` and `grounded`, not a gate that counts rounds. Each of the two gates counts its own retries. So a paragraph can go back to the model more often in all than before, when both gates fail in turn. The 12 regression cases end where they ended in version 0; their paths are new.
 
 ## Limits
 

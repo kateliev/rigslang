@@ -3,7 +3,7 @@
 A project is a folder with one rig.json file:
 
     {
-      "rig": 0,
+      "rig": 1,
       "name": "release",
       "level": 4,                      1 tools, 2 checked, 3 flow, 4 production (guide/levels.md)
       "source": "release.rig",         one .rig file, or a list of them
@@ -66,7 +66,7 @@ def loaded(folder, m):
 def main_unit(m, files):
 	for _, root, _ in files:
 		for u in rig.units(root):
-			if (m.get('unit') and u.word(0) == m['unit']) or (not m.get('unit') and any(c.head in rig.FLOW for c in u.children)):
+			if (m.get('unit') and u.word(0) == m['unit']) or (not m.get('unit') and rig.has_flow(u)):
 				return u
 	return None
 
@@ -85,9 +85,9 @@ def outputs(folder, m):
 	for _, root, ctx in files:
 		for u in rig.units(root):
 			name = u.word(0)
-			if any(c.head in rig.FLOW for c in u.children) or u.kids('rule') or u.word(1) in ('tool', 'agent'):
+			if rig.has_flow(u) or u.kids('rule') or u.word(1, 'tool') in ('tool', 'agent'):
 				out[os.path.join(gen, name + '.json')] = rig.compile_to('json', u, ctx=ctx)
-			if u.kids('in') and u.word(1) == 'tool':
+			if u.kids('in') and u.word(1, 'tool') == 'tool':
 				out[os.path.join(gen, name + '.tool.json')] = rig.compile_to('tool', u)
 	if main is not None and m['build'].get('skill'):
 		skill_path = m['build']['skill']
@@ -109,20 +109,26 @@ def front(m, files, main):
 	The plugin has no knowledge of its own: it reads this file.'''
 	driver = m.get('driver', 'python3 tool.py')
 	tools, rules = [], []
-	flow = main is not None and any(c.head in rig.FLOW for c in main.children)
+	flow = main is not None and rig.has_flow(main)
 	if flow:
+		c = rig.catalog(main)
 		d = rig.tool_def(main)
 		run = {'type': 'string', 'description': 'The run id: "run" in the result of start_run.'}
 		tools.append({'name': 'start_run', 'kind': 'run', 'parameters': d['parameters'],
 			'description': 'Start a run for one item: {}. Code does the work and stops when it needs you.'.format(d['description'])})
-		model_gates = any(g.word(1) == 'judge' or (g.word(1) in ('hard', 'soft') and not g.kids('by')) for g in main.kids('gate'))
+		model_gates = rig.guessed_gates(c)
 		if model_gates:  # a flow with no gate for the model gets no tool for it: one tool less to choose wrongly
 			tools.append({'name': 'answer_gate', 'kind': 'answer_gate',
-				'description': 'Answer the gate that a run waits at, when "waiting" has kind "judge". Decide as its "brief" says.',
+				'description': 'Answer the gate that a run waits at, when "waiting" has kind "model". Decide what its "check" says.',
 				'parameters': {'type': 'object', 'properties': {'run': run, 'pass': {'type': 'boolean', 'description': 'true: the gate passes. false: it fails.'},
 					'why': {'type': 'string', 'description': 'The reason, in one sentence.'}}, 'required': ['run', 'pass']}})
-		model_steps = [f.word(0) for f in main.kids('step') if not f.kids('by') or any(rig.by_target(b.word(0), main) != 'bound' for b in f.kids('by'))]
-		if model_steps:
+		model_steps = [f for f in c['flow'] if f['kind'] == 'step' and f['lane'] == 'model']
+		formed = [f for f in model_steps if f.get('schema')]
+		for f in formed:  # one tool for each step with an "out" type: the schema of the tool is the form of the answer
+			tools.append({'name': 'finish_' + f['id'].replace('-', '_'), 'kind': 'finish_step', 'node': f['id'],
+				'description': 'Give the result of the step "{}" when a run waits there ("waiting" has node "{}"). Do what its "do" says first.'.format(f['id'], f['id']),
+				'parameters': {'type': 'object', 'properties': {'run': run, 'result': dict(f['schema'], description='The result, in this form: ' + f['out'])}, 'required': ['run', 'result']}})
+		if len(formed) < len(model_steps):
 			tools.append({'name': 'finish_step', 'kind': 'finish_step',
 				'description': 'Give the result of the step that a run waits at, when "waiting" has kind "step". Do what its "do" says first.',
 				'parameters': {'type': 'object', 'properties': {'run': run, 'result': {'description': 'What the step gave: a text, a number or an object.'}}, 'required': ['run', 'result']}})
@@ -130,27 +136,33 @@ def front(m, files, main):
 			'parameters': {'type': 'object', 'properties': {'run': run}, 'required': ['run']}})
 		tools.append({'name': 'start_batch', 'kind': 'batch', 'description': 'Start a run for each item of a list. Gives a short summary and the path of the report. Use it for more than one item.',
 			'parameters': {'type': 'object', 'properties': {'items': {'type': 'array', 'items': d['parameters'], 'description': 'One object for each item, with the inputs of start_run.'}}, 'required': ['items']}})
-		tools.append({'name': 'queues', 'kind': 'queues', 'description': 'The runs that did not end: left_for_model (you answer them), waits_for_person (the operator answers), errors.',
+		tools.append({'name': 'queues', 'kind': 'queues', 'description': 'The runs that did not end: left_for_model (you answer them) and waits_for_person (the operator answers).',
 			'parameters': {'type': 'object', 'properties': {}, 'required': []}})
 		inputs = ', '.join(x.word(0) for x in main.kids('in')) or 'no input'
 		rules = ['To work on one item, call start_run ({}). Work on one item at a time.'.format(inputs),
 			'Read each result. It is JSON.',
-			'"outcome": the run ended. Tell the operator the end and the "problems". Then go to the next item.']
+			'"outcome": the run ended. Tell the operator the end and the "problems". The end "error" means that code failed: tell the error text. Then go to the next item.']
 		if model_gates:
-			rules.append('"waiting" with kind "judge": decide what "brief" asks. Call answer_gate with the run id, pass true or false, and why in one sentence.')
-		if model_steps:
+			rules.append('"waiting" with kind "model": decide what "check" says. Call answer_gate with the run id, pass true or false, and why in one sentence.')
+		if formed:
+			rules.append('"waiting" with kind "step": do what "do" says. Call the finish tool of that node ({}){} with the run id and the result.'.format(
+				', '.join('finish_{} for {}'.format(f['id'].replace('-', '_'), f['id']) for f in formed), ', else finish_step' if len(formed) < len(model_steps) else ''))
+		elif model_steps:
 			rules.append('"waiting" with kind "step": do what "do" says. Call finish_step with the run id and the result.')
 		rules.append('"waiting" has "problems": your last answer at that node failed for these reasons. Fix them in the new answer.')
-		if any(g.word(1) == 'human' for g in main.kids('gate')):
-			rules.append('"waiting" with kind "human": you cannot answer. Show the operator what "brief" asks. The operator answers with a chat message: approve yes (or no), and the words of the answer, if any. In a terminal, the command in "command" does the same. Stop, and wait for the result of that answer.')
+		humans = [f for f in c['flow'] if f['kind'] == 'human']
+		if humans:
+			text = '"waiting" with kind "human": you cannot answer. Show the operator the question ("name", "check") and "sees". The operator answers with a chat message: approve yes (or no). In a terminal, the command in "command" does the same. Stop, and wait for the result of that answer.'
+			if any(f.get('options') for f in humans):
+				text += ' When "waiting" has "options", show them: the operator answers approve and the words of the answer, for example approve {}. The first option is the default: approve yes takes it.'.format(next(f for f in humans if f.get('options'))['options'][0])
+			rules.append(text)
 		rules.append('More than one item: call start_batch with the list. Show only its summary and the report path. Then, for each run in "left_for_model": call run_status, and answer it as in the rules above. Tell the operator the list "waits_for_person". To continue earlier work, call queues.')
 		rules += ['"refused": the call was wrong. It is final. Do not repeat it. Call run_status to see where the run is.',
-			'"error": tell the operator the error text. Do not answer the run.',
 			'Do not invent names or numbers. Use only values from a result.',
 			'When a run ends and its "guessed" list is not empty, write one last line: Guessed: and the names in that list.']
 	for _, root, _ in files:
 		for u in rig.units(root):
-			if u.word(1) == 'tool' and u.kids('in'):
+			if u.word(1, 'tool') == 'tool' and u.kids('in'):
 				d = rig.tool_def(u)
 				text = d.get('returns', {}).get('description')
 				tools.append({'name': u.word(0).replace('-', '_'), 'kind': 'call', 'unit': u.word(0), 'parameters': d['parameters'],
@@ -227,8 +239,14 @@ def run_cmd(folder, cmd):
 	return r.returncode, (r.stdout + r.stderr).strip()
 
 
-def test(folder):
+def test(folder, replay=None):
+	'''Run the tests of the project. replay: a run id; run the flow again with the answers recorded in
+	that run (the driver's replay command), and compare the end and the path.'''
 	m = manifest(folder)
+	if replay:
+		code, out = run_cmd(folder, '{} replay {}'.format(m.get('driver', 'python3 tool.py'), shlex.quote(replay)))
+		print(out)
+		return code
 	if not m.get('tests'):
 		print('rig.json has no "tests" command')
 		return 1
@@ -263,7 +281,7 @@ def doctor(folder, run_tests=True):
 	# Level 1: tools
 	add(1, not errs, 'the source has no errors', '; '.join(errs[:3]))
 	holes = [u.word(0) for u, ctx in units if 'hole' in rig.unit_status(u, ctx)]
-	add(1, not holes, 'every unit has code (a "code" line or a cast)', ', '.join(holes))
+	add(1, not holes, 'every unit has code (a "code" line) or a flow', ', '.join(holes))
 	bare = [u.word(0) for u, _ in units if not u.kids('intent')]
 	add(1, not bare, 'every unit has an intent', ', '.join(bare))
 	untyped = ['{}.{}'.format(u.word(0), x.word(0)) for u, _ in units for x in u.kids('in') if rig.in_parts(x)[1] is None or not rig.in_parts(x)[2]]
@@ -281,32 +299,34 @@ def doctor(folder, run_tests=True):
 		add(1, code == 0, 'the tests pass', (out.splitlines() or ['no output'])[-1])
 
 	# Level 2: checked
-	gates = [(u, g, rig.gate_level(g, u, ctx, (u.word(0),))) for u, ctx in units for g in u.kids('gate')]
+	gates = [(u, g, rig.gate_level(g, u, ctx, (u.word(0),))) for u, ctx in units for g in rig.flow_nodes(u) if g.head == 'gate']
 	add(2, bool(gates), 'the tool has at least one gate')
 	for name, bad in (('none', 'every hard or soft gate names code that exists'), ('code', 'a test names the code of every gate')):
 		got = ['{}.{}'.format(u.word(0), g.word(0)) for u, g, lv in gates if lv == name]
 		add(2, not got, bad, ', '.join(got))
 	unread = [w for w in warns if 'is not read by any step or gate' in w]
 	add(2, not unread, 'every rule is read by a step or a gate', '; '.join(unread[:3]))
-	nobrief = [w for w in warns if 'has no brief' in w]
-	add(2, not nobrief, 'every judge and human gate has a brief', '; '.join(nobrief))
+	nobrief = [w for w in warns if 'has no check' in w or 'has no question' in w]
+	add(2, not nobrief, 'every model gate has a check, and every human gate a question', '; '.join(nobrief))
+	nowho = [w for w in warns if 'say who does it' in w]
+	add(2, not nowho, 'every step says who does it: code, or the model', '; '.join(nowho))
 	rules = [r for u, _ in units for r in u.kids('rule')]
 	bare_rules = [r.word(0) for r in rules if rig.rule_type(r) == 'number' and not r.kids('note')]
 	add(2, not bare_rules, 'every number rule has a note that says where the value comes from', ', '.join(bare_rules), soft=True)
 	if gates:
 		cv = rig.coverage(main, [c for u, c in units if u is main][0]) if main is not None else None
 		if cv:
-			rows.append((2, 'note', 'coverage: {} of {} gates by proved or tested code, {} by the model, {} by a person'.format(cv['proved'] + cv['tested'], cv['gates'], cv['judge'], cv['human'])))
+			rows.append((2, 'note', 'coverage: {} of {} gates by tested code, {} by the model, {} by a person'.format(cv['tested'], cv['gates'], cv['model'], cv['human'])))
 
 	# Level 3: flow
 	add(3, main is not None, 'a unit has a flow')
 	if main is not None:
-		ends = [e.word(0) for e in main.kids('end')]
+		ends = [e.word(0) for e in rig.flow_nodes(main) if e.head == 'end']
 		add(3, bool(ends), 'the flow has an end node')
 		lost = [w for w in warns if 'cannot be reached' in w]
 		add(3, not lost, 'every node can be reached', '; '.join(lost))
-		onefail = [g.word(0) for g in main.kids('gate') if not g.kids('fail') or not g.kids('pass')]
-		add(3, not onefail, 'every gate has a pass line and a fail line', ', '.join(onefail))
+		ends_off = [w for w in warns if 'run past its last line' in w]
+		add(3, not ends_off, 'the flow ends at an end line, not past its last line', '; '.join(ends_off))
 		add(3, bool(m.get('driver')), 'rig.json names the driver: the runner command')
 		add(3, bool(m['build'].get('skill')), 'the skill is compiled (build.skill in rig.json)')
 		reg = m.get('regression')
@@ -320,7 +340,7 @@ def doctor(folder, run_tests=True):
 			seen = set(n for c in cases for n in (c.get('expect') or {}).get('path', []))
 			noend = [e for e in ends if e not in seen]
 			add(3, not noend, 'every end node is the end of a regression case', ', '.join(noend))
-			nogate = [g.word(0) for g in main.kids('gate') if g.word(0) not in seen]
+			nogate = [g.word(0) for g in rig.flow_nodes(main) if g.head == 'gate' and g.word(0) not in seen]
 			add(3, not nogate, 'every gate is on the path of a regression case', ', '.join(nogate), soft=True)
 			if m.get('driver') and run_tests:
 				code, out = run_cmd(folder, m['driver'] + ' regress ' + reg)
@@ -340,7 +360,7 @@ def doctor(folder, run_tests=True):
 	for lv, state, text in rows:
 		print('  {:<5} L{}  {}'.format(state, lv, text))
 		missing += state == 'MISS'
-	other = [w for w in warns if not any(k in w for k in ('a number in the text', 'is not read by', 'has no brief', 'cannot be reached', 'no test names'))]
+	other = [w for w in warns if not any(k in w for k in ('a number in the text', 'is not read by', 'has no check', 'has no question', 'say who does it', 'cannot be reached', 'run past its last line', 'no test names'))]
 	for w in other:
 		print('  note      ' + w)
 	print('Nothing is missing for level {}.'.format(level) if not missing else '{} missing for level {}.'.format(missing, level))
@@ -367,43 +387,38 @@ def rig_source(name, level):
 		'  code steps steps.py',
 		'    test tests/test_steps.py',
 		'',
-		'  rule limits.min_length 3',
-		'    min 1',
-		'    max 1000',
-		'    label "Shortest item"',
-		'    unit "characters"',
+		'  rule limits.min_length 3 "Shortest item, in characters"',
+		'    range 1 1000',
 		'    note "TODO: say where this value comes from"']
 	if level >= 4:
-		L += ['  rule permissions.write off',
-			'    label "The tool may write"',
+		L += ['  rule permissions.write off "The tool may write"',
 			'    note "off: a dry run. The run ends at ready and changes nothing."']
 	L += ['',
-		'  step look "Look"',
+		'  ; The lines run in order. A gate that passes goes on to the next line.',
+		'  step look "Look" by steps.look',
 		'    do "read the item and measure it"',
-		'    by steps.look',
-		'    next -> long-enough',
 		'  gate long-enough hard "Long enough"',
-		'    ensure "the item has at least {limits.min_length} characters"',
+		'    check "the item has at least {limits.min_length} characters"',
 		'    by gates.long_enough',
-		'    pass -> sensible',
 		'    fail -> stop "too short"',
-		'  gate sensible judge "Makes sense"',
-		'    brief "TODO: say what the model must judge; pass if the item makes sense"',
-		'    pass -> {}'.format('approve' if level >= 4 else 'done'),
+		'  gate sensible model "Makes sense"',
+		'    check "TODO: say what the model must decide; pass if the item makes sense"',
+		'    sees item look',
 		'    fail -> stop "the model said no"']
 	if level >= 4:
-		L += ['  gate approve human "A person agrees"',
-			'    brief "TODO: say what to show the person and what to ask"',
-			'    pass -> allowed',
+		L += ['  gate approve human "May the tool write?"',
+			'    check "TODO: say what the person must see before the answer"',
+			'    sees item look',
 			'    fail -> stop "the person said no"',
 			'  gate allowed hard "The tool may write"',
 			'    reads permissions.write',
-			'    ensure "the rule permissions.write is on"',
+			'    check "the rule permissions.write is on"',
 			'    by gates.may_write',
-			'    pass -> done',
-			'    fail -> ready "dry run"',
-			'  end ready "Ready, nothing written"']
-	L += ['  end done "Done"', '  end stop "Stopped"']
+			'    fail -> ready "dry run"']
+	L += ['  end done "Done"']
+	if level >= 4:
+		L += ['  end ready "Ready, nothing written"']
+	L += ['  end stop "Stopped"']
 	return '\n'.join(L) + '\n'
 
 
@@ -440,7 +455,7 @@ def new(folder, name, level=2):
 	if os.path.exists(folder) and os.listdir(folder):
 		raise SystemExit('{} exists and is not empty'.format(folder))
 	os.makedirs(folder, exist_ok=True)
-	m = {'rig': 0, 'name': name, 'level': level, 'source': name + '.rig'}
+	m = {'rig': 1, 'name': name, 'level': level, 'source': name + '.rig'}
 	if level > 1:
 		m['unit'] = name
 	m['driver'] = 'python3 tool.py'
@@ -482,11 +497,14 @@ def main(cmd, rest):
 	if cmd == 'plugin':
 		owner = rig.option(rest, '--owner') or 'local'
 		return plugin(rest[0] if rest else '.', owner)
+	replay = rig.option(rest, '--replay') if cmd == 'test' else None
 	folder = next((a for a in rest if not a.startswith('--')), '.')
+	if cmd == 'test':
+		return test(folder, replay)
 	if cmd == 'build':
 		return build(folder, '--check' in rest)
 	if cmd == 'doctor':
 		return doctor(folder, '--no-tests' not in rest)
 	if cmd == 'test':
-		return test(folder)
+		return test(folder, rig.option(rest, '--replay'))
 	raise SystemExit('new, build, doctor or test')

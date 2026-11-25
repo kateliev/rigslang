@@ -5,6 +5,8 @@
     python3 tool.py answer RUN '{"result": [...]}'                 the model gives the folders of a sort batch
     python3 tool.py approve RUN yes|no [WORDS]                     a person answers a human gate
     python3 tool.py resume RUN | status RUN | queues | rules | flow
+    python3 tool.py rerun RUN --from ID [--set group.name=value]   a new run from a line of an old run
+    python3 tool.py replay RUN                                     the flow again, with the recorded answers
     python3 tool.py regress tests/regression-set.json [--baseline]
 
 Each call prints one JSON line. A "refused" result is final: do not repeat the call.

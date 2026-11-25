@@ -5,6 +5,7 @@
     python3 tool.py answer RUN '{"pass": true}'
     python3 tool.py approve RUN yes
     python3 tool.py status RUN | rules | flow | regress tests/regression-set.json
+    python3 tool.py rerun RUN --from ID | replay RUN
 """
 import os
 import sys

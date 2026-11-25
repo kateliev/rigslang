@@ -52,12 +52,6 @@ class Gates(unittest.TestCase):
 		self.assertFalse(gates.short_enough({'write': ''}, rules())['pass'])
 		self.assertFalse(gates.short_enough({'write': {'text': 'not a text'}}, rules())['pass'])
 
-	def test_rounds_left(self):
-		self.assertTrue(gates.rounds_left({'_visits': {'write': 1}}, rules())['pass'])
-		self.assertTrue(gates.rounds_left({'_visits': {'write': 2}}, rules())['pass'])
-		self.assertFalse(gates.rounds_left({'_visits': {'write': 3}}, rules())['pass'])
-		self.assertFalse(gates.rounds_left({'_visits': {'write': 1}}, rules(answer__rounds=0))['pass'])
-
 
 class Parse(unittest.TestCase):
 	def test_search_titles(self):

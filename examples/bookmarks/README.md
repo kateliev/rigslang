@@ -20,17 +20,19 @@ Sync is on, so a change in Edge goes to every device. Do it in this order:
 
 | Node | Kind | Who |
 |---|---|---|
-| `file-ok`, `page-left`, `choice-ok`, `batch-left`, `sort-ok`, `rounds`, `any-new`, `accept-ok`, `share`, `verify`, `target` | hard gate | code |
-| `choose` (similar URLs, a page at a time), `new-ok` (new folders), `approve` (the report) | human gate | the person |
-| `sort` (one batch of bookmarks into folders) | step | the model |
-| `read`, `dupes`, `group`, `page`, `apply`, `loose`, `batch`, `keep`, `skip`, `folders`, `accept`, `links`, `report`, `build`, `place` | step | code |
+| `file-ok`, `sort-ok`, `share`, `verify`, `target` | hard gate | code |
+| `choose` (similar URLs, a page at a time), `new-ok` (new folders), `approve` (the report) | human gate | the person. `choose` and `new-ok` have `options`: code (`steps.apply`, `steps.accept`) reads the answer, and the gate asks again when it does not understand it |
+| `sort` (one batch of bookmarks into folders) | step | the model; its answer has the type of `out`, and the plugin tool `finish_sort` has that schema |
+| `read`, `similar`, `show`, `loose`, `prepare`, `folders`, `report`, `build`, `place` | step | code |
+
+The flow is written in language version 1: 18 steps and gates and 4 ends (version 0 had 30 and 5). The lines run in order. Two `for` blocks hold the loops: `for page in similar.pages` (the pages of choices) and `for batch in loose.batches` (the batches to sort). The runner saves the run after each page and each batch.
 
 What code does, in order:
 
 1. **Read.** Every folder with its path, every bookmark with its title, URL, folder and date. The folders of the file are never renamed or deleted.
 2. **Exact duplicates.** Two URLs are the same when they differ only in http or https, `www.`, a last `/`, a `#part`, or tracking parameters (`dupes.tracking`). A `#/route` or `#!route` stays: it is a page of a one-page site. The copy in the deeper folder stays, else the oldest.
 3. **Similar URLs.** On one site, URLs where one path starts with another form a group (`home.org`, `home.org/events`, `home.org/users/account`). Plain variants such as `/index.html` or `/default.aspx` fold into the short URL with no question (`similar.index_names`). Sites with many separate pages are never grouped (`similar.skip_hosts`, `similar.skip_pattern`). Every other group goes to the person, a page at a time.
-4. **Sort.** Code leaves alone each bookmark that shares its site with another bookmark of its folder, and every bookmark on the favorites bar. The model gets the loose bookmarks (the top level, and the top folders such as Other favorites) and the likely misfiled ones (alone in their folder, while another folder has `sort.host_elsewhere` of their site), in batches of `sort.batch`, with the folder list. The gate `sort-ok` checks every answer: each bookmark once, no other id, no changed URL or title, only folders of the list or new folders under them, at most `sort.new_per_batch` and `sort.new_max` new folders.
+4. **Sort.** Code leaves alone each bookmark that shares its site with another bookmark of its folder, and every bookmark on the favorites bar. The model gets the loose bookmarks (the top level, and the top folders such as Other favorites) and the likely misfiled ones (alone in their folder, while another folder has `sort.host_elsewhere` of their site), in batches of `sort.batch`, with the folder list. The gate `sort-ok` checks every answer: each bookmark once, no other id, no changed URL or title, only folders of the list or new folders under them, at most `sort.new_per_batch` and `sort.new_max` new folders. A bad answer goes back to the model at most `sort.rounds` times (`retry`). Then the batch is left unsorted (`fail -> continue`). When more than 20% of the batches are left (`tolerate 20%`), the run ends at `held`.
 5. **Dry run.** The report counts and lists what would be removed, folded, moved and made. Nothing else is written. The gate `share` holds back a plan that removes more than `safety.max_removed` percent.
 6. **Write.** After the person agrees, code writes the file into the work folder, reads it again, and the gate `verify` checks it. Then it copies it to `out/`.
 
@@ -95,7 +97,7 @@ python3 tool.py queues
 |---|---|
 | `work/<file>-<time>/` | One folder for each run: the parsed file, the duplicates, the groups, one file for each page of choices (`choices/`) and each sorted batch (`sorted/`), the report, the new file before it is checked. |
 | `out/<file>-cleaned.html` | The new file to import. A second run does not write over it (`permissions.overwrite`). |
-| `runs/` | The run files of the runner. A run goes on after a restart: `python3 tool.py resume RUN`. |
+| `runs/<run id>/` | One folder for each run of the runner: the run, a copy of the flow and the rules, every answer of the model and of the person. A run goes on after a restart: `python3 tool.py resume RUN`. `python3 tool.py replay RUN` plays the recorded answers again with the current code. |
 
 None of these goes into version control. Neither does any HTML file outside `tests/fixtures/`.
 
@@ -133,13 +135,14 @@ The tests and the regression set use only the synthetic file `tests/fixtures/exp
 
 ## Dead links: not in this version
 
-The step `links` is the hook. A later link checker writes the ids of dead bookmarks to `dead.json` in the work folder. The report then moves them to the folder of `links.folder` ("Dead links"). Nothing is deleted. With `links.check` on, this version stops with an error that says so.
+The step `report` holds the hook (`steps.dead_links`). A later link checker writes the ids of dead bookmarks to `dead.json` in the work folder. The report then moves them to the folder of `links.folder` ("Dead links"). Nothing is deleted. With `links.check` on, this version stops with an error that says so.
 
 ## Limits
 
 - A folder is never renamed, merged or deleted. An empty folder stays.
 - The model sees a URL cut at `sort.url_chars` and a title cut at `sort.title_chars`. The file keeps the whole text.
-- A batch that fails `sort-ok` after `sort.rounds` retries stays unsorted. The report lists it.
+- A batch that fails `sort-ok` after `sort.rounds` retries stays unsorted. The report lists it. When more than 20% of the batches stay unsorted, nothing is written (`held`).
+- The output file exists: the run ends at `held` with the reason "the output file exists" (version 0 had its own end, `exists`).
 - After an `approve no` on a page, every later page keeps all its URLs too.
 - What was verified and what was not: see `notes/project-facts.md`.
 

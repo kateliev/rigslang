@@ -10,7 +10,7 @@
 :root{
   --bg:#f7f6f2;--fg:#1d1d1b;--muted:#6b6a65;--faint:#9a988f;--line:#e2dfd6;--card:#fff;--head:#f1efe8;
   --accent:#b8492a;--accent-fg:#fff;--changed:#fff1cc;--changed-line:#e6c25a;--ok:#2f7d4f;--bad:#b3261e;--warn:#9a6a12;
-  --hard:#2b5c8a;--hard-bg:#e6eef7;--soft:#8a6212;--soft-bg:#f6eedb;--judge:#7a4f9a;--judge-bg:#f0e8f6;--human:#1f7a72;--human-bg:#dff1ee;--step:#55534d;--step-bg:#efede6;
+  --hard:#2b5c8a;--hard-bg:#e6eef7;--soft:#8a6212;--soft-bg:#f6eedb;--model:#7a4f9a;--model-bg:#f0e8f6;--human:#1f7a72;--human-bg:#dff1ee;--step:#55534d;--step-bg:#efede6;
   --param:#6a6f2a;--param-bg:#eef0dc;--fail:#a2381f;--fail-bg:#fbe9e4;--pass:#2f6f48;--pass-bg:#e5f2ea;
   --grid:#e9e6dd;--wire-p:#b9b49f;--term:#5b5953;--term-bg:#ecebe6;--hit:#fff8e1;--hit-line:#c4532c;--chip:#efede6;--code:#f3f1ea;
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;--shadow:0 1px 2px rgba(0,0,0,.06),0 4px 14px rgba(0,0,0,.06);
@@ -19,7 +19,7 @@
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#141311;--fg:#ecebe6;--muted:#a3a19a;--faint:#7b7972;--line:#34322d;--card:#211f1c;--head:#26241f;
   --accent:#e2774f;--accent-fg:#1a1a18;--changed:#3a3120;--changed-line:#8a6e2a;--ok:#6cc08f;--bad:#f2817a;--warn:#e0b25a;
-  --hard:#8db8e3;--hard-bg:#1f2c3a;--soft:#e3be78;--soft-bg:#33291a;--judge:#c9a2e6;--judge-bg:#2c2236;--human:#7fd1c7;--human-bg:#17302d;--step:#c9c6bd;--step-bg:#2a2824;
+  --hard:#8db8e3;--hard-bg:#1f2c3a;--soft:#e3be78;--soft-bg:#33291a;--model:#c9a2e6;--model-bg:#2c2236;--human:#7fd1c7;--human-bg:#17302d;--step:#c9c6bd;--step-bg:#2a2824;
   --param:#c8cc8a;--param-bg:#2a2c1d;--fail:#f0a08a;--fail-bg:#3a231d;--pass:#8fd0a8;--pass-bg:#1d3326;
   --grid:#1f1d1a;--wire-p:#57544b;--term:#c9c6bd;--term-bg:#2a2824;--hit:#33291c;--hit-line:#e2774f;--chip:#2c2a26;--code:#1a1917;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.35);color-scheme:dark;
@@ -27,7 +27,7 @@
 :root[data-theme="dark"]{
   --bg:#141311;--fg:#ecebe6;--muted:#a3a19a;--faint:#7b7972;--line:#34322d;--card:#211f1c;--head:#26241f;
   --accent:#e2774f;--accent-fg:#1a1a18;--changed:#3a3120;--changed-line:#8a6e2a;--ok:#6cc08f;--bad:#f2817a;--warn:#e0b25a;
-  --hard:#8db8e3;--hard-bg:#1f2c3a;--soft:#e3be78;--soft-bg:#33291a;--judge:#c9a2e6;--judge-bg:#2c2236;--human:#7fd1c7;--human-bg:#17302d;--step:#c9c6bd;--step-bg:#2a2824;
+  --hard:#8db8e3;--hard-bg:#1f2c3a;--soft:#e3be78;--soft-bg:#33291a;--model:#c9a2e6;--model-bg:#2c2236;--human:#7fd1c7;--human-bg:#17302d;--step:#c9c6bd;--step-bg:#2a2824;
   --param:#c8cc8a;--param-bg:#2a2c1d;--fail:#f0a08a;--fail-bg:#3a231d;--pass:#8fd0a8;--pass-bg:#1d3326;
   --grid:#1f1d1a;--wire-p:#57544b;--term:#c9c6bd;--term-bg:#2a2824;--hit:#33291c;--hit-line:#e2774f;--chip:#2c2a26;--code:#1a1917;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 6px 18px rgba(0,0,0,.35);color-scheme:dark;
@@ -100,7 +100,7 @@ details summary{cursor:pointer}
 /* Badges, chips, links */
 .gid{display:inline-block;font:600 11px/1.6 var(--mono);padding:0 6px;border-radius:4px;color:var(--step);background:var(--step-bg)}
 .gid.hard{color:var(--hard);background:var(--hard-bg)}.gid.soft{color:var(--soft);background:var(--soft-bg)}
-.gid.judge{color:var(--judge);background:var(--judge-bg)}.gid.human{color:var(--human);background:var(--human-bg)}.gid.end{color:var(--term);background:var(--term-bg)}
+.gid.model{color:var(--model);background:var(--model-bg)}.gid.human{color:var(--human);background:var(--human-bg)}.gid.end{color:var(--term);background:var(--term-bg)}
 .kind{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint)}
 .chip{display:inline-flex;align-items:baseline;gap:4px;padding:0 6px;border-radius:5px;background:var(--chip);border:1px solid transparent;cursor:pointer;white-space:nowrap;font-size:12px;line-height:1.6}
 .chip .rid{font:11px var(--mono);color:var(--muted)}
@@ -167,8 +167,8 @@ body.tracing .node.tr{opacity:1}
 #run{max-width:240px}
 .node.sel{outline:2px solid var(--accent);outline-offset:2px}
 .node .hd{display:flex;gap:7px;align-items:center;padding:6px 10px;border-radius:9px 9px 0 0;cursor:move;position:relative;background:var(--step-bg)}
-.node.hard .hd{background:var(--hard-bg)}.node.soft .hd{background:var(--soft-bg)}.node.judge .hd{background:var(--judge-bg)}.node.human .hd{background:var(--human-bg)}
-.node.judge,.node.human{border-style:dashed}
+.node.hard .hd{background:var(--hard-bg)}.node.soft .hd{background:var(--soft-bg)}.node.model .hd{background:var(--model-bg)}.node.human .hd{background:var(--human-bg)}
+.node.model,.node.human{border-style:dashed}
 .node.params .hd{background:var(--param-bg)}
 .node .hd .t{font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .node .hd .gid{background:var(--card)}
@@ -205,6 +205,27 @@ body.tracing .node.tr{opacity:1}
 .node.term .hd{background:none;font-weight:600;color:var(--term);padding:7px 12px 7px 14px}
 .node.term .hd .t{white-space:normal}
 .node.term .n{font:11px var(--mono);color:var(--faint);font-weight:400}
+.node.start{box-shadow:var(--shadow),0 0 0 2px var(--pass)}
+.node .tags{display:flex;flex-wrap:wrap;gap:4px;padding:5px 10px 0}
+.node .tags span{font:10.5px/1.6 var(--mono);padding:0 6px;border-radius:4px;background:var(--chip);color:var(--muted)}
+.node .row.out.retry .sym{color:var(--accent)}
+.w.retry{stroke:var(--accent);stroke-dasharray:2 5;stroke-linecap:round}
+.w.skip{stroke-dasharray:3 4;opacity:.6}
+.w.fail.cont{stroke-dasharray:2 4}
+.lane{position:absolute;left:0;top:0;border-top:1px dashed var(--line);pointer-events:none}
+.lane-model{background:color-mix(in srgb,var(--model-bg) 45%,transparent)}
+.lane-person{background:color-mix(in srgb,var(--human-bg) 45%,transparent)}
+.lane-l{position:absolute;left:12px;top:10px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);font-weight:600}
+.box{position:absolute;left:0;top:0;border:1.5px solid var(--faint);border-radius:14px;background:color-mix(in srgb,var(--card) 18%,transparent)}
+.box-for,.box-until{border-color:var(--accent)}
+.box-if,.box-else{border-style:dashed}
+.box-section{border-style:dotted;background:none}
+.box-finally{border-color:var(--term);border-style:dashed}
+.box-l{position:absolute;left:10px;top:4px;font:600 12px/1.4 var(--mono);color:var(--muted);cursor:pointer;background:var(--bg);padding:0 6px;border-radius:6px}
+.box-for .box-l,.box-until .box-l{color:var(--accent)}
+.box-t{font-weight:400;color:var(--faint)}
+.box .box-port{position:absolute;right:-6px;bottom:24px}
+body.focus .box,body.tracing .box{opacity:.5}
 aside{flex:none;width:350px;border-left:1px solid var(--line);background:var(--card);overflow:auto;padding:14px 16px 40px;font-size:13px}
 aside h2{font-size:15px;margin:6px 0 2px}
 aside .k{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);margin:12px 0 3px}
@@ -462,45 +483,59 @@ function unitCard(U) {
       el("td", {}, S.served ? el("button", { onclick: () => applyPreset(U, p) }, "Apply") : null))))));
   return card;
 }
-const kindWord = k => k === "step" || k === "end" ? k : k + " gate";
 function nodeRef(U, id, onGo) {
   const f = cat(U).flow.find(x => x.id === id);
   return el("a", { onclick: onGo, title: f ? f.name || "" : "" }, el("span", { class: "gid " + (f ? f.kind : "step") }, id), " ", f ? f.name || "" : "?");
 }
 function flowTable(U) {
-  const c = cat(U), rowId = id => "n-" + U.name + "-" + id;
+  const c = cat(U), rowId = id => "n-" + U.name + "-" + id, blocks = Object.fromEntries((c.blocks || []).map(b => [b.id, b]));
   const go = id => () => { const tr = document.getElementById(rowId(id)); if (!tr) return; tr.scrollIntoView({ block: "center", behavior: "smooth" }); tr.classList.remove("flash"); void tr.offsetWidth; tr.classList.add("flash"); };
-  const from = {};
-  for (const f of c.flow) for (const l of [...(f.next || []), ...(f.pass || []), ...(f.fail || [])]) if (l.to !== f.id) (from[l.to] ||= []).includes(f.id) || from[l.to].push(f.id);
   const focusEd = (fid, rid) => { const e = $(`#${CSS.escape(rowId(fid))} [data-rule="${CSS.escape(rid)}"] input, #${CSS.escape(rowId(fid))} [data-rule="${CSS.escape(rid)}"] select`); e && e.focus(); };
+  const title = b => ({ for: `for ${b.item} in ${b.path}`, until: `until ${b.path}`, if: `if ${b.path}`, else: "else", section: b.name, finally: "finally" }[b.kind] || b.id);
+  const target = x => !x ? el("span", { class: "when" }, "the flow ends") : c.flow.some(f => f.id === x) ? nodeRef(U, x, go(x)) : el("span", { class: "gid" }, x);
   const strip = el("nav", { class: "flowstrip", "aria-label": "Flow" });
   c.flow.forEach((f, i) => { if (i) strip.append(el("span", { class: "arrow" }, "›")); const a = nodeRef(U, f.id, go(f.id)); a.href = "#" + rowId(f.id); a.onclick = e => { e.preventDefault(); go(f.id)(); }; strip.append(a); });
-  const rows = c.flow.map(f => {
+  const rows = [], drawn = new Set();
+  const row = f => {
     const leads = el("div", { class: "links" });
-    for (const l of [...(f.next || []), ...(f.pass || [])]) leads.append(el("div", { class: "lk pass" }, el("span", { class: "sym" }, "→"), el("span", {}, nodeRef(U, l.to, go(l.to)), l.when ? el("span", { class: "when" }, " — ", chips(U, l.when, () => {})) : null)));
-    for (const l of f.fail || []) leads.append(el("div", { class: "lk fail" }, el("span", { class: "sym" }, "✕"), el("span", {}, nodeRef(U, l.to, go(l.to)), l.when ? el("span", { class: "when" }, " — ", chips(U, l.when, () => {})) : null)));
+    if (f.kind !== "end") leads.append(el("div", { class: "lk pass" }, el("span", { class: "sym" }, "→"), el("span", {}, target(f.next))));
+    if (f.back) leads.append(el("div", { class: "lk pass" }, el("span", { class: "sym" }, "↺"), el("span", {}, "retry: ", nodeRef(U, f.back, go(f.back)), el("span", { class: "when" }, ` — at most ${f.retry} times`))));
+    for (const l of f.fail || []) leads.append(el("div", { class: "lk fail" }, el("span", { class: "sym" }, "✕"), el("span", {}, l.continue ? "continue (next item)" : nodeRef(U, l.to, go(l.to)), l.when ? el("span", { class: "when" }, " — ", chips(U, l.when, () => {})) : null)));
     if (f.kind === "end") leads.append(el("div", { class: "lk pass" }, el("span", { class: "sym" }, "■"), el("span", { class: "when" }, "the flow stops here")));
-    if ((from[f.id] || []).length) leads.append(el("div", { class: "lk from" }, el("span", { class: "sym" }, "←"), el("span", {}, from[f.id].map((id, i) => [i ? ", " : "", nodeRef(U, id, go(id))]))));
     const pick = rid => focusEd(f.id, rid);
-    const txt = (key, title) => has(f, key) ? el("div", {}, title ? el("span", { class: "faint" }, title + ": ") : null, chips(U, f[key], pick)) : null;
+    const txt = (key, label) => has(f, key) ? el("div", {}, label ? el("span", { class: "faint" }, label + ": ") : null, chips(U, f[key], pick)) : null;
     const eds = el("div", { class: "eds" }, (f.reads || []).map(rid => {
       const r = ruleOf(U, rid);
-      return r ? el("div", { class: "ed" + (isChanged(U, rid) ? " changed" : ""), "data-rule": rid }, el("div", { class: "lab" }, r.label, el("span", { class: "rid" }, rid)), el("div", {}, editor(U, rid), r.unit ? el("span", { class: "unitx" }, " " + r.unit) : null)) : null;
+      return r ? el("div", { class: "ed" + (isChanged(U, rid) ? " changed" : ""), "data-rule": rid }, el("div", { class: "lab" }, r.label, el("span", { class: "rid" }, rid)), el("div", {}, editor(U, rid))) : null;
     }));
     if (!(f.reads || []).length) eds.append(el("span", { class: "none" }, "no rules"));
     const by = (f.by || []).join(", "), level = U.levels[f.id];
+    const who = by ? "by " + by : { model: "decided by the model", human: "decided by a person", step: f.lane === "model" ? "by the model" : "", end: "" }[f.kind] ?? "no code yet";
+    const extra = [f.if && "only if " + f.if, f.options && "options: " + f.options.join(" | "), f.out && "out " + f.out, f.timeout_text && "timeout " + f.timeout_text].filter(Boolean);
     return el("tr", { id: rowId(f.id), class: (f.reads || []).some(r => isChanged(U, r)) ? "changed" : "" },
       el("td", {}, el("div", {}, el("span", { class: "gid " + f.kind }, f.id), " ", el("span", { class: "kind" }, kindWord(f.kind))),
         f.name ? el("div", { style: "font-weight:600;margin-top:2px" }, f.name) : null,
-        el("div", { class: "code" }, by ? "by " + by : f.kind === "judge" ? "decided by the model" : f.kind === "human" ? "decided by a person" : f.kind === "hard" || f.kind === "soft" ? "no code yet" : ""),
-        level && by && f.kind !== "judge" && f.kind !== "human" ? el("div", {}, el("span", { class: "st " + (level === "proved" || level === "tested" ? "ok" : level === "none" ? "warn" : "") }, level)) : null,
+        el("div", { class: "code" }, who),
+        level && by && f.kind !== "model" && f.kind !== "human" ? el("div", {}, el("span", { class: "st " + (level === "tested" ? "ok" : level === "none" ? "warn" : "") }, level)) : null,
         (f.notes || []).map(n => el("div", { class: "dim", style: "font-size:12px;margin-top:4px" }, "note: ", chips(U, n.text, pick)))),
-      el("td", {}, txt("when", "when"), txt("ensure", f.kind === "step" ? "ensure" : "check")),
-      el("td", {}, txt("do"), txt("brief", f.kind === "human" ? "ask" : "judge")),
+      el("td", {}, txt("do"), txt("check", f.kind === "human" ? "ask" : f.kind === "model" ? "decide" : "check"), extra.map(x => el("div", { class: "faint", style: "font-size:12px" }, x))),
       el("td", {}, leads), el("td", {}, eds));
-  });
-  return el("div", {}, el("h3", {}, "Flow"), strip, el("div", { class: "tw" }, el("table", {},
-    el("tr", {}, el("th", { style: "width:17%" }, "Node"), el("th", { style: "width:24%" }, "When / check"), el("th", { style: "width:22%" }, "Do / judge"), el("th", { style: "width:19%" }, "Leads to"), el("th", { style: "width:18%" }, "Values")), rows)));
+  };
+  const walk = (ids, depth) => {
+    for (const x of ids) {
+      const f = c.flow.find(n => n.id === x);
+      if (f) { rows.push(row(f)); drawn.add(x); continue; }
+      const b = blocks[x];
+      if (!b) continue;
+      const opts = [b.tolerate != null && "tolerate " + b.tolerate + "%", b.retry != null && "retry " + b.retry, ...(b.fail || []).map(l => "fail → " + l.to)].filter(Boolean).join(" · ");
+      rows.push(el("tr", { class: "blockrow" }, el("th", { colspan: 4, style: `text-transform:none;padding-left:${8 + 16 * depth}px` }, (b.kind === "for" || b.kind === "until" ? "↻ " : b.kind === "section" ? "§ " : "▸ ") + title(b), opts ? el("span", { class: "faint" }, "  " + opts) : null)));
+      walk(b.body, depth + 1);
+    }
+  };
+  walk(c.body || c.flow.map(f => f.id), 0);
+  for (const f of c.flow) if (!drawn.has(f.id)) rows.push(row(f));
+  return el("div", {}, el("h3", {}, "Flow"), el("p", { class: "dim", style: "margin:0 0 6px;font-size:13px" }, "The lines run in order. A gate that passes goes on to the next line; a fail goes to an end."), strip, el("div", { class: "tw" }, el("table", {},
+    el("tr", {}, el("th", { style: "width:20%" }, "Node"), el("th", { style: "width:36%" }, "Do / check"), el("th", { style: "width:24%" }, "Leads to"), el("th", { style: "width:20%" }, "Values")), rows)));
 }
 function rulesTable(U) {
   const c = cat(U), readers = {};
@@ -560,35 +595,78 @@ function jsonView() {
   return wrap;
 }
 
-// - Graph tab: a node graph of the flow ----------------
-// Nodes: one per step and gate, one per end, one per rule group. Wires: pass/next, fail, and rule -> node input.
-let G = { U: null, c: null, nodes: [], edges: [], layerOf: {}, byId: {}, pos: {} };
-const posKey = () => "pos." + S.B.file + "." + S.unit;
+// - Graph tab: the flow in three lanes, with the blocks as boxes ---
+// Each node is in the lane of who decides it: code, the model or the person. The order of the
+// columns is the order of the lines. A block (for, until, if, else, section, finally) is a box
+// around the columns of its lines. The ends stand in a column of their own at the right.
+// Wires: next (solid), fail (dashed), retry (dotted, back to the step). The rule groups stand
+// above the lanes, wired to the nodes that read them.
+let G = { U: null, c: null, nodes: [], edges: [], boxes: [], byId: {}, pos: {} };
+const LANES = [["code", "code"], ["model", "the model"], ["person", "a person"]];
+const COL = 300, GAP = 70, LANE_PAD = 26;
+const posKey = () => "pos2." + S.B.file + "." + S.unit;
+const kindWord = k => k === "step" || k === "end" ? k : k + " gate";
+function blockTitle(b) {
+  return { for: `for ${b.item} in ${b.path}`, until: `until ${b.path}`, if: `if ${b.path}`, else: "else", section: b.name || "section", finally: "finally" }[b.kind] || b.id;
+}
 function buildGraph(U) {
-  const c = cat(U), byId = Object.fromEntries(c.flow.map(f => [f.id, f]));
-  const nodes = [], edges = [], terms = {};
-  const outs = f => [...(f.next || []), ...(f.pass || []), ...(f.fail || [])].map(l => l.to).filter(t => byId[t] && byId[t].kind !== "end");
-  const state = {}, order = [], back = new Set();
-  const dfs = id => { state[id] = 1; for (const t of outs(byId[id])) { if (state[t] === 1) back.add(id + ">" + t); else if (!state[t]) dfs(t); } state[id] = 2; order.push(id); };
-  const flows = c.flow.filter(f => f.kind !== "end");
-  if (c.start) dfs(c.start);
-  for (const f of flows) if (!state[f.id]) dfs(f.id);
-  const layerOf = {}; for (const f of flows) layerOf[f.id] = 0;
-  for (const id of order.reverse()) for (const t of outs(byId[id])) if (!back.has(id + ">" + t)) layerOf[t] = Math.max(layerOf[t], layerOf[id] + 1);
-  for (const f of flows) nodes.push({ id: f.id, type: "flow", f });
-  for (const f of c.flow.filter(f => f.kind === "end")) { terms[f.id] = { id: f.id, type: "term", f, from: [] }; nodes.push(terms[f.id]); }
-  for (const f of flows) {
-    [...(f.next || []), ...(f.pass || [])].forEach((l, i) => byId[l.to] && edges.push({ from: f.id + ":o:p" + i, to: l.to + ":in", cls: "pass", src: f.id, dst: l.to, back: back.has(f.id + ">" + l.to), label: l.when }));
-    (f.fail || []).forEach((l, i) => byId[l.to] && edges.push({ from: f.id + ":o:f" + i, to: l.to + ":in", cls: "fail", src: f.id, dst: l.to, back: back.has(f.id + ">" + l.to), label: l.when }));
-    for (const l of [...(f.next || []), ...(f.pass || []), ...(f.fail || [])]) if (terms[l.to] && !terms[l.to].from.includes(f.id)) terms[l.to].from.push(f.id);
+  const c = cat(U), byId = Object.fromEntries(c.flow.map(f => [f.id, f])), blocks = Object.fromEntries((c.blocks || []).map(b => [b.id, b]));
+  const nodes = [], edges = [], order = [], ends = [], depthOf = {};
+  const walk = (ids, depth) => {
+    for (const x of ids) {
+      if (byId[x]) { (byId[x].kind === "end" ? ends : order).push(x); depthOf[x] = depth; }
+      else if (blocks[x]) walk(blocks[x].body, depth + 1);
+    }
+  };
+  walk(c.body || [], 0);
+  for (const f of c.flow) if (!order.includes(f.id) && !ends.includes(f.id)) (f.kind === "end" ? ends : order).push(f.id);
+  order.forEach((id, i) => nodes.push({ id, type: "flow", f: byId[id], col: i }));
+  ends.forEach((id, i) => nodes.push({ id, type: "term", f: byId[id], col: order.length, row: i }));
+  const entry = x => {  // a node or block id -> the nodes where the flow enters it
+    if (!x) return [];
+    if (byId[x]) return [x];
+    const b = blocks[x];
+    if (!b) return [];
+    if (b.kind === "if") return [...new Set([...entry(b.first), ...entry(b.else)])];
+    return entry(b.first);
+  };
+  const inside = (id, bid) => { for (let f = byId[id]; f && f.block;) { if (f.block === bid) return true; const b = blocks[f.block]; f = b ? { block: b.block } : null; } return false; };
+  for (const f of c.flow) {
+    if (f.kind === "end") continue;
+    let nxt = f.next;
+    const loop = nxt && blocks[nxt] && (blocks[nxt].kind === "for" || blocks[nxt].kind === "until") && inside(f.id, nxt);
+    if (loop) nxt = blocks[nxt].next;  // the end of a loop body: the box shows the way back; draw the way out
+    if (f.if) for (const t of entry(f.next)) edges.push({ from: f.id + ":o:skip", to: t + ":in", cls: "pass skip", src: f.id, dst: t, label: "if not " + f.if });
+    entry(nxt).forEach(t => edges.push({ from: f.id + ":o:p", to: t + ":in", cls: "pass" + (loop ? " out" : ""), src: f.id, dst: t, label: loop ? "after the last item" : "" }));
+    (f.fail || []).forEach((l, i) => {
+      if (l.continue) edges.push({ from: f.id + ":o:f" + i, to: "B:" + l.to, cls: "fail cont", src: f.id, dst: l.to, label: l.when ? "continue: " + l.when : "continue" });
+      else entry(l.to).forEach(t => edges.push({ from: f.id + ":o:f" + i, to: t + ":in", cls: "fail", src: f.id, dst: t, label: l.when }));
+    });
+    if (f.back) edges.push({ from: f.id + ":o:r", to: f.back + ":in", cls: "retry back", src: f.id, dst: f.back, label: "retry " + f.retry });
     for (const rid of f.reads || []) { const r = c.rules.find(x => x.id === rid); if (r) edges.push({ from: "R:" + rid, to: f.id + ":p:" + rid, cls: "param", src: "P:" + r.group, dst: f.id, rule: rid }); }
   }
+  for (const b of c.blocks || []) {
+    if (b.kind !== "for" && b.kind !== "until") continue;
+    (b.fail || []).forEach(l => entry(l.to).forEach(t => edges.push({ from: "B:" + b.id, to: t + ":in", cls: "fail", src: b.id, dst: t, label: b.kind === "for" ? "more than " + b.tolerate + "% left" : "still not " + b.path })));
+  }
+  const starts = entry(c.start);
   for (const gr of [...new Set(c.rules.map(r => r.group))]) nodes.push({ id: "P:" + gr, type: "params", group: gr, rules: c.rules.filter(r => r.group === gr) });
-  G = { U, c, nodes, edges, layerOf, byId, pos: G.pos };
+  const boxes = (c.blocks || []).map(b => {
+    const ids = [], add = x => { if (byId[x]) ids.push(x); else if (blocks[x]) blocks[x].body.forEach(add); };
+    b.body.forEach(add);
+    let inner = 0; const deep = (x, d) => { const bb = blocks[x]; if (!bb) return; inner = Math.max(inner, d); bb.body.forEach(y => deep(y, d + 1)); };
+    b.body.forEach(x => deep(x, 1));
+    return { b, ids, inner };
+  }).filter(x => x.ids.length);
+  G = { U, c, nodes, edges, boxes, byId, blocks, starts, depthOf, ends: ends.length, cols: order.length, pos: G.pos };
 }
 function port(cls, key) { return el("span", { class: "port " + cls, "data-port": key }); }
 const fmt = rid => shown(G.U, rid);
 const fill = t => fillText(G.U, t);
+function byLineOf(f) {
+  if ((f.by || []).length) return "by " + f.by.join(", ");
+  return { model: "decided by the model: a guess", human: "decided by a person", step: f.lane === "model" ? "done by the model" : "", end: "" }[f.kind] ?? "no code yet";
+}
 function nodeEl(n) {
   const drag = { onpointerdown: e => startDrag(e, n) };
   const U = G.U;
@@ -599,83 +677,104 @@ function nodeEl(n) {
     return el("div", { class: "node params", "data-node": n.id },
       el("div", { class: "hd", ...drag }, el("span", { class: "t" }, n.group), el("span", { class: "kind" }, "rules")),
       n.rules.map(r => el("div", { class: "row" + (used.has(r.id) ? "" : " unused") + (isChanged(U, r.id) ? " changed" : ""), "data-rule": r.id,
-          title: [r.note, r.unit ? "(" + r.unit + ")" : "", r.evidence ? "evidence: " + r.evidence : ""].filter(Boolean).join(" "),
-          onpointerenter: () => hover({ rule: r.id }), onpointerleave: () => hover(null) },
+          title: r.note || "", onpointerenter: () => hover({ rule: r.id }), onpointerleave: () => hover(null) },
         el("span", { class: "lab" }, el("span", { class: "l" }, r.label), el("span", { class: "rid" }, r.id)),
         el("span", { class: "ctl" }, editor(U, r.id)),
         used.has(r.id) ? port("out p-out", "R:" + r.id) : null)),
       el("div", { class: "foot" }));
   }
-  const f = n.f, k = f.kind, txt = f.ensure || f.do || f.brief || f.when;
-  const byLine = (f.by || []).length ? "by " + f.by.join(", ") : k === "judge" ? "decided by the model" : k === "human" ? "decided by a person" : k === "step" || k === "end" ? "" : "no code yet";
-  return el("div", { class: "node " + k, "data-node": n.id, onclick: e => { if (!e.target.closest("input,select")) select(n.id); } },
+  const f = n.f, k = f.kind, txt = f.check || f.do;
+  const tags = [f.if ? "if " + f.if : null, f.options ? "options: " + f.options.join(" | ") : null, f.out ? "out " + f.out : null,
+    f.retry != null ? "retry " + (typeof f.retry === "string" ? fmt(f.retry) : f.retry) : null, f.timeout_text ? "timeout " + f.timeout_text : null].filter(Boolean);
+  return el("div", { class: "node " + k + (G.starts.includes(f.id) ? " start" : ""), "data-node": n.id, onclick: e => { if (!e.target.closest("input,select")) select(n.id); } },
     el("div", { class: "hd", ...drag }, port("in flow", f.id + ":in"), el("span", { class: "gid " + k }, f.id), el("span", { class: "t", title: f.name || "" }, f.name || ""), el("span", { class: "kind" }, k)),
-    byLine ? el("div", { class: "by" }, byLine) : null,
+    byLineOf(f) ? el("div", { class: "by" }, byLineOf(f)) : null,
     txt ? el("div", { class: "txt", title: fill(txt) }, fill(txt)) : null,
+    tags.length ? el("div", { class: "tags" }, tags.map(t => el("span", {}, t))) : null,
     (f.reads || []).length ? el("div", { class: "sec" }, "inputs") : null,
     (f.reads || []).map(rid => el("div", { class: "row" + (isChanged(U, rid) ? " changed" : ""), "data-rule": rid, onpointerenter: () => hover({ rule: rid }), onpointerleave: () => hover(null) },
       port("in p-in", f.id + ":p:" + rid), el("span", { class: "rid" }, rid), el("span", { class: "v" }, fmt(rid)))),
-    [...(f.next || []), ...(f.pass || []), ...(f.fail || [])].length ? el("div", { class: "sec", style: "text-align:right" }, "outputs") : null,
-    [...(f.next || []), ...(f.pass || [])].map((l, i) => el("div", { class: "row out pass" }, el("span", { class: "when" }, l.when ? fill(l.when) : "→ " + l.to), el("span", { class: "sym" }, "✓"), port("out flow", f.id + ":o:p" + i))),
-    (f.fail || []).map((l, i) => el("div", { class: "row out fail" }, el("span", { class: "when" }, l.when ? fill(l.when) : "→ " + l.to), el("span", { class: "sym" }, "✕"), port("out flow f-fail", f.id + ":o:f" + i))),
+    el("div", { class: "sec", style: "text-align:right" }, "outputs"),
+    el("div", { class: "row out pass" }, el("span", { class: "when" }, f.next ? "next" : "the flow ends"), el("span", { class: "sym" }, "✓"), port("out flow", f.id + ":o:p")),
+    f.if ? el("div", { class: "row out pass" }, el("span", { class: "when" }, "skipped"), el("span", { class: "sym" }, "↷"), port("out flow", f.id + ":o:skip")) : null,
+    f.back ? el("div", { class: "row out retry" }, el("span", { class: "when" }, "retry"), el("span", { class: "sym" }, "↺"), port("out flow f-retry", f.id + ":o:r")) : null,
+    (f.fail || []).map((l, i) => el("div", { class: "row out fail" }, el("span", { class: "when" }, l.when ? fill(l.when) : (l.continue ? "continue" : "→ " + l.to)), el("span", { class: "sym" }, "✕"), port("out flow f-fail", f.id + ":o:f" + i))),
     el("div", { class: "foot" }));
 }
 function renderGraph() {
   const U = curUnit(), c = cat(U);
   const world = $("#world");
-  $$("#world .node").forEach(e => e.remove());
+  $$("#world .node, #world .box, #world .lane").forEach(e => e.remove());
   $("#wires").replaceChildren();
   if (!c || !c.flow.length) {
     document.body.classList.remove("tab-graph");
-    $("#page").append(el("main", {}, el("div", { class: "card" }, el("p", {}, "This unit has no flow. The graph shows the steps, gates, ends and rules of tool and agent units."),
+    $("#page").append(el("main", {}, el("div", { class: "card" }, el("p", {}, "This unit has no flow. The graph shows the steps, gates, ends and rules of agent units."),
       units().filter(x => x.flow).map(x => el("button", { style: "margin-right:6px", onclick: () => { S.unit = x.name; render(); } }, x.name)))));
     $("#gbar").hidden = true;
     return;
   }
   const cv = c.coverage;
-  $("#cov").replaceChildren(el("b", {}, U.name), " · ", ...(cv.gates ? [el("b", {}, Math.round(100 * (cv.proved + cv.tested) / cv.gates) + "%"), ` coverage · ${cv.proved + cv.tested} of ${cv.gates} gates by proved or tested code` + (cv.observed ? `, ${cv.observed} observed` : "") + (cv.code ? `, ${cv.code} by code with no test` : "") + (cv.judge ? `, ${cv.judge} by the model` : "") + (cv.human ? `, ${cv.human} by a person` : "")] : ["no gates"]));
+  $("#cov").replaceChildren(el("b", {}, U.name), " · ", ...(cv.gates ? [el("b", {}, Math.round(100 * cv.tested / cv.gates) + "%"), ` coverage · ${cv.tested} of ${cv.gates} gates by tested code` + (cv.code ? `, ${cv.code} by code with no test` : "") + (cv.model ? `, ${cv.model} by the model` : "") + (cv.human ? `, ${cv.human} by a person` : "") + (cv.none ? `, ${cv.none} with no code` : "")] : ["no gates"]));
   if (!G.U || G.U.name !== U.name || G.name !== S.B.file) { try { G.pos = JSON.parse(store.get(posKey()) || "{}") || {}; } catch (e) { G.pos = {}; } }
   buildGraph(U); G.name = S.B.file;
   if (S.sel && !G.nodes.some(n => n.id === S.sel)) S.sel = null;
   for (const n of G.nodes) { n.el = nodeEl(n); world.append(n.el); }
   layout();
   for (const n of G.nodes) place(n);
+  drawLanes(); drawBoxes();
   const first = !S.view;
   if (first) S.view = { x: 40, y: 40, k: 0.7 };
   applyView();
   requestAnimationFrame(() => { if (first) fit(); drawWires(); inspector(); });
 }
-const COL = 340, ROWGAP = 40;
 function layout() {
-  const auto = {}, colH = {};
-  const flows = G.nodes.filter(n => n.type === "flow");
-  const layers = Math.max(0, ...flows.map(n => G.layerOf[n.id])) + 1;
-  const per = layers > 9 ? Math.ceil(layers / 2) : layers;
-  for (const n of flows) { const L = G.layerOf[n.id]; const y = colH[L] || 0; auto[n.id] = { x: L * COL, y }; colH[L] = y + n.el.offsetHeight + ROWGAP; }
+  const flows = G.nodes.filter(n => n.type === "flow"), laneH = {}, top = {};
+  for (const [lane] of LANES) laneH[lane] = 120;
+  for (const n of flows) laneH[n.f.lane] = Math.max(laneH[n.f.lane], n.el.offsetHeight + 2 * LANE_PAD);
+  const maxInner = Math.max(0, ...G.boxes.map(x => x.inner)), head = 46 + 26 * maxInner;
+  let y = 0;
+  for (const [lane] of LANES) { top[lane] = y; y += laneH[lane]; }
+  G.lanes = { top, h: laneH, bottom: y, head };
+  const auto = {};
+  for (const n of flows) auto[n.id] = { x: n.col * COL, y: top[n.f.lane] + LANE_PAD };
+  let ey = 0;
+  for (const n of G.nodes.filter(n => n.type === "term")) { auto[n.id] = { x: n.col * COL + GAP, y: ey + LANE_PAD }; ey += n.el.offsetHeight + 18; }
   const above = {};
   for (const n of G.nodes.filter(n => n.type === "params")) {
-    const count = {};
-    for (const e of G.edges) if (e.src === n.id) count[e.dst] = (count[e.dst] || 0) + 1;
-    const a = Object.keys(count).sort((p, q) => count[q] - count[p] || G.layerOf[p] - G.layerOf[q])[0];
-    const L = a ? G.layerOf[a] : 0;
-    const h = (above[L] || 0) + n.el.offsetHeight + ROWGAP;
-    above[L] = h; auto[n.id] = { x: L * COL - 30, y: -h - 40 };
+    const cols = G.edges.filter(e => e.src === n.id).map(e => (G.nodes.find(m => m.id === e.dst) || {}).col).filter(x => x != null);
+    const col = cols.length ? Math.min(...cols) : 0;
+    const h = (above[col] || 0) + n.el.offsetHeight + 24;
+    above[col] = h; auto[n.id] = { x: col * COL, y: -head - h };
   }
-  const below = {};
-  for (const n of G.nodes.filter(n => n.type === "term")) {
-    const L = n.from.length ? Math.max(...n.from.map(id => G.layerOf[id] || 0)) : 0;
-    const y = (colH[L] || 0) + (below[L] || 0) + 30;
-    below[L] = (below[L] || 0) + n.el.offsetHeight + 24; auto[n.id] = { x: L * COL + 60, y };
-  }
-  const rowOf = id => Math.floor(Math.max(0, Math.round((auto[id].x + 60) / COL)) / per);
-  const rows = {};
-  for (const n of G.nodes) { const r = rowOf(n.id); const b = rows[r] ||= { top: Infinity, bot: -Infinity }; b.top = Math.min(b.top, auto[n.id].y); b.bot = Math.max(b.bot, auto[n.id].y + n.el.offsetHeight); }
-  let shift = 0; const off = {};
-  for (const r of Object.keys(rows).map(Number).sort((a, b) => a - b)) { off[r] = shift - rows[r].top + (r ? 0 : rows[r].top); shift = off[r] + rows[r].bot + 260; }
-  for (const n of G.nodes) { const r = rowOf(n.id); auto[n.id] = { x: auto[n.id].x - r * per * COL, y: auto[n.id].y + off[r] }; }
   for (const n of G.nodes) n.auto = auto[n.id] || { x: 0, y: 0 };
 }
 function place(n) { const p = G.pos[n.id] || n.auto; n.x = p.x; n.y = p.y; n.el.style.transform = `translate(${n.x}px,${n.y}px)`; }
+function drawLanes() {
+  $$("#world .lane").forEach(e => e.remove());
+  const L = G.lanes, width = (G.cols + 1) * COL + GAP + 40;
+  for (const [lane, who] of LANES) {
+    $("#world").prepend(el("div", { class: "lane lane-" + lane, style: `transform:translate(-160px,${L.top[lane]}px);width:${width + 160}px;height:${L.h[lane]}px` },
+      el("span", { class: "lane-l" }, who)));
+  }
+}
+function drawBoxes() {  // a block: a box around the columns of its lines, over all three lanes
+  $$("#world .box").forEach(e => e.remove());
+  const L = G.lanes, world = $("#world");
+  const sorted = [...G.boxes].sort((a, b) => b.inner - a.inner);
+  for (const { b, ids, inner } of sorted.reverse()) {
+    const ns = ids.map(id => G.nodes.find(n => n.id === id)).filter(Boolean);
+    if (!ns.length) continue;
+    const pad = 16 + 14 * inner;
+    const x0 = Math.min(...ns.map(n => n.x)) - pad, x1 = Math.max(...ns.map(n => n.x + n.el.offsetWidth)) + pad;
+    const y0 = Math.min(-26 - 26 * inner, ...ns.map(n => n.y - 30 - 26 * inner)), y1 = Math.max(L.bottom + 8 + 12 * inner, ...ns.map(n => n.y + n.el.offsetHeight + pad));
+    const tags = [b.tolerate != null ? "tolerate " + b.tolerate + "%" : null, b.retry != null ? "retry " + b.retry : null].filter(Boolean).join(" · ");
+    const box = el("div", { class: "box box-" + b.kind, "data-box": b.id, title: b.id, style: `transform:translate(${x0}px,${y0}px);width:${x1 - x0}px;height:${y1 - y0}px`, onclick: e => { if (e.target === box || e.target.closest(".box-l")) select(b.id); } },
+      el("span", { class: "box-l" }, el("b", {}, b.kind === "section" ? "§ " : b.kind === "for" || b.kind === "until" ? "↻ " : ""), blockTitle(b), tags ? el("span", { class: "box-t" }, " · " + tags) : null),
+      port("out flow f-fail box-port", "B:" + b.id));
+    world.prepend(box);
+  }
+  for (const e of $$("#world .lane")) world.prepend(e);
+}
 function portXY(key) {
   const p = document.querySelector(`[data-port="${CSS.escape(key)}"]`);
   if (!p) return null;
@@ -684,7 +783,7 @@ function portXY(key) {
 }
 function curve(a, b, back) {
   const dx = Math.max(60, Math.abs(b.x - a.x) * 0.45);
-  if (back) { const dip = Math.max(a.y, b.y) + 120 + Math.abs(a.x - b.x) * 0.06; return `M${a.x},${a.y} C${a.x + 120},${a.y} ${a.x + 120},${dip} ${(a.x + b.x) / 2},${dip} S${b.x - 120},${b.y} ${b.x},${b.y}`; }
+  if (back) { const lift = Math.min(a.y, b.y) - 90 - Math.abs(a.x - b.x) * 0.05; return `M${a.x},${a.y} C${a.x + 90},${a.y} ${a.x + 90},${lift} ${(a.x + b.x) / 2},${lift} S${b.x - 90},${b.y} ${b.x},${b.y}`; }
   return `M${a.x},${a.y} C${a.x + dx},${a.y} ${b.x - dx},${b.y} ${b.x},${b.y}`;
 }
 function drawWires() {
@@ -693,8 +792,8 @@ function drawWires() {
     const a = portXY(e.from), b = portXY(e.to);
     if (!a || !b) { e.path = null; continue; }
     e.path = document.createElementNS(NS, "path");
-    e.path.setAttribute("d", curve(a, b, e.back));
-    e.path.setAttribute("class", "w " + e.cls + (e.back ? " back" : ""));
+    e.path.setAttribute("d", curve(a, b, e.cls.includes("back") || b.x < a.x - 10));
+    e.path.setAttribute("class", "w " + e.cls);
     svg.append(e.path);
     if (e.cls !== "param" && e.label) {
       const t = document.createElementNS(NS, "text"), L = e.path.getTotalLength(), m = e.path.getPointAtLength(L / 2);
@@ -708,12 +807,12 @@ function drawWires() {
 let hov = null;
 let TRACE = null;  // one run of rigkit (from rig.py serve): its trace is shown as a path on the graph
 function traceEdges() {  // the wires that the run followed
-  const t = TRACE.trace || [], out = new Set();
+  const t = (TRACE.trace || []).filter(x => G.byId[x.node] && !x.skipped), out = new Set();
   t.forEach((a, i) => {
     const b = t[i + 1] ? t[i + 1].node : (TRACE.outcome ? null : TRACE.at);
     if (!b) return;
     const flow = G.edges.filter(e => e.cls !== "param" && e.src === a.node && e.dst === b);
-    const same = flow.filter(e => e.cls === (a.pass === false ? "fail" : "pass"));
+    const same = flow.filter(e => a.retry ? e.cls.includes("retry") : e.cls.startsWith(a.pass === false ? "fail" : "pass"));
     const e = same.find(e => a.when && e.label === a.when) || same[0] || flow[0];
     if (e) out.add(e);
   });
@@ -725,10 +824,11 @@ function applyTrace(on) {
   for (const e of G.edges) { e.path && e.path.classList.remove("tr"); e.text && e.text.classList.remove("tr"); }
   if (!TRACE) return;
   const seen = {};
-  (TRACE.trace || []).forEach((t, i) => { (seen[t.node] = seen[t.node] || []).push(i + 1); });
+  (TRACE.trace || []).forEach((t, i) => { if (!t.skipped) (seen[t.node] = seen[t.node] || []).push(i + 1); });
   for (const n of G.nodes) {
     if (!n.el || !seen[n.id]) continue;
-    n.el.classList.add("tr"); n.el.setAttribute("data-trace", seen[n.id].join(" · "));
+    n.el.classList.add("tr");
+    n.el.setAttribute("data-trace", seen[n.id].length > 3 ? seen[n.id].length + "×" : seen[n.id].join(" · "));
     if ((TRACE.trace || []).some(t => t.node === n.id && t.pass === false)) n.el.classList.add("tr-fail");
   }
   if (!TRACE.outcome) { const n = G.nodes.find(n => n.id === TRACE.at); if (n && n.el) n.el.classList.add("tr", "tr-wait"); }
@@ -737,18 +837,21 @@ function applyTrace(on) {
 function traceInfo(f) {  // for the inspector: the run as a whole, or what happened at one node
   const T = TRACE, j = v => JSON.stringify(v);
   if (!f) {
-    const state = T.outcome ? "ended at " + (T.outcome.end || T.outcome.label) : T.error ? "error at " + T.error.node + ": " + T.error.error : "waits at " + T.at;
+    const state = T.outcome ? "ended at " + (T.outcome.end || T.outcome.label) + (T.outcome.end === "error" && T.error ? ": " + T.error.error : "") : "waits at " + T.at;
     return el("div", {}, el("div", { class: "k" }, "Run " + T.id), el("p", {}, state),
       el("p", { class: "hint" }, "inputs: " + j(T.inputs)),
+      T.from ? el("p", { class: "hint" }, `a rerun of ${T.from.run}, from ${T.from.from}`) : null,
       (T.problems || []).length ? [el("div", { class: "k" }, "Problems"), T.problems.map(x => el("p", { class: "hint" }, x))] : null,
+      (T.left || []).length ? [el("div", { class: "k" }, "Items left (continue)"), T.left.map(x => el("p", { class: "hint" }, `${x.block} item ${x.item}: ${x.gate}, ${x.why}`))] : null,
       (T.guessed || []).length ? el("p", { class: "hint" }, "Guessed by the model: " + T.guessed.join(", ")) : null,
       el("p", { class: "hint" }, "The numbers on the nodes are the order of the path. Click a node to see what happened there."));
   }
   const rows = (T.trace || []).map((t, i) => [t, i + 1]).filter(([t]) => t.node === f.id);
   if (!rows.length) return el("div", {}, el("div", { class: "k" }, "In run " + T.id), el("p", { class: "hint" }, !T.outcome && T.at === f.id ? "The run waits here." : "The run did not come here."));
-  return el("div", {}, el("div", { class: "k" }, "In run " + T.id), rows.map(([t, n]) => el("div", { class: "trow" },
-    el("b", {}, "#" + n + " "), t.kind === "step" || t.kind === "end" ? t.kind : el("span", { class: t.pass ? "ok" : "no" }, t.pass ? "pass" : "fail"),
-    t.by ? " · by the " + t.by : "", t.guessed ? " · a guess" : "", t.when ? el("div", {}, "→ " + t.when) : null, t.why ? el("div", {}, "why: " + t.why) : null,
+  return el("div", {}, el("div", { class: "k" }, "In run " + T.id), rows.slice(0, 40).map(([t, n]) => el("div", { class: "trow" },
+    el("b", {}, "#" + n + " "), t.skipped ? "skipped (if)" : t.kind === "step" || t.kind === "end" || t.kind === "for" || t.kind === "until" ? t.kind + (t.item != null ? " item " + t.item : "") : el("span", { class: t.pass ? "ok" : "no" }, t.pass ? "pass" : "fail"),
+    t.by ? " · by the " + t.by : "", t.guessed ? " · a guess" : "", t.retry ? " · retry " + t.retry : "", t.timeout ? " · timeout" : "", t.error ? el("div", { class: "no" }, t.error) : null,
+    t.when ? el("div", {}, "→ " + t.when) : null, t.why ? el("div", {}, "why: " + t.why) : null,
     (t.problems || []).map(x => el("div", { class: "no" }, x)), t.facts ? el("div", { class: "dim" }, j(t.facts)) : null)));
 }
 async function loadRuns() {  // only rig.py serve has runs
@@ -793,37 +896,57 @@ function svgLegend(color, dash) {
   l.setAttribute("stroke", color); l.setAttribute("stroke-width", 2); if (dash) l.setAttribute("stroke-dasharray", dash); s.append(l); return s;
 }
 function inspector() {
-  const a = $("#insp"), U = G.U, f = S.sel && G.byId[S.sel];
+  const a = $("#insp"), U = G.U, f = S.sel && G.byId[S.sel], b = S.sel && G.blocks[S.sel];
   const pickRule = rid => { const r = G.c.rules.find(x => x.id === rid); if (r) goTo("P:" + r.group, rid); };
   pickRule.hover = rid => hover(rid ? { rule: rid } : null);
   const link = id => el("a", { style: "cursor:pointer;text-decoration:none", onclick: () => { select(id); goTo(id); } }, el("span", { class: "gid " + (G.byId[id] ? G.byId[id].kind : "") }, id), " ", G.byId[id] ? G.byId[id].name || "" : "");
+  const sec = (title, body) => body ? [el("div", { class: "k" }, title), el("p", {}, body)] : null;
+  if (b) {
+    a.replaceChildren(el("div", {}, el("div", {}, el("span", { class: "gid" }, b.kind), " ", el("span", { class: "kind" }, "block")),
+      el("h2", {}, blockTitle(b)),
+      el("p", { class: "hint" }, { for: `The lines of this box run once for each item of ${b.path}. The item is ${b.item}. The runner saves the run after each item.`,
+        until: `The lines of this box run, then again until ${b.path} is true: at most ${b.retry} more times.`,
+        if: `The lines of this box run only when ${b.path} is not empty and not false.`, else: "The lines of this box run when the if before did not.",
+        section: "A heading: it has no effect on a run.", finally: "The lines of this box run after the run ends, also after an error." }[b.kind]),
+      b.tolerate != null ? sec("Tolerate", `more than ${b.tolerate}% of the items left: the block fails`) : null,
+      (b.fail || []).length ? [el("div", { class: "k" }, "Fail"), b.fail.map(l => el("div", { class: "lk fail" }, el("span", { class: "sym" }, "✕"), link(l.to), l.when ? el("span", { class: "when" }, fill(l.when)) : null))] : null,
+      el("div", { class: "k" }, "Lines"), b.body.map(x => el("div", { class: "lk" }, G.byId[x] ? link(x) : el("span", { class: "gid" }, x)))));
+    return;
+  }
   if (!f) {
     a.replaceChildren(el("h2", {}, U.name), el("p", { class: "dim" }, chips(U, G.c.intent || "", pickRule)),
-      el("div", { class: "legend" }, svgLegend("var(--pass)", ""), "pass / next", svgLegend("var(--fail)", "6 5"), "fail", svgLegend("var(--pass)", "2 5"), "back to an earlier node", svgLegend("var(--wire-p)", ""), "rule → node input"),
+      el("div", { class: "legend" }, svgLegend("var(--pass)", ""), "next line", svgLegend("var(--fail)", "6 5"), "fail: to an end, or continue", svgLegend("var(--accent)", "2 5"), "retry: the step again", svgLegend("var(--wire-p)", ""), "rule → node input"),
+      el("div", { class: "k" }, "Lanes"),
+      el("p", { class: "hint" }, "Each node stands in the lane of who decides it: code, the model, or a person. The columns are the order of the lines. The ends stand at the right."),
+      el("div", { class: "k" }, "Boxes"),
+      el("p", { class: "hint" }, "A box is a block: ↻ for and until run their lines again; if and else choose; § a section is a heading; finally runs after the end. Click the title of a box to read it."),
       el("div", { class: "k" }, "Kinds"),
-      el("p", { class: "hint" }, el("span", { class: "gid hard" }, "hard"), " code decides; a fail blocks. ", el("span", { class: "gid soft" }, "soft"), " code decides; a fail is reported. ", el("span", { class: "gid judge" }, "judge"), " the model decides; the result is a guess. ", el("span", { class: "gid human" }, "human"), " a person decides; the flow waits. ", el("span", { class: "gid" }, "step"), " work. ", el("span", { class: "gid end" }, "end"), " the flow stops."),
+      el("p", { class: "hint" }, el("span", { class: "gid hard" }, "hard"), " code decides; a fail goes to an end. ", el("span", { class: "gid soft" }, "soft"), " code decides; a fail is reported. ", el("span", { class: "gid model" }, "model"), " the model decides; the result is a guess. ", el("span", { class: "gid human" }, "human"), " a person decides; the flow waits. ", el("span", { class: "gid" }, "step"), " work. ", el("span", { class: "gid end" }, "end"), " the flow stops."),
       el("div", { class: "k" }, "Use"),
       el("p", { class: "hint" }, "Click a node to read it here. Hover a rule to see where it goes. Change a value in a rule box; Save writes it into the file. Drag a node by its header, drag the background to pan, wheel to zoom. ", el("kbd", {}, "F"), " fits, ", el("kbd", {}, "Esc"), " clears."),
       el("div", { class: "k" }, "Wiring"),
-      el("p", { class: "hint" }, "The wires are read-only: change them in the .rig file."));
+      el("p", { class: "hint" }, "The wires are read-only: change the order of the lines in the .rig file."));
     if (TRACE) a.prepend(traceInfo(null));
     return;
   }
-  const from = G.edges.filter(e => e.dst === f.id && e.cls !== "param").map(e => e.src);
-  const sec = (title, body) => body ? [el("div", { class: "k" }, title), el("p", {}, body)] : null;
+  const from = G.edges.filter(e => e.dst === f.id && e.cls !== "param").map(e => e.src).filter(id => G.byId[id]);
+  const chain = []; for (let x = f.block; x && G.blocks[x]; x = G.blocks[x].block) chain.unshift(blockTitle(G.blocks[x]));
   a.replaceChildren(el("div", {},
-    el("div", {}, el("span", { class: "gid " + f.kind }, f.id), " ", el("span", { class: "kind" }, f.kind === "step" || f.kind === "end" ? f.kind : f.kind + " gate")),
+    el("div", {}, el("span", { class: "gid " + f.kind }, f.id), " ", el("span", { class: "kind" }, kindWord(f.kind)), " · ", el("span", { class: "kind" }, f.kind === "end" ? "" : "lane: " + (f.lane === "person" ? "a person" : f.lane === "model" ? "the model" : "code"))),
     el("h2", {}, f.name || f.id),
-    (f.by || []).length ? el("p", { class: "code" }, "by " + f.by.join(", ")) : f.kind === "judge" ? el("p", { class: "code" }, "decided by the model: the result is a guess") : f.kind === "human" ? el("p", { class: "code" }, "decided by a person: the flow waits for the answer") : null,
-    sec("When", f.when && chips(U, f.when, pickRule)), sec("Do", f.do && chips(U, f.do, pickRule)),
-    sec(f.kind === "step" ? "Ensure" : "Check", f.ensure && chips(U, f.ensure, pickRule)), sec(f.kind === "human" ? "Ask the person" : "Judge", f.brief && chips(U, f.brief, pickRule)),
-    (f.notes || []).length ? [el("div", { class: "k" }, "Notes"), f.notes.map(n => el("p", { class: "hint" }, chips(U, n.text, pickRule), n.evidence.length ? " (evidence: " + n.evidence.join(", ") + ")" : ""))] : null,
+    chain.length ? el("p", { class: "hint" }, "in: " + chain.join(" › ")) : null,
+    byLineOf(f) ? el("p", { class: "code" }, byLineOf(f)) : null,
+    sec("Only if", f.if && el("code", {}, f.if)), sec("Do", f.do && chips(U, f.do, pickRule)),
+    sec(f.kind === "human" ? "Ask the person" : f.kind === "model" ? "The model decides" : "Check", f.check && chips(U, f.check, pickRule)),
+    sec("Options (the first is the default)", f.options && f.options.join(" | ")), sec("The answer has the type", f.out && el("code", {}, f.out)),
+    sec("Retry", f.back && `on fail, do ${f.back} again, at most ${typeof f.retry === "string" ? fmt(f.retry) + " times (" + f.retry + ")" : f.retry + " times"}`), sec("Timeout", f.timeout_text),
+    (f.notes || []).length ? [el("div", { class: "k" }, "Notes"), f.notes.map(n => el("p", { class: "hint" }, chips(U, n.text, pickRule)))] : null,
     (f.sees || []).length ? [el("div", { class: "k" }, "Sees"), el("p", { class: "code" }, f.sees.join(", "))] : null,
     (f.reads || []).length ? [el("div", { class: "k" }, "Reads"), el("p", {}, f.reads.map(rid => [chips(U, "{" + rid + "}", pickRule), " "]))] : null,
-    [...(f.next || []), ...(f.pass || [])].length || (f.fail || []).length ? el("div", { class: "k" }, "Leads to") : null,
-    [...(f.next || []), ...(f.pass || [])].map(l => el("div", { class: "lk pass" }, el("span", { class: "sym" }, "✓"), link(l.to), l.when ? el("span", { class: "when" }, fill(l.when)) : null)),
-    (f.fail || []).map(l => el("div", { class: "lk fail" }, el("span", { class: "sym" }, "✕"), link(l.to), l.when ? el("span", { class: "when" }, fill(l.when)) : null)),
-    f.kind === "end" ? el("p", { class: "hint" }, "The flow stops here.") : null,
+    f.kind !== "end" ? el("div", { class: "k" }, "Leads to") : null,
+    f.kind !== "end" ? el("div", { class: "lk pass" }, el("span", { class: "sym" }, "✓"), f.next ? (G.byId[f.next] ? link(f.next) : el("span", { class: "gid" }, f.next)) : "the flow ends") : null,
+    (f.fail || []).map(l => el("div", { class: "lk fail" }, el("span", { class: "sym" }, "✕"), l.continue ? "continue: the next item of " + l.to : link(l.to), l.when ? el("span", { class: "when" }, fill(l.when)) : null)),
+    f.kind === "end" ? el("p", { class: "hint" }, "The flow stops here." + (G.c.finally ? " Then the block finally runs." : "")) : null,
     from.length ? [el("div", { class: "k" }, "Reached from"), [...new Set(from)].map(id => el("div", { class: "lk" }, link(id)))] : null));
   if (TRACE) a.append(traceInfo(f));
 }
@@ -837,9 +960,9 @@ function fit() {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const n of G.nodes) { if (!n.el || n.el.offsetParent === null) continue; x0 = Math.min(x0, n.x); y0 = Math.min(y0, n.y); x1 = Math.max(x1, n.x + n.el.offsetWidth); y1 = Math.max(y1, n.y + n.el.offsetHeight); }
   if (!isFinite(x0)) return;
-  y1 += 160;
+  x0 -= 170; y1 = Math.max(y1, G.lanes ? G.lanes.bottom : y1) + 60;
   const r = $("#view").getBoundingClientRect(), pad = 30;
-  const k = Math.min(1.2, Math.max(0.12, Math.min((r.width - 2 * pad) / (x1 - x0), (r.height - 2 * pad) / (y1 - y0))));
+  const k = Math.min(1.2, Math.max(0.08, Math.min((r.width - 2 * pad) / (x1 - x0), (r.height - 2 * pad) / (y1 - y0))));
   S.view = { k, x: pad - x0 * k + ((r.width - 2 * pad) - (x1 - x0) * k) / 2, y: pad - y0 * k };
   applyView();
 }
@@ -848,7 +971,7 @@ function startDrag(e, n) {
   if (e.button !== 0 || e.target.closest("input,select,button")) return;
   e.stopPropagation(); e.preventDefault();
   const sx = e.clientX, sy = e.clientY, ox = n.x, oy = n.y; let moved = false;
-  const mv = ev => { moved = true; G.pos[n.id] = { x: ox + (ev.clientX - sx) / S.view.k, y: oy + (ev.clientY - sy) / S.view.k }; place(n); drawWires(); };
+  const mv = ev => { moved = true; G.pos[n.id] = { x: ox + (ev.clientX - sx) / S.view.k, y: oy + (ev.clientY - sy) / S.view.k }; place(n); drawBoxes(); drawWires(); };
   const up = () => { removeEventListener("pointermove", mv); removeEventListener("pointerup", up); if (moved) savePos(); else if (n.type !== "params") select(n.id); };
   addEventListener("pointermove", mv); addEventListener("pointerup", up);
 }
@@ -905,7 +1028,7 @@ $("#preset").addEventListener("change", e => { if (e.target.value && curUnit()) 
 $("#t-param").onchange = e => document.body.classList.toggle("no-param", !e.target.checked);
 $("#t-fail").onchange = e => { document.body.classList.toggle("no-fail", !e.target.checked); drawWires(); };
 $("#t-anim").onchange = e => document.body.classList.toggle("anim", e.target.checked);
-$("#relayout").onclick = () => { G.pos = {}; savePos(); for (const n of G.nodes) place(n); drawWires(); fit(); };
+$("#relayout").onclick = () => { G.pos = {}; savePos(); for (const n of G.nodes) place(n); drawBoxes(); drawWires(); fit(); };
 $("#fit").onclick = fit;
 $("#run").onchange = e => pickRun(e.target.value);
 $("#run").onpointerdown = () => { loadRuns(); };

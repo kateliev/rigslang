@@ -1,29 +1,23 @@
-; Every line marked "error" must be refused by rig.py and by the viewer (see test_rig.py).
+; Every line marked "error" must be refused by rig.py (see test_rig.py).
 
 unit broken agent
-  intent "uses {nope.missing} and {plain} text"
-  rule limits 3
-  rule size.max 12
-    min 1
-    max 10
-  rule mode.kind fast
-    options fast slow
-  rule flag.on maybe
-    options on off
+  intent "uses {nope.missing} and {plain} text"     ; error: no rule nope.missing
+  rule limits 3                                     ; error: an id is group.name
+  rule size.max 12 "Size"                           ; error: above the range
+    range 1 10
+  rule mode.kind fast "Mode"
+    options fast | slow
+  rule flag.on maybe "Flag"                         ; error: not one of the options
+    options on | off
   preset quick
-    set size.max 99
-    set mode.kind medium
-    set ghost.rule 1
-  preset quick
-  step a "A"
+    set size.max 99                                 ; error: above the range
+    set mode.kind medium                            ; error: not an option
+    set ghost.rule 1                                ; error: no such rule
+  preset quick                                      ; error: twice
+  step a "A" by model
     do "make 3 drafts, then {size.max} more"
-    next -> b
   gate b hard "B"
-    ensure "at most {size.max} and {mode.kind}"
+    check "at most {size.max} and {mode.kind}"
     by checks.b
-    pass -> done
+    fail -> a                                       ; error: a fail goes to an end
   end done "Done"
-
-unit more snippet
-  external
-  probe "x" => "y"

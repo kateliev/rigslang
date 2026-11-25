@@ -1,18 +1,14 @@
 ; SYNTAX TEST "Packages/Rig/Rig.sublime-syntax"
 ; Run in Sublime Text: open this file, then Tools > Build.
-; Assertion lines start at column 0, so they end a cast block: test cast heads and bodies apart.
 
-unit slugify snippet  ; a comment
+unit sort-tool agent  ; a comment
 ; <- storage.type.unit.rig
-;    ^^^^^^^ entity.name.type.unit.rig
-;            ^^^^^^^ storage.modifier.scale.rig
+;    ^^^^^^^^^ entity.name.type.unit.rig
+;              ^^^^^ storage.modifier.scale.rig
 ;                     ^^^^^^^^^^^ comment.line.semicolon.rig
   note "keep the hyphens"
 ; ^^^^ keyword.other.context.rig
 ;      ^^^^^^^^^^^^^^^^^^ string.quoted.double.rig
-    evidence docs/why.md
-;   ^^^^^^^^ keyword.other.context.rig
-;            ^^^^^^^^^^^ markup.underline.link.rig
   intent "say \"hi\"; not a comment"
 ; ^^^^^^ keyword.other.matrix.rig
 ;        ^^^^^^^^^^^^^^^^^^^^^^^^^^^ string.quoted.double.rig
@@ -34,119 +30,99 @@ unit slugify snippet  ; a comment
 ;                  ^ punctuation.section.parens.end.rig
 ;                    ^^ keyword.operator.arrow.rig
 ;                       ^^^ string.quoted.double.rig
-  ensure "only a-z"
-; ^^^^^^ keyword.other.matrix.rig
-;        ^^^^^^^^^^ string.quoted.double.rig
-    check py "re.fullmatch(r'[a-z]*', result)"
-;   ^^^^^ keyword.other.matrix.rig
-;         ^^ storage.type.language.rig
-;            ^^^^ string.quoted.double.rig
-  cast py #1a80d208 #9fe3f5f5 proved 2026-11-11
-; ^^^^ storage.type.cast.rig
-;      ^^ storage.type.language.rig
-;         ^^^^^^^^^ constant.other.hash.rig
-;                   ^^^^^^^^^ constant.other.hash.rig
-;                             ^^^^^^ keyword.other.proved.rig
-;                                    ^^^^^^^^^^ constant.numeric.date.rig
-  cast py
-    def slugify(text):
-
-        return text  ; not rig
-;       ^^^^^^ meta.embedded.block.py.rig
-;                    ^^^^^^^^^ - comment.line.semicolon.rig
-  cast zz
-    anything (goes) "here
-;   ^^^^^^^^^^^^^^^^^^^^^ markup.raw.block.rig
-;                   ^^^^^ - string
-  cast ts #1a80d208 #9fe3f5f5 observed 2026-11-12
-; ^^^^ storage.type.cast.rig
-;                             ^^^^^^^^ keyword.other.proved.rig
-;                                      ^^^^^^^^^^ constant.numeric.date.rig
-  cast js
-; ^^^^ storage.type.cast.rig
-  note "the cast above is empty"
+  check "only a-z"
+; ^^^^^ keyword.other.matrix.rig
+;       ^^^^^^^^^^ string.quoted.double.rig
+  code steps steps.py
 ; ^^^^ keyword.other.context.rig
-;      ^^^^ - meta.embedded
-;      ^^^^ string.quoted.double.rig
-
-unit release-check agent
-;    ^^^^^^^^^^^^^ entity.name.type.unit.rig
-;                  ^^^^^ storage.modifier.scale.rig
-  uses slugify
-; ^^^^ keyword.other.context.rig
-;      ^^^^^^^ entity.other.inherited-class.rig
-  external checks.notes_ok "count the words"
-; ^^^^^^^^ keyword.other.context.rig
-;          ^^^^^^^^^^^^^^^ support.function.rig
-;                          ^^^^^^^^^^^^^^^^^ string.quoted.double.rig
-  probe "Hello World"
-; ^^^^^ keyword.other.context.rig
-;       ^^^^^^^^^^^^^ string.quoted.double.rig
-    check py "result != ''"
-;   ^^^^^ keyword.other.matrix.rig
-  rule notes.min_words 50
-; ^^^^ storage.type.rule.rig
-;      ^^^^^^^^^^^^^^^ entity.name.constant.rule.rig
-;                      ^^ constant.numeric.rig
-    min 10
-;   ^^^ keyword.other.context.rig
-;       ^^ constant.numeric.rig
-    unit words
+    test tests/test_steps.py
 ;   ^^^^ keyword.other.context.rig
-;        ^^^^^ - entity
-  rule version.pattern /^\d+\.\d+$/
-;      ^^^^^^^^^^^^^^^ entity.name.constant.rule.rig
-;                      ^^^^^^^^^^^^ string.regexp.rig
-  rule tests.required on
-;                     ^^ constant.language.rig
-  preset hotfix
+  uses helper other.rig
+; ^^^^ keyword.other.context.rig
+;      ^^^^^^ entity.other.inherited-class.rig
+  rule sort.batch 60 "Bookmarks in one batch"
+; ^^^^ storage.type.rule.rig
+;      ^^^^^^^^^^ entity.name.constant.rule.rig
+;                 ^^ constant.numeric.rig
+;                    ^^^^^^^^^^^^^^^^^^^^^^^^ string.quoted.double.rig
+    range 10 100
+;   ^^^^^ keyword.other.context.rig
+;         ^^ constant.numeric.rig
+  rule sort.mode fast "Mode"
+    options fast | careful
+;   ^^^^^^^ keyword.other.context.rig
+;                ^ punctuation.separator.rig
+  rule names.pattern /^[a-z]+$/ "Names"
+;                    ^^^^^^^^^^ string.regexp.rig
+  preset quick
 ; ^^^^^^ storage.type.rule.rig
-;        ^^^^^^ entity.name.constant.preset.rig
-    set notes.min_words 10
+;        ^^^^^ entity.name.constant.preset.rig
+    set sort.batch 20
 ;   ^^^ keyword.other.context.rig
-;       ^^^^^^^^^^^^^^^ variable.other.constant.rule.rig
-;                       ^^ constant.numeric.rig
-  step collect "Collect"
+;       ^^^^^^^^^^ variable.other.constant.rule.rig
+
+  step read "Read" by steps.read
 ; ^^^^ storage.type.node.rig
-;      ^^^^^^^ entity.name.function.node.rig
-;              ^^^^^^^^^ string.quoted.double.rig
-    do "read at least {notes.min_words} words, keep {name}"
+;      ^^^^ entity.name.function.node.rig
+;                  ^^ keyword.control.flow.rig
+    do "read the file, at most {sort.batch} at a time"
 ;   ^^ keyword.control.flow.rig
-;                     ^^^^^^^^^^^^^^^^^ variable.other.constant.rule.rig
-;                                             ^^^^^^ - variable
-    next -> notes
-;   ^^^^ keyword.control.flow.rig
-;        ^^ keyword.operator.arrow.rig
-;           ^^^^^ variable.function.target.rig
-  gate notes hard "Notes long enough"
+;                              ^^^^^^^^^^^^ variable.other.constant.rule.rig
+    reads sort.batch sort.mode
+;   ^^^^^ keyword.control.flow.rig
+;         ^^^^^^^^^^ variable.other.constant.rule.rig
+;                    ^^^^^^^^^ variable.other.constant.rule.rig
+  gate ok hard "Read well" fail -> held "why"
 ; ^^^^ storage.type.node.rig
-;      ^^^^^ entity.name.function.node.rig
-;            ^^^^ storage.modifier.gate.rig
-    reads notes.min_words tests.required  ; two rules
-;   ^^^^^ keyword.control.flow.rig
-;         ^^^^^^^^^^^^^^^ variable.other.constant.rule.rig
-;                         ^^^^^^^^^^^^^^ variable.other.constant.rule.rig
-;                                         ^^^^^^^^^^^ comment.line.semicolon.rig
-    by checks.notes_ok
+;      ^^ entity.name.function.node.rig
+;         ^^^^ storage.modifier.gate.rig
+;                          ^^^^ keyword.control.flow.rig
+;                               ^^ keyword.operator.arrow.rig
+;                                  ^^^^ variable.function.target.rig
+    by gates.ok
 ;   ^^ keyword.control.flow.rig
-;      ^^^^^^^^^^^^^^^ support.function.rig
-    pass -> publish
-;   ^^^^ keyword.control.flow.rig
-;           ^^^^^^^ variable.function.target.rig
-    fail -> stop "too short"
-;   ^^^^ keyword.control.flow.rig
-;           ^^^^ variable.function.target.rig
-;                ^^^^^^^^^^^ string.quoted.double.rig
-  gate tone judge
-;           ^^^^^ storage.modifier.gate.rig
-    brief "read it as a user"
-;   ^^^^^ keyword.control.flow.rig
-  end stop "Stopped"
+;      ^^^^^^^^ support.function.rig
+  for batch in read.batches
+; ^^^ keyword.control.block.rig
+;     ^^^^^ variable.other.item.rig
+;           ^^ keyword.control.block.rig
+;              ^^^^^^^^^^^^ variable.other.path.rig
+    tolerate 20%
+;   ^^^^^^^^ keyword.control.flow.rig
+;            ^^^ constant.numeric.rig
+    step sort by model
+      out (list (record id int folder str))
+;     ^^^ keyword.other.matrix.rig
+      timeout 5m
+;     ^^^^^^^ keyword.control.flow.rig
+;             ^^ constant.numeric.rig
+      sees batch
+;     ^^^^ keyword.control.flow.rig
+    gate sort-ok hard
+      retry 2
+;     ^^^^^ keyword.control.flow.rig
+      fail -> continue
+;     ^^^^ keyword.control.flow.rig
+  if sort.new
+; ^^ keyword.control.block.rig
+;    ^^^^^^^^ variable.other.path.rig
+    gate new-ok human "Make these folders?"
+;                ^^^^^ storage.modifier.gate.rig
+  else
+; ^^^^ keyword.control.block.rig
+    gate tone model
+;             ^^^^^ storage.modifier.gate.rig
+      fail -> held
+  until draft.done
+; ^^^^^ keyword.control.block.rig
+    retry 3
+    step draft by model
+  section "Output"
+; ^^^^^^^ keyword.control.block.rig
+    step report by steps.report
+  end held "Held back"
 ; ^^^ storage.type.node.rig
 ;     ^^^^ entity.name.function.node.rig
-  custom word 3 off #abc ?
-;        ^^^^ - entity
-;             ^ constant.numeric.rig
-;               ^^^ constant.language.rig
-;                   ^^^^ constant.other.hash.rig
-;                        ^ constant.language.unknown.rig
+  finally
+; ^^^^^^^ keyword.control.block.rig
+    step summary by steps.summary

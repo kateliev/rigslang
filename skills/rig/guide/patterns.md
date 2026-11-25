@@ -27,7 +27,7 @@ The doctor cannot check most of them. Check them yourself with the list at the e
 **Failure:** good work was thrown away because one small check failed.
 
 - Every verdict is `hard` or `soft`. A hard fail can never be kept. A soft fail can.
-- A soft fail first gets a correction round, when a correction exists. The number of rounds is a rule.
+- A soft fail first gets a correction round, when a correction exists: `retry <rule>` on the gate that checks. The number of rounds is a rule.
 - After the rounds, a soft fail ends at **kept, but doubtful**: the result stays, with a mark and the problems in its note. A person looks at the doubtful ones. One rule switches this off (then a soft fail is a restore).
 - So a flow has at least these ends: done; doubtful; skipped, with nothing changed.
 
@@ -61,12 +61,12 @@ Sort every item that is not done by **who must act**:
 
 The runner has this: `tool.py batch` runs a list and writes a report, and `tool.py queues` lists the runs that wait, by who must act. A run that needs the model does not stop the batch: it waits in its file.
 
-**One large item.** Sometimes the item is one file with thousands of records, and the model or the person must answer for parts of it. Then the item is one run, and the flow has a loop:
+**One large item.** Sometimes the item is one file with thousands of records, and the model or the person must answer for parts of it. Then the item is one run, and the flow has a `for` block:
 
-- A step takes the next part that is not done yet, from files in a work folder. The model or the person answers that part. A step saves the answer as its own file.
-- A gate in code ends the loop when no part is left. It returns `"route": true` with its fail, so the end of the loop is not a problem.
-- The state of the run holds counts and paths only. The run file stays small, and after a restart the run goes on from the last saved part.
-- The loop visits its nodes many times: set the rule `run.max_visits` high enough, with a note.
+- A step cuts the item into parts and saves them as files in a work folder. It returns the list of the parts (numbers or names, not the data): `for batch in loose.batches`.
+- In the body, a step reads the part of this turn (`state["batch"]`), the model or the person answers it, and code saves the answer as its own file.
+- A part that fails after its retries is left: `fail -> continue`. `tolerate 20%` with a `fail` line on the `for` stops the run when too many parts are left.
+- The state of the run holds counts and paths only. The runner saves the run after each part, so after a restart the run goes on from the next part.
 - The pattern example is `examples/bookmarks`: pages of choices for the person, and sort batches for the model.
 
 ## 6. The state survives a restart
@@ -114,7 +114,7 @@ The runner has this: `tool.py batch` runs a list and writes a report, and `tool.
 | `notes/failures-log.md` | Methods that failed, and why | Read before a batch. Do not repeat what is here. |
 | `bugs-and-fixes.md` | Code bugs: symptom as it was seen, cause, fix, check | A fixed bug gets a regression case. |
 | `reports/` | One report for each batch or review | Failures first. |
-| the `note` and `evidence` of a rule | Why a value is what it is | A new limit needs one. |
+| the `note` of a rule | Why a value is what it is, and the evidence | A new limit needs one. |
 
 - One word has one meaning. Put the words of the project into `project-facts.md`, and use them the same way in the code, the source and the reports.
 - Write for a reader who is tired and not an expert: short sentences, the condition before the instruction.

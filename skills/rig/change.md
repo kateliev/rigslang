@@ -17,22 +17,25 @@ Say which rule changed and why, with the evidence, and write the reason into the
 
 ## A new number
 
-Never put it in code. Add a `rule` to the source (`group.name`, a value, `min` and `max` or `options`, `label`, `unit`, and a `note` that says where the value comes from). Read it in code with `R('group.name')`, and name it in text as `{group.name}`. Then build.
+Never put it in code. Add a `rule` to the source: `rule group.name <value> "label, with the unit"`, then `range <min> <max>` or `options a | b`, and a `note` that says where the value comes from. Read it in code with `R('group.name')`, and name it in text as `{group.name}`. Then build.
 
 ## A gate
 
 | Change | Do |
 |---|---|
 | The decision of a gate in code | Change the function in `gates.py`, and its test. |
-| A new gate in code | Add the function and a test that names it. Add the `gate` to the source with `by gates.<function>`, a `pass` line and a `fail` line. |
-| A `judge` gate becomes code | Write the function and the test, add `by`, change the kind to `hard` or `soft`. Keep the old `brief` as a `note` if it explains the intent. |
-| A gate must wait for the person | Change the kind to `human`, and write the `brief`: what to show, and what to ask. |
+| A new gate in code | Add the function and a test that names it. Add the `gate` line where it belongs in the order, with `by gates.<function>` and a `fail -> <end>` line (a `soft` gate has none). |
+| A `model` gate becomes code | Write the function and the test, add `by`, change the kind to `hard` or `soft`. Keep the old `check` if it still says what the gate checks. |
+| A gate must wait for the person | Change the kind to `human`, write the question as its name, and a `check`: what to show. For a choice from a list, add `options` and a `by` function that reads the answer. |
+| A correction round | Add `retry <n>` (or `retry <rule id>`) to the gate that checks. The run goes back to the nearest step before the gate. |
 
 Never put a decision into a step, a skill or a plugin. A step returns facts; a gate decides.
 
 ## The flow
 
-Change the `next`, `pass` and `fail` lines in the source. A new end needs an `end` node and a regression case that reaches it. A new loop needs a gate that counts the rounds, with the limit as a rule. Show the person the graph after a change of the wires.
+Change the order of the lines in the source: the next line is the next node. A new end needs an `end` line and a regression case that reaches it. A loop is a block: `for <item> in <path>` for a list, `until <path>` with `retry <n>` for "again until done", `retry` on a gate for a correction. A node that runs only sometimes gets `if <path>`. Show the person the graph after a change of the order.
+
+A run that started before the change keeps its own copy of the flow (`runs/RUN/flow.json`), so it goes on as it began. To try the new flow on an old run: `python3 tool.py rerun RUN --from <line>`, or `python3 RIG test DIR --replay RUN`.
 
 ## The code of a step
 
@@ -57,7 +60,7 @@ python3 tool.py regress tests/regression-set.json
 - `doctor` runs the tests and the regression set too; run `regress` alone to read the differences.
 - A regression case that changes its result **and the change is wanted**: look at the new path, then `python3 tool.py regress tests/regression-set.json --baseline`, and name the changed cases in the commit message.
 - A case that changes and the change is **not** wanted: stop and report.
-- The plugin, when the tool has one: `node --no-warnings try.ts` in `plugin/` shows the tools and the rules text that the model gets. Read them after a change of an `intent`, a `brief` or a `do`.
+- The plugin, when the tool has one: `node --no-warnings try.ts` in `plugin/` shows the tools and the rules text that the model gets. Read them after a change of an `intent`, a `check` or a `do`.
 - A front that is not compiled (extra skill files, a guide in prose): the README of the tool lists them under "after a change, also update".
 
 Then write down what you learned: [guide/rules.md](guide/rules.md), rule 17.

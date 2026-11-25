@@ -10,79 +10,7 @@ file_extensions: [rig]
 contexts:
   main:
     - include: comment
-    - match: '^(\s*)(cast)\s+(py)(?=[\s;]|$)(?:\s+(#[^\s;]*))?(?:\s+(#[^\s;]*))?(?:\s+(proved|observed)(?:\s+(\d{4}-\d{2}-\d{2}))?)?\s*(;.*)?$'
-      captures:
-        2: storage.type.cast.rig
-        3: storage.type.language.rig
-        4: constant.other.hash.rig
-        5: constant.other.hash.rig
-        6: keyword.other.proved.rig
-        7: constant.numeric.date.rig
-        8: comment.line.semicolon.rig
-      embed: scope:source.python
-      embed_scope: meta.embedded.block.py.rig source.python
-      escape: '^(?!\1[ \t]+\S|[ \t]*$)'
-    - match: '^(\s*)(cast)\s+(js)(?=[\s;]|$)(?:\s+(#[^\s;]*))?(?:\s+(#[^\s;]*))?(?:\s+(proved|observed)(?:\s+(\d{4}-\d{2}-\d{2}))?)?\s*(;.*)?$'
-      captures:
-        2: storage.type.cast.rig
-        3: storage.type.language.rig
-        4: constant.other.hash.rig
-        5: constant.other.hash.rig
-        6: keyword.other.proved.rig
-        7: constant.numeric.date.rig
-        8: comment.line.semicolon.rig
-      embed: scope:source.js
-      embed_scope: meta.embedded.block.js.rig source.js
-      escape: '^(?!\1[ \t]+\S|[ \t]*$)'
-    - match: '^(\s*)(cast)\s+(ts)(?=[\s;]|$)(?:\s+(#[^\s;]*))?(?:\s+(#[^\s;]*))?(?:\s+(proved|observed)(?:\s+(\d{4}-\d{2}-\d{2}))?)?\s*(;.*)?$'
-      captures:
-        2: storage.type.cast.rig
-        3: storage.type.language.rig
-        4: constant.other.hash.rig
-        5: constant.other.hash.rig
-        6: keyword.other.proved.rig
-        7: constant.numeric.date.rig
-        8: comment.line.semicolon.rig
-      embed: scope:source.ts
-      embed_scope: meta.embedded.block.ts.rig source.ts
-      escape: '^(?!\1[ \t]+\S|[ \t]*$)'
-    - match: '^(\s*)(cast)\s+(sh)(?=[\s;]|$)(?:\s+(#[^\s;]*))?(?:\s+(#[^\s;]*))?(?:\s+(proved|observed)(?:\s+(\d{4}-\d{2}-\d{2}))?)?\s*(;.*)?$'
-      captures:
-        2: storage.type.cast.rig
-        3: storage.type.language.rig
-        4: constant.other.hash.rig
-        5: constant.other.hash.rig
-        6: keyword.other.proved.rig
-        7: constant.numeric.date.rig
-        8: comment.line.semicolon.rig
-      embed: scope:source.shell.bash
-      embed_scope: meta.embedded.block.sh.rig source.shell.bash
-      escape: '^(?!\1[ \t]+\S|[ \t]*$)'
-    - match: '^(\s*)(cast)\s+(rust)(?=[\s;]|$)(?:\s+(#[^\s;]*))?(?:\s+(#[^\s;]*))?(?:\s+(proved|observed)(?:\s+(\d{4}-\d{2}-\d{2}))?)?\s*(;.*)?$'
-      captures:
-        2: storage.type.cast.rig
-        3: storage.type.language.rig
-        4: constant.other.hash.rig
-        5: constant.other.hash.rig
-        6: keyword.other.proved.rig
-        7: constant.numeric.date.rig
-        8: comment.line.semicolon.rig
-      embed: scope:source.rust
-      embed_scope: meta.embedded.block.rust.rig source.rust
-      escape: '^(?!\1[ \t]+\S|[ \t]*$)'
-    - match: '^(\s*)(cast)\s+([^\s();"][^\s();]*)(?=[\s;]|$)(?:\s+(#[^\s;]*))?(?:\s+(#[^\s;]*))?(?:\s+(proved|observed)(?:\s+(\d{4}-\d{2}-\d{2}))?)?\s*(;.*)?$'
-      captures:
-        2: storage.type.cast.rig
-        3: storage.type.language.rig
-        4: constant.other.hash.rig
-        5: constant.other.hash.rig
-        6: keyword.other.proved.rig
-        7: constant.numeric.date.rig
-        8: comment.line.semicolon.rig
-      embed: cast-raw
-      embed_scope: markup.raw.block.rig
-      escape: '^(?!\1[ \t]+\S|[ \t]*$)'
-    - match: '^(unit)\s+([^\s();"][^\s();]*)(?:\s+(snippet|tool|agent)(?=[\s;]|$))?'
+    - match: '^(unit)\s+([^\s();"][^\s();]*)(?:\s+(tool|agent)(?=[\s;]|$))?'
       captures:
         1: storage.type.unit.rig
         2: entity.name.type.unit.rig
@@ -96,28 +24,13 @@ contexts:
       captures:
         1: keyword.other.matrix.rig
         2: support.type.rig
-    - match: '^\s*(intent|example|ensure)(?=[\s;]|$)'
+    - match: '^\s*(intent|example|check)(?=[\s;]|$)'
       captures:
         1: keyword.other.matrix.rig
-    - match: '^\s*(probe)(?=[\s;]|$)'
-      captures:
-        1: keyword.other.context.rig
-    - match: '^\s*(check)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?'
-      captures:
-        1: keyword.other.matrix.rig
-        2: storage.type.language.rig
-    - match: '^\s*(evidence)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?'
-      captures:
-        1: keyword.other.context.rig
-        2: markup.underline.link.rig
     - match: '^\s*(uses)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?'
       captures:
         1: keyword.other.context.rig
         2: entity.other.inherited-class.rig
-    - match: '^\s*(external)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?'
-      captures:
-        1: keyword.other.context.rig
-        2: support.function.rig
     - match: '^\s*(code|test)(?=[\s;]|$)'
       captures:
         1: keyword.other.context.rig
@@ -133,23 +46,36 @@ contexts:
       captures:
         1: keyword.other.context.rig
         2: variable.other.constant.rule.rig
-    - match: '^\s*(note|label|options|min|max|unit)(?=[\s;]|$)'
+    - match: '^\s*(note|options|range)(?=[\s;]|$)'
       captures:
         1: keyword.other.context.rig
     - match: '^\s*(step|end)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?'
       captures:
         1: storage.type.node.rig
         2: entity.name.function.node.rig
-    - match: '^\s*(gate)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?(?:\s+(hard|soft|judge|human)(?=[\s;]|$))?'
+    - match: '^\s*(gate)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?(?:\s+(hard|soft|model|human)(?=[\s;]|$))?'
       captures:
         1: storage.type.node.rig
         2: entity.name.function.node.rig
         3: storage.modifier.gate.rig
+    - match: '^\s*(for)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?(?:\s+(in)(?=[\s;]|$))?(?:\s+([^\s();"][^\s();]*))?'
+      captures:
+        1: keyword.control.block.rig
+        2: variable.other.item.rig
+        3: keyword.control.block.rig
+        4: variable.other.path.rig
+    - match: '^\s*(until|if)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?'
+      captures:
+        1: keyword.control.block.rig
+        2: variable.other.path.rig
+    - match: '^\s*(else|section|finally)(?=[\s;]|$)'
+      captures:
+        1: keyword.control.block.rig
     - match: '^\s*(by)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?'
       captures:
         1: keyword.control.flow.rig
         2: support.function.rig
-    - match: '^\s*(when|do|brief|next|pass|fail)(?=[\s;]|$)'
+    - match: '^\s*(do|fail|retry|timeout|tolerate)(?=[\s;]|$)'
       captures:
         1: keyword.control.flow.rig
     - match: '^\s*(reads)(?=[\s;]|$)'
@@ -167,8 +93,10 @@ contexts:
     - include: regex
     - include: arrow
     - include: example
-    - include: date
-    - include: hash
+    - include: inline
+    - include: percent
+    - include: time
+    - include: bar
     - include: number
     - include: constant
     - include: unknown
@@ -193,13 +121,21 @@ contexts:
     - match: '(?<![^\s(])=>(?=[\s();]|$)'
       scope: keyword.operator.arrow.rig
 
-  date:
-    - match: '(?<![^\s(])\d{4}-\d{2}-\d{2}(?=[\s();]|$)'
-      scope: constant.numeric.date.rig
+  inline:
+    - match: '(?<![^\s(])(?:by|fail)(?=[\s();]|$)'
+      scope: keyword.control.flow.rig
 
-  hash:
-    - match: '(?<![^\s(])#[0-9a-fA-F]+(?=[\s();]|$)'
-      scope: constant.other.hash.rig
+  percent:
+    - match: '(?<![^\s(])\d+(?:\.\d+)?%(?=[\s();]|$)'
+      scope: constant.numeric.rig
+
+  time:
+    - match: '(?<![^\s(])\d+[smhd](?=[\s();]|$)'
+      scope: constant.numeric.rig
+
+  bar:
+    - match: '(?<![^\s(])\|(?=[\s();]|$)'
+      scope: punctuation.separator.rig
 
   number:
     - match: '(?<![^\s(])[-+]?\d+(?:\.\d+)?(?=[\s();]|$)'
@@ -242,6 +178,3 @@ contexts:
     - include: comment
     - match: '[^\s();"][^\s();]*'
       scope: variable.other.constant.rule.rig
-
-  cast-raw:
-    - meta_include_prototype: false

@@ -3,8 +3,10 @@
 
     python3 tool.py run '{"item": "..."}'      start a run; code walks the flow as far as it can
     python3 tool.py answer RUN '{"pass": true}' the model answers the node that the run waits at
-    python3 tool.py approve RUN yes|no [NOTE]   a person answers a human gate
+    python3 tool.py approve RUN yes|no [NOTE]   a person answers a human gate (or the words of an answer)
     python3 tool.py resume RUN | status RUN | rules | flow
+    python3 tool.py rerun RUN --from ID [--set group.name=value]   a new run from a line of an old run
+    python3 tool.py replay RUN                  the flow again, with the answers recorded in RUN
     python3 tool.py regress tests/regression-set.json [--baseline]
 
 Each call prints one JSON line. A "refused" result is final: do not repeat the call.

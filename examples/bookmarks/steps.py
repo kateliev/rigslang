@@ -5,7 +5,8 @@ The value goes to state[<step id>], where the gates and the later steps read it.
 
 Each run has a work folder (rule files.work). A step writes what it found there, and the state of
 the run keeps only the counts and the paths. So the state stays small, and every page of choices and
-every sorted batch is saved as its own file: a run that stops goes on from the last saved file.
+every sorted batch is saved as its own file. The flow runs a page of choices, or a batch to sort,
+once for each item of a list ("for"); the runner saves the run after each item.
 
 No step changes the export file or a file of the browser. The new file goes to the folder of the
 rule files.out, and only after the person agreed to the report.
@@ -112,7 +113,7 @@ def group(state, R):
 	s = bm.similar(c, removed_so_far(work), R)
 	s['pages'] = bm.pages(s['groups'], R('similar.page_size'))
 	save(work, 'similar.json', s)
-	return {'folded': len(s['folded']), 'groups': len(s['groups']), 'pages': len(s['pages']), 'too_big': len(s['too_big'])}
+	return {'folded': len(s['folded']), 'groups': len(s['groups']), 'pages': list(range(1, len(s['pages']) + 1)), 'too_big': len(s['too_big'])}
 
 
 def how_page(groups):
@@ -131,53 +132,62 @@ def how_page(groups):
 
 
 def page(state, R):
-	'''The next page of groups that waits for the person, or "page": null when every page is decided.'''
+	'''The page of groups of this turn of the loop (state["page"]: its number). "ask": false when the page
+	needs no answer: the person said "rest" or "no" on an earlier page, or the page is decided already.'''
 	c, work = collection(state), work_of(state)
 	s = load(work, 'similar.json')
+	k = state['page']
 	by_n = dict((g['n'], g) for g in s['groups'])
+	name = 'choices/page-{:03d}.json'.format(k)
+	if load(work, name) is not None:
+		return {'page': k, 'of': len(s['pages']), 'ask': False, 'decided': 'before'}
+	groups = [by_n[n] for n in s['pages'][k - 1]]
 	rest = load(work, 'choices/rest.json')
-	for k, ns in enumerate(s['pages'], 1):
-		name = 'choices/page-{:03d}.json'.format(k)
-		if load(work, name) is not None:
-			continue
-		groups = [by_n[n] for n in ns]
-		if rest is not None:  # the person said "rest" or "no" on an earlier page
-			decisions = dict((g['n'], rest['mode']) for g in groups)
-			save(work, name, {'page': k, 'decisions': decisions, 'by': 'rest',
-				'removed': [i for g in groups for i in bm.removed_by_choice(g, rest['mode'])]})
-			continue
-		shown = []
-		for g in groups:
-			urls = []
-			for j, i in enumerate(g['ids'], 1):
-				b = c['bookmarks'][i]
-				urls.append('{}. {}  "{}"  in {}{}'.format(j, b['url'], bm.plain_title(b)[:R('sort.title_chars')], bm.path_of(c, b['folder']) or 'the top level',
-					'  (shortest)' if i == g['default'] else ''))
-			shown.append({'group': g['n'], 'site': g['host'], 'urls': urls})
-		how = how_page(groups)
-		text = ['# Similar URLs: page {} of {}'.format(k, len(s['pages'])), '', 'Answer with: approve <run id> and one of these answers:', '']
-		text += ['- `{}`: {}'.format(a, m) for a, m in how.items()] + ['']
-		for g in shown:
-			text += ['## Group {} ({})'.format(g['group'], g['site']), ''] + ['- ' + u for u in g['urls']] + ['']
-		path = write_text(work, 'pages/page-{:03d}.md'.format(k), '\n'.join(text))
-		return {'page': k, 'of': len(s['pages']), 'groups': shown, 'file': path, 'how': how}
-	return {'page': None, 'of': len(s['pages'])}
+	if rest is not None:  # the person said "rest" or "no" on an earlier page
+		decisions = dict((g['n'], rest['mode']) for g in groups)
+		save(work, name, {'page': k, 'decisions': decisions, 'by': 'rest',
+			'removed': [i for g in groups for i in bm.removed_by_choice(g, rest['mode'])]})
+		return {'page': k, 'of': len(s['pages']), 'ask': False, 'decided': 'rest'}
+	shown = []
+	for g in groups:
+		urls = []
+		for j, i in enumerate(g['ids'], 1):
+			b = c['bookmarks'][i]
+			urls.append('{}. {}  "{}"  in {}{}'.format(j, b['url'], bm.plain_title(b)[:R('sort.title_chars')], bm.path_of(c, b['folder']) or 'the top level',
+				'  (shortest)' if i == g['default'] else ''))
+		shown.append({'group': g['n'], 'site': g['host'], 'urls': urls})
+	how = how_page(groups)
+	text = ['# Similar URLs: page {} of {}'.format(k, len(s['pages'])), '', 'Answer with: approve <run id> and one of these answers:', '']
+	text += ['- `{}`: {}'.format(a, m) for a, m in how.items()] + ['']
+	for g in shown:
+		text += ['## Group {} ({})'.format(g['group'], g['site']), ''] + ['- ' + u for u in g['urls']] + ['']
+	path = write_text(work, 'pages/page-{:03d}.md'.format(k), '\n'.join(text))
+	return {'page': k, 'of': len(s['pages']), 'ask': True, 'groups': shown, 'file': path, 'how': how}
+
+
+def yes_and_words(answer):
+	'''The words of the person after "approve <run>": "yes ..." or "no ..." -> (yes, the other words).'''
+	words = str(answer or '').split()
+	if words and words[0].lower() in ('yes', 'no'):
+		return words[0].lower() == 'yes', ' '.join(words[1:])
+	return True, ' '.join(words)
 
 
 def apply(state, R):
-	'''Read the answer of the person for the page. Save it only when every word is understood.'''
-	work, p = work_of(state), state['page']
-	answer = state.get('choose') or {}
+	'''The code of the human gate "choose": read the answer of the person for the page, and save it only
+	when every word is understood. A fail means "not understood": the gate asks again.'''
+	work, k = work_of(state), state['page']
+	yes, words = yes_and_words((state.get('choose') or {}).get('answer'))
 	s = load(work, 'similar.json')
-	groups = [g for g in s['groups'] if g['n'] in set(s['pages'][p['page'] - 1])]
-	decisions, rest, problems = bm.choices(answer.get('why'), groups, answer.get('pass') is True)
+	groups = [g for g in s['groups'] if g['n'] in set(s['pages'][k - 1])]
+	decisions, rest, problems = bm.choices(words, groups, yes)
 	if problems:
-		return {'ok': False, 'page': p['page'], 'problems': problems}
+		return {'pass': False, 'page': k, 'problems': problems}
 	removed = [i for g in groups for i in bm.removed_by_choice(g, decisions[g['n']])]
-	save(work, 'choices/page-{:03d}.json'.format(p['page']), {'page': p['page'], 'decisions': decisions, 'by': 'person', 'removed': removed})
+	save(work, 'choices/page-{:03d}.json'.format(k), {'page': k, 'decisions': decisions, 'by': 'person', 'removed': removed})
 	if rest:
-		save(work, 'choices/rest.json', {'mode': 'short' if answer.get('pass') is True else 'all', 'from_page': p['page']})
-	return {'ok': True, 'page': p['page'], 'removed': len(removed), 'rest': rest, 'problems': []}
+		save(work, 'choices/rest.json', {'mode': 'short' if yes else 'all', 'from_page': k})
+	return {'pass': True, 'page': k, 'removed': len(removed), 'rest': rest}
 
 
 # - Sorting ----------------------------------------------
@@ -189,7 +199,7 @@ def loose(state, R):
 	size = R('sort.batch')
 	f['batches'] = [todo[i:i + size] for i in range(0, len(todo), size)]
 	save(work, 'loose.json', f)
-	return {'fit': len(f['fit']), 'loose': len(f['loose']), 'misfiled': len(f['misfiled']), 'batches': len(f['batches'])}
+	return {'fit': len(f['fit']), 'loose': len(f['loose']), 'misfiled': len(f['misfiled']), 'batches': list(range(1, len(f['batches']) + 1))}
 
 
 def made_folders(work):
@@ -203,38 +213,28 @@ def made_folders(work):
 	return out
 
 
-def batch(state, R):
-	'''The next batch that is not sorted, with the folder list; or "batch": null when all are done.'''
+def prepare(state, R):
+	'''The batch of this turn of the loop (state["batch"]: its number), with the folder list and the new
+	folders of the earlier batches.'''
 	c, work = collection(state), work_of(state)
 	batches = load(work, 'loose.json')['batches']
-	for k, ids in enumerate(batches, 1):
-		if load(work, 'sorted/batch-{:03d}.json'.format(k)) is not None:
-			continue
-		made = made_folders(work)
-		return {'batch': k, 'of': len(batches), 'bookmarks': [bm.shown(c, c['bookmarks'][i], R) for i in ids],
-			'folders': [bm.path_of(c, x['id']) for x in c['folders'] if not (x['bar'] and R('keep.bar'))] + made, 'new_so_far': made,
-			'sort_visits': state.get('_visits', {}).get('sort', 0)}
-	return {'batch': None, 'of': len(batches)}
+	k = state['batch']
+	made = made_folders(work)
+	return {'batch': k, 'of': len(batches), 'bookmarks': [bm.shown(c, c['bookmarks'][i], R) for i in batches[k - 1]],
+		'folders': [bm.path_of(c, x['id']) for x in c['folders'] if not (x['bar'] and R('keep.bar'))] + made, 'new_so_far': made}
 
 
 def keep(state, R):
-	'''Save the answer of the model for the batch (the gate sort-ok passed it).'''
-	b = state['batch']
+	'''The second code of the gate sort-ok: it runs only after gates.sort_ok passed, and saves the answer
+	of the model for the batch. A batch with no saved file stays unsorted; the report lists it.'''
+	b = state['prepare']
 	known = [p for p in b['folders'] if p not in b['new_so_far']]
 	_, new = bm.sort_problems(state['sort'], b['bookmarks'], known, b['new_so_far'], R)
 	folder_of = dict((x['id'], x['folder']) for x in b['bookmarks'])
 	places = dict((a['id'], bm.clean_path(a['folder'])) for a in state['sort'])
 	moves = dict((str(i), p) for i, p in places.items() if p != folder_of[i])
 	save(work_of(state), 'sorted/batch-{:03d}.json'.format(b['batch']), {'batch': b['batch'], 'moves': moves, 'new': new})
-	return {'batch': b['batch'], 'moved': len(moves), 'new': new}
-
-
-def skip(state, R):
-	'''No good answer after the retries: the batch stays where it is, and the report lists it.'''
-	b = state['batch']
-	save(work_of(state), 'sorted/batch-{:03d}.json'.format(b['batch']), {'batch': b['batch'], 'moves': {}, 'new': [], 'skipped': True,
-		'ids': [x['id'] for x in b['bookmarks']]})
-	return {'batch': b['batch'], 'skipped': True}
+	return {'pass': True, 'batch': b['batch'], 'moved': len(moves), 'new': new}
 
 
 def how_new(proposed):
@@ -263,14 +263,15 @@ def folders(state, R):
 
 
 def accept(state, R):
-	'''Read the answer of the person about the new folders.'''
+	'''The code of the human gate "new-ok": read the answer of the person about the new folders.
+	A fail means "not understood": the gate asks again.'''
 	work, proposed = work_of(state), state['folders']['new']
-	answer = state.get('new-ok') or {}
-	if answer.get('pass') is not True:
+	yes, words = yes_and_words((state.get('new-ok') or {}).get('answer'))
+	if not yes:
 		made, problems = [], []
 	else:
 		drop, problems = set(), []
-		for word in (answer.get('why') or '').replace(',', ' ').split():
+		for word in words.replace(',', ' ').split():
 			w = word.strip().lower()
 			if w in ('yes', 'ok'):
 				continue
@@ -282,9 +283,9 @@ def accept(state, R):
 		made = [p['path'] for p in proposed if p['n'] not in drop]
 		made = [p for p in made if all(q in made for q in parents_new(p, proposed))]  # a new folder in a left-out new folder is left out too
 	if problems:
-		return {'ok': False, 'problems': problems}
+		return {'pass': False, 'problems': problems}
 	save(work, 'new-folders-ok.json', made)
-	return {'ok': True, 'made': made, 'left_out': [p['path'] for p in proposed if p['path'] not in made], 'problems': []}
+	return {'pass': True, 'made': made, 'left_out': [p['path'] for p in proposed if p['path'] not in made]}
 
 
 def parents_new(path, proposed):
@@ -294,13 +295,12 @@ def parents_new(path, proposed):
 
 
 # - Dead links: the hook for a later version -------------
-def links(state, R):
-	'''Not in v1. A later link checker writes the ids of dead bookmarks to dead.json in the work folder;
-	the report then moves them to the folder of the rule links.folder. Nothing is deleted.'''
+def dead_links(state, R):
+	'''Not in this version. A later link checker writes the ids of dead bookmarks to dead.json in the work
+	folder; the report then moves them to the folder of the rule links.folder. Nothing is deleted.'''
 	if R('links.check'):
 		raise NotImplementedError('the link checker is not in this version: set links.check off')
-	dead = load(work_of(state), 'dead.json', [])
-	return {'checked': False, 'dead': len(dead)}
+	return load(work_of(state), 'dead.json', [])
 
 
 # - The plan and the report -------------------------------
@@ -314,7 +314,7 @@ def plan_of(state, R):
 		for i, p in load(folder, n)['moves'].items():
 			if int(i) not in removed and (p in known or p in made):
 				moves[int(i)] = p
-	dead = [i for i in load(work, 'dead.json', []) if i not in removed]
+	dead = [i for i in dead_links(state, R) if i not in removed]
 	new_folders = list(made)
 	if dead:
 		if R('links.folder') not in known:
@@ -335,8 +335,8 @@ def report(state, R):
 	chosen = [load(os.path.join(work, 'choices'), n) for n in sorted(os.listdir(os.path.join(work, 'choices')))
 		if n.startswith('page-')] if os.path.isdir(os.path.join(work, 'choices')) else []
 	by_choice = [i for ch in chosen for i in ch['removed']]
-	batches = [load(os.path.join(work, 'sorted'), n) for n in sorted(os.listdir(os.path.join(work, 'sorted')))] if os.path.isdir(os.path.join(work, 'sorted')) else []
-	skipped = [b['batch'] for b in batches if b.get('skipped')]
+	todo = len((load(work, 'loose.json') or {}).get('batches', []))
+	skipped = [k for k in range(1, todo + 1) if load(work, 'sorted/batch-{:03d}.json'.format(k)) is None]
 	moves = dict((int(i), p) for i, p in plan['moves'].items())
 	before, after = len(c['bookmarks']), len(c['bookmarks']) - len(plan['removed'])
 	counts = {'bookmarks_before': before, 'bookmarks_after': after, 'duplicates': len(d), 'variants_folded': len(s['folded']),

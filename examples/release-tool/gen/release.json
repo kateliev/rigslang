@@ -1,12 +1,11 @@
 {
- "rig": 0,
+ "rig": 1,
  "unit": "release",
  "scope": "agent",
  "preset": null,
  "intent": "publish a release folder only when its notes, its version and its tests are ready, and a person agrees",
  "notes": [],
  "uses": [],
- "external": [],
  "code": [
   {
    "prefix": "gates",
@@ -30,14 +29,31 @@
   "type": "text",
   "text": "the end of the run: published, ready (dry run) or stopped, with the problems"
  },
+ "examples": [],
+ "checks": [],
  "start": "collect",
+ "finally": null,
+ "body": [
+  "collect",
+  "notes",
+  "version",
+  "tests-required",
+  "tests",
+  "rewrite",
+  "rewritten",
+  "tone",
+  "approve",
+  "allowed",
+  "publish",
+  "done",
+  "ready",
+  "stop"
+ ],
  "coverage": {
-  "gates": 7,
-  "proved": 0,
-  "tested": 5,
-  "observed": 0,
+  "gates": 8,
+  "tested": 6,
   "code": 0,
-  "judge": 1,
+  "model": 1,
   "human": 1,
   "none": 0
  },
@@ -51,13 +67,12 @@
   {
    "id": "notes.min_words",
    "group": "notes",
-   "label": "Shortest release notes",
+   "label": "Shortest release notes, in words",
    "type": "number",
    "value": 50,
    "default": 50,
    "min": 10,
    "max": 500,
-   "unit": "words",
    "note": "shorter notes did not answer the usual questions"
   },
   {
@@ -101,222 +116,215 @@
   {
    "id": "collect",
    "kind": "step",
+   "lane": "code",
    "name": "Collect",
    "do": "read NOTES.md, VERSION and tests.json of the folder",
    "by": [
     "steps.collect"
    ],
-   "next": [
-    {
-     "to": "notes"
-    }
-   ]
+   "next": "notes"
   },
   {
    "id": "notes",
    "kind": "hard",
+   "lane": "code",
    "name": "Notes long enough",
-   "ensure": "the notes have at least {notes.min_words} words",
+   "check": "the notes have at least {notes.min_words} words",
    "by": [
     "gates.notes_ok"
    ],
    "reads": [
     "notes.min_words"
    ],
-   "pass": [
-    {
-     "to": "version"
-    }
-   ],
    "fail": [
     {
      "to": "stop",
      "when": "notes too short"
     }
-   ]
+   ],
+   "next": "version"
   },
   {
    "id": "version",
    "kind": "hard",
+   "lane": "code",
    "name": "Version format",
-   "ensure": "the version matches {version.pattern}",
+   "check": "the version matches {version.pattern}",
    "by": [
     "gates.version_ok"
    ],
    "reads": [
     "version.pattern"
    ],
-   "pass": [
-    {
-     "to": "tests"
-    }
-   ],
    "fail": [
     {
      "to": "stop",
      "when": "bad version"
     }
-   ]
+   ],
+   "next": "tests-required"
   },
   {
-   "id": "tests",
-   "kind": "soft",
-   "name": "Tests green",
-   "ensure": "the last test run passed",
+   "id": "tests-required",
+   "kind": "hard",
+   "lane": "code",
+   "name": "Tests green when they are required",
+   "check": "the last test run passed, or the rule tests.required is off",
    "by": [
-    "gates.tests_green"
+    "gates.tests_required"
    ],
    "reads": [
     "tests.required"
-   ],
-   "pass": [
-    {
-     "to": "tone"
-    }
    ],
    "fail": [
     {
      "to": "stop",
      "when": "tests failed and tests are required"
-    },
-    {
-     "to": "tone",
-     "when": "tests failed; reported"
-    }
-   ]
-  },
-  {
-   "id": "tone",
-   "kind": "judge",
-   "name": "Notes speak to users",
-   "brief": "read the notes as a user would; fail if they use internal words or miss the upgrade steps",
-   "sees": [
-    "collect.notes",
-    "rewrite"
-   ],
-   "pass": [
-    {
-     "to": "approve"
     }
    ],
-   "fail": [
-    {
-     "to": "rounds",
-     "when": "the notes need a rewrite"
-    }
-   ]
+   "next": "tests"
   },
   {
-   "id": "rounds",
-   "kind": "hard",
-   "name": "A rewrite is left",
-   "ensure": "the notes were rewritten fewer than {notes.rounds} times",
+   "id": "tests",
+   "kind": "soft",
+   "lane": "code",
+   "name": "Tests green",
+   "check": "the last test run passed; a fail is reported",
    "by": [
-    "gates.rounds_left"
+    "gates.tests_green"
    ],
-   "reads": [
-    "notes.rounds"
-   ],
-   "pass": [
-    {
-     "to": "rewrite"
-    }
-   ],
-   "fail": [
-    {
-     "to": "stop",
-     "when": "no rewrite left"
-    }
-   ]
+   "next": "rewrite"
   },
   {
    "id": "rewrite",
    "kind": "step",
+   "lane": "model",
    "name": "Rewrite the notes",
    "do": "rewrite the notes for users: plain words, and the upgrade steps; give the new text as the result",
    "sees": [
     "collect.notes",
+    "rewrite",
+    "tone"
+   ],
+   "out": "text",
+   "schema": {
+    "type": "string"
+   },
+   "if": "tone",
+   "next": "rewritten"
+  },
+  {
+   "id": "rewritten",
+   "kind": "hard",
+   "lane": "code",
+   "name": "The rewrite is long enough",
+   "check": "the rewritten notes have at least {notes.min_words} words",
+   "by": [
+    "gates.notes_ok"
+   ],
+   "reads": [
+    "notes.min_words"
+   ],
+   "if": "rewrite",
+   "fail": [
+    {
+     "to": "stop",
+     "when": "the rewrite is too short"
+    }
+   ],
+   "next": "tone"
+  },
+  {
+   "id": "tone",
+   "kind": "model",
+   "lane": "model",
+   "name": "Notes speak to users",
+   "check": "read the notes as a user would; fail if they use internal words or miss the upgrade steps",
+   "reads": [
+    "notes.rounds"
+   ],
+   "sees": [
+    "collect.notes",
     "rewrite"
    ],
-   "next": [
+   "retry": "notes.rounds",
+   "fail": [
     {
-     "to": "notes"
+     "to": "stop",
+     "when": "the notes do not speak to users"
     }
-   ]
+   ],
+   "next": "approve",
+   "back": "rewrite"
   },
   {
    "id": "approve",
    "kind": "human",
-   "name": "A person agrees",
-   "brief": "show the person the version and the notes; ask: may this release be published?",
+   "lane": "person",
+   "name": "May this release be published?",
+   "check": "show the person the version and the notes",
    "sees": [
     "collect.version",
     "collect.notes",
     "rewrite"
-   ],
-   "pass": [
-    {
-     "to": "allowed"
-    }
    ],
    "fail": [
     {
      "to": "stop",
      "when": "the person said no"
     }
-   ]
+   ],
+   "next": "allowed"
   },
   {
    "id": "allowed",
    "kind": "hard",
+   "lane": "code",
    "name": "The tool may publish",
-   "ensure": "the rule permissions.publish is on",
+   "check": "the rule permissions.publish is on",
    "by": [
     "gates.may_publish"
    ],
    "reads": [
     "permissions.publish"
    ],
-   "pass": [
-    {
-     "to": "publish"
-    }
-   ],
    "fail": [
     {
      "to": "ready",
      "when": "dry run"
     }
-   ]
+   ],
+   "next": "publish"
   },
   {
    "id": "publish",
    "kind": "step",
+   "lane": "code",
    "name": "Publish",
    "do": "write published.json into the folder",
    "by": [
     "steps.publish"
    ],
-   "next": [
-    {
-     "to": "done"
-    }
-   ]
+   "next": "done"
   },
   {
    "id": "done",
    "kind": "end",
+   "lane": "end",
    "name": "Published"
   },
   {
    "id": "ready",
    "kind": "end",
+   "lane": "end",
    "name": "Ready, not published"
   },
   {
    "id": "stop",
    "kind": "end",
+   "lane": "end",
    "name": "Stopped"
   }
- ]
+ ],
+ "blocks": []
 }

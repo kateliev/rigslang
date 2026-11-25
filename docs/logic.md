@@ -1,102 +1,75 @@
 # How Rig works, and why
 
-This page explains the ideas of the language. The exact rules are in [the specification](../skills/rig/spec.md).
-
-**Since 2026-11-15 the centre of Rig is the agent scale**: tools and agents whose code lives in normal files, with a runner that walks the flow. The method for that is in [the guide](../skills/rig/guide/README.md). The snippet scale of Section 4 (matrix, cast, remelt) still works and is still tested, but it is now the small end of Rig, not its headline. [status.md](status.md) has the state of the work.
+This page explains the ideas of the language and of the kit. The exact rules are in [the specification](../skills/rig/spec.md). The method for building a tool is in [the guide](../skills/rig/guide/README.md). [status.md](status.md) has the state of the work.
 
 ## 1. The problem
 
-When an LLM writes code, three things go wrong:
+A model that does a job with tools goes wrong in three ways:
 
-1. **It forgets.** It solves the same problem again in each session, a little differently each time.
-2. **Nobody checks it.** Generated code often looks right and is not.
-3. **Nobody knows what was guessed.** Code does not show which parts a model decided by judgment and which parts a test proved.
+1. **It decides what code could decide.** A limit in a prompt is a suggestion. A model wrote 142 words for a limit of 120.
+2. **Nobody knows what was guessed.** The answer does not show which parts a test checked and which parts the model decided by judgment.
+3. **The numbers drift.** A value is copied into a prompt, a script and a README, and the copies stop agreeing.
 
-Agent instructions have the same problems. A paragraph in a prompt is easy to read loosely. Numbers get copied into three files and drift apart.
+## 2. Three words
 
-## 2. The idea: three words
-
-| Word | Question | Who writes it | Who checks it |
-|---|---|---|---|
-| **reason** | How do we get there? | the model: it writes the code and decides `judge` gates | a gate; until then, it is a **guess** |
-| **intent** | What must it do? | the human or the model, in plain controlled language | the examples and checks |
-| **gate** | How do we know it did? | the model | **a real runtime** |
-
-Each word has its own actor. The model reasons, the intent states the goal, and the runtime decides. A gate turns the model's guess into a fact, measured against the intent. An intent must never be falsified: when it describes existing code, it states what the code does. Rig keeps the three together in one small file. People read that file, and tools run it.
-
-Rig does not ask *why* a unit exists. The intent says what it must do, and that is enough. When code looks wrong but is right, or a value must not change, write a `note`.
-
-## 3. One syntax, three scales
-
-| Scale | What a unit holds | Example |
+| Word | Question | Who owns it |
 |---|---|---|
-| **snippet** | a matrix and a cast | [slugify.rig](../examples/older/slugify.rig) |
-| **tool** | a matrix, steps, gates, and units that it `uses` | [contacts.rig](../examples/older/contacts.rig) |
-| **agent** | rules (parameters), steps and gates | [release-check.rig](../examples/older/release-check.rig) |
+| **reason** | What needs judgment? | The model: the steps that need language, and the `model` gates. Its results are marked as guesses. |
+| **intent** | What must the tool do? | The person, or the model, in plain words. An intent must never be falsified: when it describes existing code, it says what the code does. |
+| **gate** | How do we know it did? | Code where code can decide (`hard`, `soft`). Else the model (`model`, a guess). Else a person (`human`). |
 
-The syntax does not change between scales. Only the amount you write changes. A snippet needs one intent and one example. Do not add ceremony that the work does not need.
+## 3. One source, one core, thin fronts
 
-## 4. The life of a snippet: matrix, proof, cast, remelt
+A tool is one `.rig` file and normal code files. The source says the order of the work and who decides. The code (`steps.py`, `gates.py`) does the work and the decisions. A runner (`rigkit.py`) walks the flow.
 
-The words come from hot-metal typefounding.
+The fronts are compiled from the source: a skill for Claude, a plugin for a local model, a command line and a graph page for a person. No front has a limit of its own, and no front decides a gate. A change of the source reaches all fronts at the next build.
 
-```
-   write the matrix           prove in a real runtime          the matrix changes
-   (intent, examples,   ──►   (examples + checks pass)   ──►   (hash mismatch)
-    ensure)                    → cast, with two hashes          → remelt: a hole again
-        ▲                                                              │
-        └──────────────────────────────────────────────────────────────┘
-```
+## 4. The flow is the order of the lines
 
-- The **matrix** is the spec: `in`, `out`, `intent`, `example`, `ensure`.
-- A **hole** is a unit with a matrix and no code.
-- A **proof** runs every example and every check in a real runtime. The model never imagines a result.
-- A **cast** is code that passed the proof. It carries two hashes: one of the matrix and one of the code.
-- If the matrix changes, the first hash does not match. The cast **remelts**, and the unit is a hole again.
-- If someone edits the code by hand, the second hash does not match. The cast is **stale**: prove it again, and check that the intent still describes it.
-- Some code needs the real world: the network, files, a service. Its result changes from day to day, so it has no fixed examples. A **probe** runs it live and checks conditions on the result. A pass is **observed**, not proved: true on that day, against that world. Version control keeps the date.
+In version 1, the lines of the flow run in order. A step, then the next line. A gate that passes goes on to the next line; a gate that fails goes to an end. The flow never jumps back.
 
-The two-way check stops drift between the documentation and the code. Neither can change without the other noticing.
+Why: a flow with jumps (`next ->`, `pass ->` in version 0) can say anything, but a person must follow arrows to read it. In real flows, about a third of the nodes were plumbing: a step that takes the next page, a gate that asks "is a page left?", a gate that counts the rounds. The order of the lines says the same thing with no extra nodes, and it reads from top to bottom.
 
-## 5. The life of an agent: gates and coverage
+What a flow still needs, a few blocks say:
 
-An agent unit is a small state machine. **Steps** do work. **Gates** decide. **Ends** stop the flow.
+| Block | For |
+|---|---|
+| `for <item> in <path>` | A list of parts in one run: pages of choices, batches to sort. `fail -> continue` leaves one item; `tolerate` says how many may be left. |
+| `until <path>` with `retry <n>` | "Again until the model says done." The only loop without a list. |
+| `if <path>`, `else` | Two ways through. `if` on one node skips that node. |
+| `section "name"` | A heading. It has no effect on a run. |
+| `finally` | The report that must be written, also after an error. |
 
-| Gate kind | Who decides | What the result means |
-|---|---|---|
-| `hard` | code (`by`) | a fact; a fail blocks |
-| `soft` | code (`by`) | a fact; a fail is reported |
-| `judge` | the model (`brief`) | a **guess**, and labelled so |
-| `human` | a person (`brief`) | the flow waits; the model cannot answer |
+A correction is `retry <n>` on the gate that checks: on fail, the run goes back to the step before the gate. These are the only ways back, so every loop has a limit that the source states.
 
-**Coverage** is the share of gates that **proved or tested** code decides. A `by` line names a unit, an `external`, or a function of a `code` line (code in a normal file, with its test file). The gate takes the level of that code: proved (Rig ran its examples), tested (a test file names the function), observed, code (nothing checks it), or none (the name points at nothing). A gate that names code is not yet a fact: only checked code makes it one.
+**Paths, never expressions.** `if sort.new_folders` tests one value of the state: is it there, and not empty, and not false? Rig has no variables, no assignments and no expressions. When a decision needs a computation, the computation is code, and the source names it with `by`.
 
-**A gate in a prompt is a suggestion; a gate in a runner is a fact.** The first compiled skill asked the model to walk the flow and to obey the gates. A test run showed the limit of that: a word limit that was only text was broken, and nothing saw it. So a tool now has a **runner** (`rigkit.py`): code walks the flow, calls the code of the steps and the gates, and stops only at a `judge` gate, a `human` gate, or a step that has no code. It refuses an answer for another node. Over time, move gates from `judge` to `hard` or `soft` when you can write the check, and prove the check. The model stays where it is good: inside the judge gates and inside the steps, for decisions that no rule can hold.
+## 5. Who decides: the lanes
 
-A `judge` result is a guess, and the person must see that. The compiled skill tells the agent to end its answer with a `Guessed:` line that names the gates it decided itself.
+Every node has a decider: code, the model, or a person. The catalogue writes it as the `lane` of the node, and the graph page draws the nodes in three bands. A person sees at once how much of the flow is code, and where the model or a person acts.
 
-**Rules** are the numbers and switches of the agent. They live in one place. The text of a step or gate names a rule as `{group.name}`, never as a number, so the viewer and the checker can see unused rules and missing ones. A **preset** is a named set of rule values, for example a careful mode and a fast mode.
+**Coverage** is the share of the gates that tested code decides. It is not a goal by itself: a gate that needs judgment stays a `model` gate. The goal is that no gate is a guess by accident.
 
-**One source, compiled.** The `.rig` file is the source. It compiles to a JSON catalogue for a code runner, to a skill for an agent that follows instructions, and to a tool definition for a model that calls tools. `emit` writes the proved and observed casts as modules for a program to import. Both come from the same file, so the numbers cannot drift apart between them. The skill can also read its values from the catalogue, so each value has one place at run time too. A person checks the agent in the viewer, as a graph and as tables, and changes values there.
+A `human` gate is the only place where the person decides, and the model can never answer it. The runner refuses an answer of the model there; the plugin has no tool for it. A gate with `options` takes the words of the person and gives them to code, which asks again when it does not understand them.
 
-## 6. Documentation and memory
+## 6. Runs that can be read again
 
-A Rig file is pseudo-code that the agent writes and the human reads. It is also a good format for persistent memory:
+A run has a folder. The runner keeps four things there:
 
-- The **intent**, the **notes** and their **evidence** survive between sessions and between models.
-- The **status** of each unit (proved, stale, remelted, hole, coverage) shows at a glance what is known and what is guessed.
-- Version control keeps every old cast. Nothing is lost when a cast remelts.
+- **A pinned copy of the flow and the rules.** A run that started before a change goes on as it began, and says that the source changed.
+- **Every answer** of the model and of the person, in order.
+- **The state before each line** outside a loop. `rerun --from <line>` starts a new run there, with changed rules: a fix of code or of a value can be tried on the item where it failed, with no new answers.
+- **The progress of a loop.** The run is saved after each item, so a stopped process goes on from the next item.
 
-## 7. What Rig is not
+`replay` plays the recorded answers again with the current code: a flow test with no model. Together with the regression set (written answers) and the tests of the code, it shows what a change does before a model or a person sees it.
 
-- It is not a replacement for a programming language. The code of a tool is written in a normal language, in normal files.
-- It is not a framework that a tool must live in. A tool keeps one copied file (`rigkit.py`) and its compiled catalogue.
-- It is not a prompt format for open-ended work. For "help me design this", plain language is better.
-- It is not a way to trust a model. It is a way to *not need to*: the runtime decides.
+## 7. The language stays small
 
-## 8. Where it came from
+Two limits hold:
 
-- [history/sidenote-agent-configuration.md](history/sidenote-agent-configuration.md): agent configuration as a graph of gates and rules.
-- [history/self-writing-language.md](history/self-writing-language.md): intent as data, and the self-writing loop.
-- [history/findings-2026-11-11.md](history/findings-2026-11-11.md): research on related work, and what to learn from it.
-- [status.md](status.md): the refocus of 2026-11-15, from a language to a kit and a guide.
+1. **Rig is not a general programming language.** It says the order of the work and who decides. Code computes everything.
+2. **One word has one meaning, and a word comes in only when it removes nodes from real flows.** Version 1 has about as many words as version 0 (33), but it says more. The words that went out, and what replaces them, are in the spec, Section 3.
+
+## 8. Where Rig came from
+
+Rig began as a language for single functions: a unit held its code inside the `.rig` file as a **cast**, proved against its examples and pinned by hashes. That idea worked for small pure functions, but a tool needs normal code files, tests and a runner. Since the kit (2026-11-15), the code lives in files and the tests prove it. Version 1 (2026-11-25) removed the snippet scale from the language. Its examples and its task file are in [history/](history/).

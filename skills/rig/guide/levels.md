@@ -66,17 +66,18 @@ What the doctor adds:
 - The tool has at least one gate.
 - Every `hard` or `soft` gate names code that exists, and a test names that code.
 - Every rule is read by a step or a gate.
-- Every `judge` and `human` gate has a brief.
+- Every `model` gate has a `check`, and every `human` gate a question.
+- Every step says who does it: `by <code>` or `by model`.
 - A note: number rules with no note that says where the value comes from.
 - A note: the coverage. It is the share of the gates that tested code decides.
 
-At this level the tool already runs without a model up to its first `judge` gate. That is the point: you can test everything before any model sees it.
+At this level the tool already runs without a model up to its first `model` gate. That is the point: you can test everything before any model sees it.
 
 ## Level 3: flow
 
 What the doctor adds:
 
-- The flow has an end node, every node can be reached, and every gate has a pass line and a fail line.
+- The flow has an end node, every node can be reached, and the flow ends at an end line, not past its last line. (The checker already refuses a `hard`, `model` or yes/no `human` gate with no `fail` line.)
 - `rig.json` names the driver (the runner command) and the compiled skill.
 - A regression set exists, every case has an expected result, and the set passes.
 - Every end node is the end of a regression case. A note: every gate is on the path of a case.
@@ -94,6 +95,8 @@ python3 tool.py regress tests/regression-set.json
 
 Write the expected results with `--baseline` after you looked at them. Run the set after every change of the steps, the gates, the rules or the flow. A result that changes on purpose gets a new baseline, and the commit message names the cases.
 
+A run of a real model is a second kind of flow test. Its folder keeps every answer, so `python3 RIG test DIR --replay RUN` plays the same run again with the current code, and prints where the end or the path changed.
+
 ## Level 4: production
 
 What the doctor adds:
@@ -108,4 +111,4 @@ The doctor cannot check the rest of level 4. It is in [patterns.md](patterns.md)
 
 - A level is not a mark of quality. A level 1 tool with good texts is a finished tool.
 - A level does not say how good the gates are. That comes from runs and from the person: see [build-order.md](build-order.md), stage 8.
-- Coverage is not a goal by itself. A gate that needs judgment stays a `judge` gate. The goal is that no gate is a guess **by accident**.
+- Coverage is not a goal by itself. A gate that needs judgment stays a `model` gate. The goal is that no gate is a guess **by accident**.

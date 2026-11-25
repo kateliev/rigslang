@@ -4,7 +4,7 @@
     python3 tool.py run '{"band": "Pink Floyd"}'   start a run; code walks the flow as far as it can
     python3 tool.py answer RUN '{"pass": true}'     the model answers the node that the run waits at
     python3 tool.py batch '[{"band": "..."}, ...]' --report reports/NAME.md
-    python3 tool.py queues | resume RUN | status RUN | rules | flow
+    python3 tool.py queues | resume RUN | status RUN | rules | flow | rerun RUN --from ID | replay RUN
     python3 tool.py regress tests/regression-set.json [--baseline]     (no network: tests/fixtures)
 
 Each call prints one JSON line. A "refused" result is final: do not repeat the call.

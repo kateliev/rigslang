@@ -38,18 +38,17 @@ class Gates(unittest.TestCase):
 		self.assertTrue(gates.version_ok(state(), rules())['pass'])
 		self.assertFalse(gates.version_ok(state(version='v1.2'), rules())['pass'])
 
+	def test_tests_required(self):
+		self.assertTrue(gates.tests_required(state(), rules())['pass'])
+		red = state(tests={'passed': False})
+		self.assertFalse(gates.tests_required(red, rules())['pass'])
+		self.assertTrue(gates.tests_required(red, rules(tests__required=False))['pass'])
+		self.assertFalse(gates.tests_required(state(tests={}), rules())['pass'])
+
 	def test_tests_green(self):
 		self.assertTrue(gates.tests_green(state(), rules())['pass'])
-		red = state(tests={'passed': False})
-		self.assertEqual(gates.tests_green(red, rules())['when'], 'tests failed and tests are required')
-		self.assertEqual(gates.tests_green(red, rules(tests__required=False))['when'], 'tests failed; reported')
-		self.assertFalse(gates.tests_green(state(tests={}), rules())['pass'])
-
-	def test_rounds_left(self):
-		self.assertTrue(gates.rounds_left(state(), rules())['pass'])
-		self.assertTrue(gates.rounds_left(state(_visits={'rewrite': 1}), rules())['pass'])
-		self.assertFalse(gates.rounds_left(state(_visits={'rewrite': 2}), rules())['pass'])
-		self.assertFalse(gates.rounds_left(state(), rules(notes__rounds=0))['pass'])
+		self.assertFalse(gates.tests_green(state(tests={'passed': False}), rules(tests__required=False))['pass'])
+		self.assertIn('no test result', gates.tests_green(state(tests={}), rules())['problems'][0])
 
 	def test_may_publish(self):
 		self.assertFalse(gates.may_publish(state(), rules())['pass'])

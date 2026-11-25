@@ -19,7 +19,7 @@ def rules(**changes):
 
 
 def a_batch(**more):
-	b = {'batch': 2, 'of': 3, 'sort_visits': 4, 'new_so_far': ['Top > Made'],
+	b = {'batch': 2, 'of': 3, 'new_so_far': ['Top > Made'],
 		'folders': ['Top', 'Top > Cooking', 'Top > Made'],
 		'bookmarks': [{'id': 1, 'title': 'One', 'url': 'https://a.example/', 'folder': 'Top'},
 			{'id': 2, 'title': 'Two', 'url': 'https://b.example/', 'folder': 'Top'}]}
@@ -35,28 +35,10 @@ class Gates(unittest.TestCase):
 		self.assertIn('JSON', v['problems'][0])
 		self.assertFalse(gates.file_ok({'read': {'ok': True, 'bookmarks': 0}}, rules())['pass'])
 
-	def test_page_left(self):
-		self.assertTrue(gates.page_left({'page': {'page': 1, 'of': 2}}, rules())['pass'])
-		v = gates.page_left({'page': {'page': None, 'of': 2}}, rules())
-		self.assertFalse(v['pass'])
-		self.assertTrue(v['route'])  # the end of a loop is not a problem
-
-	def test_choice_ok(self):
-		self.assertTrue(gates.choice_ok({'apply': {'ok': True, 'problems': []}}, rules())['pass'])
-		v = gates.choice_ok({'apply': {'ok': False, 'problems': ['"x" is not understood']}}, rules())
-		self.assertFalse(v['pass'])
-		self.assertEqual(v['problems'], ['"x" is not understood'])
-
-	def test_batch_left(self):
-		self.assertTrue(gates.batch_left({'batch': {'batch': 1, 'of': 1}}, rules())['pass'])
-		v = gates.batch_left({'batch': {'batch': None, 'of': 1}}, rules())
-		self.assertFalse(v['pass'])
-		self.assertTrue(v['route'])
-
 	def test_sort_ok(self):
 		good = [{'id': 1, 'folder': 'Top > Cooking'}, {'id': 2, 'folder': 'Top'}]
-		self.assertTrue(gates.sort_ok({'batch': a_batch(), 'sort': good}, rules())['pass'])
-		self.assertTrue(gates.sort_ok({'batch': a_batch(), 'sort': [{'id': 1, 'folder': 'Top > Made'}, {'id': 2, 'folder': 'Top > Garden', 'new': True}]}, rules())['pass'])
+		self.assertTrue(gates.sort_ok({'prepare': a_batch(), 'sort': good}, rules())['pass'])
+		self.assertTrue(gates.sort_ok({'prepare': a_batch(), 'sort': [{'id': 1, 'folder': 'Top > Made'}, {'id': 2, 'folder': 'Top > Garden', 'new': True}]}, rules())['pass'])
 		cases = {
 			'missing ids: 2': [{'id': 1, 'folder': 'Top'}],
 			'is in the result 2 times': [{'id': 1, 'folder': 'Top'}, {'id': 1, 'folder': 'Top'}, {'id': 2, 'folder': 'Top'}],
@@ -67,36 +49,16 @@ class Gates(unittest.TestCase):
 			'not a list': {'id': 1},
 		}
 		for want, answer in cases.items():
-			v = gates.sort_ok({'batch': a_batch(), 'sort': answer}, rules())
+			v = gates.sort_ok({'prepare': a_batch(), 'sort': answer}, rules())
 			self.assertFalse(v['pass'], want)
 			self.assertTrue(any(want in p for p in v['problems']), (want, v['problems']))
 			self.assertTrue(v['problems'][0].startswith('batch 2: '))
 		two_new = [{'id': 1, 'folder': 'Top > A', 'new': True}, {'id': 2, 'folder': 'Top > B', 'new': True}]
-		self.assertTrue(gates.sort_ok({'batch': a_batch(), 'sort': two_new}, rules())['pass'])
-		v = gates.sort_ok({'batch': a_batch(), 'sort': two_new}, rules(sort__new_per_batch=1))
+		self.assertTrue(gates.sort_ok({'prepare': a_batch(), 'sort': two_new}, rules())['pass'])
+		v = gates.sort_ok({'prepare': a_batch(), 'sort': two_new}, rules(sort__new_per_batch=1))
 		self.assertIn('sort.new_per_batch 1', v['problems'][0])
-		v = gates.sort_ok({'batch': a_batch(), 'sort': two_new}, rules(sort__new_max=2))
+		v = gates.sort_ok({'prepare': a_batch(), 'sort': two_new}, rules(sort__new_max=2))
 		self.assertIn('sort.new_max 2', v['problems'][0])  # one made earlier, two now
-
-	def test_rounds_left(self):
-		def state(visits):
-			return {'batch': a_batch(), '_visits': {'sort': visits}}
-		self.assertTrue(gates.rounds_left(state(5), rules())['pass'])  # the first answer of this batch
-		self.assertTrue(gates.rounds_left(state(6), rules())['pass'])
-		v = gates.rounds_left(state(7), rules())
-		self.assertFalse(v['pass'])
-		self.assertIn('sort.rounds 2', v['problems'][0])
-		self.assertFalse(gates.rounds_left(state(5), rules(sort__rounds=0))['pass'])
-
-	def test_any_new(self):
-		self.assertTrue(gates.any_new({'folders': {'new': [{'n': 1}]}}, rules())['pass'])
-		v = gates.any_new({'folders': {'new': []}}, rules())
-		self.assertFalse(v['pass'])
-		self.assertTrue(v['route'])
-
-	def test_accept_ok(self):
-		self.assertTrue(gates.accept_ok({'accept': {'ok': True}}, rules())['pass'])
-		self.assertFalse(gates.accept_ok({'accept': {'ok': False, 'problems': ['x']}}, rules())['pass'])
 
 	def test_share_ok(self):
 		self.assertTrue(gates.share_ok({'report': {'removed_share': 14.3}}, rules())['pass'])

@@ -1,4 +1,6 @@
-# Describe code in Rig; cast and prove snippets
+# Describe code in Rig; cast and prove snippets (language version 0)
+
+> Kept as a record. Language version 1 removed the snippet scale: `cast`, `probe`, the hashes and the commands `prove`, `probe`, `stamp`, `emit` and `hash` are gone. The links below point to files of version 0.
 
 Part of the skill `rig`. Read [SKILL.md](SKILL.md) first.
 

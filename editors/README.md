@@ -10,11 +10,13 @@ python editors/build.py
 
 ## What is highlighted
 
-- The head word of each line, by group: the matrix (`in`, `out`, `intent`, `example`, `ensure`, `check`), the context (`note`, `evidence`, `rule`, `preset`, `set`, `uses`, `external`, `probe`, …) and the flow (`step`, `gate`, `end`, `next`, `pass`, `fail`, …).
-- Names: units, rules, steps, gates and ends where they are defined. Rule names after `reads`, and node names after `->`.
-- Strings, rule names in strings (`{group.name}`), `/regex/`, numbers, `on`/`off`, hashes, dates, `?` (an unknown value) and `;` comments.
-- **Cast bodies use the highlighting of their language** for `py`, `js`, `ts`, `sh` and `rust`. Other languages show as raw text. A cast body ends at the first line that is not indented more than `cast`.
-- Gate kinds (`hard`, `soft`, `judge`) and unit scales (`snippet`, `tool`, `agent`).
+- The head word of each line, by group: what the unit does (`in`, `out`, `intent`, `example`, `check`), the context (`note`, `rule`, `range`, `options`, `preset`, `set`, `uses`, `code`, `test`), the nodes (`step`, `gate`, `end`), the blocks (`for`, `until`, `if`, `else`, `section`, `finally`) and the children of the flow (`by`, `do`, `fail`, `retry`, `timeout`, `tolerate`, `reads`, `sees`).
+- `by` and `fail` at the end of a `step` or `gate` line.
+- Names: units, rules, steps, gates and ends where they are defined; the item and the path of a `for`; the path of `until` and `if`. Rule names after `reads`, and the end after `->`.
+- Strings, rule names in strings (`{group.name}`), `/regex/`, numbers, times (`5m`, `3d`), percents (`20%`), `|` between options, `on`/`off`, `?` (an unknown value) and `;` comments.
+- Gate kinds (`hard`, `soft`, `model`, `human`) and unit scopes (`tool`, `agent`).
+
+The words of language version 0 that version 1 refuses (`next`, `pass`, `judge`, `cast`, …) are not highlighted.
 
 ## VS Code
 

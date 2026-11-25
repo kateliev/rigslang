@@ -39,8 +39,3 @@ def short_enough(state, R):
 	ok = words <= R('answer.max_words')
 	return {'pass': ok, 'words': words, 'problems': [] if ok else ['the paragraph has {} words (answer.max_words {})'.format(words, R('answer.max_words'))]}
 
-
-def rounds_left(state, R):
-	rewrites = max(0, state.get('_visits', {}).get('write', 0) - 1)
-	ok = rewrites < R('answer.rounds')
-	return {'pass': ok, 'rewrites': rewrites, 'problems': [] if ok else ['the paragraph was rewritten {} times (answer.rounds {})'.format(rewrites, R('answer.rounds'))]}

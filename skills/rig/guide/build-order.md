@@ -69,7 +69,8 @@ A step is a function in `steps.py`: `def name(state, R)`. It reads the state of 
 - A step does one thing, and returns the facts that a gate needs. It does not decide.
 - Only steps touch the world. Gates never do.
 - A step that changes something has a way back: it keeps the old thing, or it works on a copy ([patterns.md](patterns.md)).
-- A step that fails raises an error with a clear text. The runner turns it into a result, and the run can resume after the cause is fixed.
+- A step that fails raises an error with a clear text. The run ends with the outcome `error`, and `finally` runs. After the cause is fixed, `tool.py rerun RUN --from <step>` starts a new run from that line, with the state that the old run had there.
+- A step that can hang (a network call, a host) gets a `timeout`: `step fetch by steps.fetch` with `timeout 30s` under it. The run ends with `error` when the time is over.
 - When the code runs inside a host application, keep each call short and return one JSON line (`rigkit.step`).
 - Use a public API of a service, not a page that is made for people. A page changes, and it may refuse a program.
 - A step that can get no answer (a service is down) returns that as a fact, and the gate after it has a fail line and an end for it. "No answer" and "nothing found" are two ends.
@@ -84,16 +85,14 @@ Write a test for each step that can run without the host. For a step that needs 
 Search the code and your log for numbers, switches and names (a file name, a font name, a server). Each one becomes a `rule` in the source:
 
 ```
-rule notes.min_words 50
-  min 10
-  max 500
-  label "Shortest release notes"
-  unit "words"
+rule notes.min_words 50 "Shortest release notes, in words"
+  range 10 500
   note "shorter notes did not answer the usual questions"
 ```
 
 - The id is `group.name`. Groups make the table readable: `limits`, `permissions`, `files`, and the stages of the job.
-- Give `min` and `max`, or `options`. They stop a wrong value before a run starts.
+- The string after the value is the label that a person reads. Put the unit in it ("in words").
+- Give a `range`, or `options` (`options fast | careful`). They stop a wrong value before a run starts.
 - The `note` says where the value comes from. A value with no reason is a value that nobody dares to change.
 - Do not set a limit from one item. Say in the note how many items it was checked on.
 - A mode of the tool (fast and careful, old method and new method) is a `preset`: a named set of values.
@@ -108,21 +107,21 @@ For each decision of the log, ask: **can code decide this?**
 |---|---|---|
 | Yes, and a fail must stop the item | `hard` | a function in `gates.py`, and a test |
 | Yes, but the item can go on with a mark | `soft` | a function in `gates.py`, and a test |
-| No: it needs judgment, and the model has what it needs to judge | `judge` | a `brief`: what to judge, and what makes a pass |
-| No: it is the person's call (taste, risk, anything visual) | `human` | a `brief`: what to show, and what to ask |
+| No: it needs judgment, and the model has what it needs to judge | `model` | a `check`: what to decide, and what makes a pass |
+| No: it is the person's call (taste, risk, anything visual) | `human` | the question as the name (`gate approve human "Write the file?"`), and a `check`: what to show |
 
 A gate is a pure function: `def name(state, R)`. No files, no network, no host. It returns:
 
 ```python
-{'pass': False, 'when': 'tests failed; reported', 'problems': ['the last test run failed'], 'failed': 3}
+{'pass': False, 'when': 'the service did not answer', 'problems': ['no answer in 10 s (http.timeout 10)'], 'tries': 3}
 ```
 
 - `problems` is text for a person: the value, the rule and its value. "the notes have 12 words (notes.min_words 50)".
-- `when` names the fail line to follow, when the gate has more than one.
-- `route: true` with a fail: the gate only ends a loop ("no page is left"). The fail is a turn of the flow, not a problem, so the runner does not add it to the problems of the run.
+- `when` names the fail line to follow, when the gate has more than one: `fail -> none "nothing found"` and `fail -> offline "the service did not answer"`.
 - Other keys are facts. They go into the trace of the run.
+- When the person chooses from a list, use a human gate with `options`, and a `by` function that reads the answer in `state[<gate id>]["answer"]`. It returns like a gate: a fail means "not understood", and the gate asks again.
 
-A `judge` gate, a `human` gate and a step that the model does need a `sees` line: the parts of the state that go with the question, for example `sees read.summary write`. The one who answers gets these values with the node, and nothing else. Without the line, the model judges blind, or it goes to look for the facts itself.
+A `model` gate, a `human` gate and a step that the model does need a `sees` line: the parts of the state that go with the question, for example `sees read.summary write`. The one who answers gets these values with the node, and nothing else. Without the line, the model judges blind, or it goes to look for the facts itself.
 
 Each gate gets a test with the rule defaults, and a test with a changed rule. The checker counts a gate as tested only when the test file names its function.
 
@@ -133,14 +132,17 @@ Two questions catch most missing gates:
 
 **Done when:** `python3 RIG doctor DIR` shows the lines "every hard or soft gate names code that exists" and "a test names the code of every gate" as ok.
 
-## Stage 6. Wire the flow and name the ends
+## Stage 6. Put the lines in order and name the ends
 
-Connect the nodes in the source with `next`, `pass` and `fail`. Then name every way a run can end.
+The order of the lines is the order of the flow. A gate that passes goes on to the next line; a fail goes to an end. Then name every way a run can end.
 
 - An end says **who must act next**: nobody (done), the person (waits for a part, waits for a look), the model (left for a choice). "Stopped" alone is too little: see queues in [patterns.md](patterns.md).
-- A gate that only reports leads on to the same node on fail. A gate that blocks leads to an end, or to a correction step.
-- A correction is a loop. Every loop needs a gate that counts the rounds, with the limit as a rule.
-- Keep the wires in the source file. The graph page shows them, and it changes values only.
+- A gate that only reports is `soft`: the flow goes on. A gate that blocks is `hard`, and its `fail` goes to an end.
+- A correction is `retry <n>` on the gate that checks: on fail, the run goes back to the step before the gate (only gates may stand between them), at most `n` times. Make `n` a rule (`retry notes.rounds`) when a preset changes it.
+- A list of items in one run is a `for` block: `for page in group.pages`. A gate in it can leave one item with `fail -> continue`; `tolerate 20%` says how many may be left.
+- A step that only runs sometimes gets `if <path>`. Two ways through are `if` and `else` blocks. "Until the model says done" is an `until` block with `retry`.
+- A report that must be written also after an error goes into `finally`.
+- Keep the order in the source file. The graph page shows it, and it changes values only.
 
 Look at the flow as a graph with the person. A person sees a missing path in a graph much faster than in a text:
 
@@ -160,7 +162,7 @@ python3 RIG build DIR
 
 This compiles the catalogue, the skill and the tool definitions. See [fronts.md](fronts.md) for the plugin of a local model and for how to install the skill.
 
-Test each front the way it will be used: give the model one item and watch the calls. The first run with a model always finds a text that the model reads in another way than you meant. Fix the text in the source (an `intent`, a `brief`, a `do`), not in the compiled file.
+Test each front the way it will be used: give the model one item and watch the calls. The first run with a model always finds a text that the model reads in another way than you meant. Fix the text in the source (an `intent`, a `check`, a `do`), not in the compiled file. A step that the model does gets an `out` type when its answer has a form: the plugin then gives the model a tool with that schema, and the runner refuses another form.
 
 **Done when:** each front did one whole item, and you read the trace of that run.
 
@@ -172,7 +174,7 @@ Now the loop that makes the tool good. One round:
 2. Write a report: failures first, with the reason. Then the counts.
 3. The person looks at the results and marks what is wrong, in the host or in a list.
 4. Start from the marks. For each one ask: which gate should have seen this? Either a gate is missing, or a limit is wrong, or a step is wrong.
-5. Change the tool. Add the marked items to the regression set, with the result that is right.
+5. Change the tool. Add the marked items to the regression set, with the result that is right. A run of a real model is a flow test too: `python3 RIG test DIR --replay RUN` plays its recorded answers again with the changed code, and names what changed.
 6. Write what you learned: a failed method into `notes/failures-log.md`, a code bug into `bugs-and-fixes.md`, a decision of the person into `notes/project-facts.md`.
 
 Rules for this loop:
@@ -186,13 +188,13 @@ Rules for this loop:
 
 ## Stage 9. Harden
 
-After some rounds, look at the `judge` gates and at the steps that the model does.
+After some rounds, look at the `model` gates and at the steps that the model does.
 
-- A `judge` gate that the model always answers the same way from the same facts can be code. Write the function and its test, add `by`, and change the kind. Coverage goes up.
+- A `model` gate that the model always answers the same way from the same facts can be code. Write the function and its test, add `by`, and change the kind. Coverage goes up.
 - A step that the model does the same way each time can be code.
-- A `judge` gate that the model gets wrong, and that code cannot decide, becomes a `human` gate, or gets a better brief.
+- A `model` gate that the model gets wrong, and that code cannot decide, becomes a `human` gate, or gets a better `check`.
 - An item that a small model cannot do goes to an end "left for a larger model or a person", not to a guess.
 
 Do not harden early. A gate written before the job is understood fixes the wrong thing in place.
 
-**Done when:** the coverage note of the doctor stopped moving for a few rounds, and every remaining `judge` gate is one on purpose.
+**Done when:** the coverage note of the doctor stopped moving for a few rounds, and every remaining `model` gate is one on purpose.

@@ -27,49 +27,30 @@ CONTEXT = 'keyword.other.context.rig'
 FLOW = 'keyword.control.flow.rig'
 NODE = 'storage.type.node.rig'
 ID = 'entity.name.function.node.rig'
+BLOCK = 'keyword.control.block.rig'
 
 # - Heads: (pattern, scopes of the groups, push the id list after it)
 HEADS = [
-	(rf'^(unit)\s+({W})(?:\s+(snippet|tool|agent){E})?', ['storage.type.unit.rig', 'entity.name.type.unit.rig', 'storage.modifier.scale.rig'], False),
+	(rf'^(unit)\s+({W})(?:\s+(tool|agent){E})?', ['storage.type.unit.rig', 'entity.name.type.unit.rig', 'storage.modifier.scale.rig'], False),
 	(rf'^\s*(in){E}(?:\s+({W}))?(?:\s+({W}))?', [MATRIX, 'variable.parameter.input.rig', 'support.type.rig'], False),
 	(rf'^\s*(out){E}(?:\s+({W}))?', [MATRIX, 'support.type.rig'], False),
-	(rf'^\s*(intent|example|ensure){E}', [MATRIX], False),
-	(rf'^\s*(probe){E}', [CONTEXT], False),
-	(rf'^\s*(check){E}(?:\s+({W}))?', [MATRIX, 'storage.type.language.rig'], False),
-	(rf'^\s*(evidence){E}(?:\s+({W}))?', [CONTEXT, 'markup.underline.link.rig'], False),
+	(rf'^\s*(intent|example|check){E}', [MATRIX], False),
 	(rf'^\s*(uses){E}(?:\s+({W}))?', [CONTEXT, 'entity.other.inherited-class.rig'], False),
-	(rf'^\s*(external){E}(?:\s+({W}))?', [CONTEXT, 'support.function.rig'], False),
 	(rf'^\s*(code|test){E}', [CONTEXT], False),
 	(rf'^\s*(rule){E}(?:\s+({W}))?', ['storage.type.rule.rig', 'entity.name.constant.rule.rig'], False),
 	(rf'^\s*(preset){E}(?:\s+({W}))?', ['storage.type.rule.rig', 'entity.name.constant.preset.rig'], False),
 	(rf'^\s*(set){E}(?:\s+({W}))?', [CONTEXT, 'variable.other.constant.rule.rig'], False),
-	(rf'^\s*(note|label|options|min|max|unit){E}', [CONTEXT], False),
+	(rf'^\s*(note|options|range){E}', [CONTEXT], False),
 	(rf'^\s*(step|end){E}(?:\s+({W}))?', [NODE, ID], False),
-	(rf'^\s*(gate){E}(?:\s+({W}))?(?:\s+(hard|soft|judge|human){E})?', [NODE, ID, 'storage.modifier.gate.rig'], False),
+	(rf'^\s*(gate){E}(?:\s+({W}))?(?:\s+(hard|soft|model|human){E})?', [NODE, ID, 'storage.modifier.gate.rig'], False),
+	(rf'^\s*(for){E}(?:\s+({W}))?(?:\s+(in){E})?(?:\s+({W}))?', [BLOCK, 'variable.other.item.rig', BLOCK, 'variable.other.path.rig'], False),
+	(rf'^\s*(until|if){E}(?:\s+({W}))?', [BLOCK, 'variable.other.path.rig'], False),
+	(rf'^\s*(else|section|finally){E}', [BLOCK], False),
 	(rf'^\s*(by){E}(?:\s+({W}))?', [FLOW, 'support.function.rig'], False),
-	(rf'^\s*(when|do|brief|next|pass|fail){E}', [FLOW], False),
+	(rf'^\s*(do|fail|retry|timeout|tolerate){E}', [FLOW], False),
 	(rf'^\s*(reads){E}', [FLOW], True),
 	(rf'^\s*(sees){E}', [FLOW], False),
 ]
-
-# - Casts: (rig name, VS Code language id, VS Code scope, Sublime scope)
-CASTS = [
-	('py', 'python', 'source.python', 'source.python'),
-	('js', 'javascript', 'source.js', 'source.js'),
-	('ts', 'typescript', 'source.ts', 'source.ts'),
-	('sh', 'shellscript', 'source.shell', 'source.shell.bash'),
-	('rust', 'rust', 'source.rust', 'source.rust'),
-]
-
-
-def cast_head(lang):
-	return (rf'^(\s*)(cast)\s+({lang}){E}(?:\s+(#[^\s;]*))?(?:\s+(#[^\s;]*))?'
-	        rf'(?:\s+(proved|observed)(?:\s+(\d{{4}}-\d{{2}}-\d{{2}}))?)?\s*(;.*)?$')
-
-
-CAST_SCOPES = ['storage.type.cast.rig', 'storage.type.language.rig', 'constant.other.hash.rig',
-               'constant.other.hash.rig', 'keyword.other.proved.rig', 'constant.numeric.date.rig',
-               'comment.line.semicolon.rig']
 
 # - Arguments, in order of priority
 ITEMS = [
@@ -77,8 +58,10 @@ ITEMS = [
 	('regex', B + r'/(?:\\.|[^/\\])*/(?=[\s)]|$)', {0: 'string.regexp.rig'}),
 	('arrow', B + rf'(->)(?:\s+({W}))?', {1: 'keyword.operator.arrow.rig', 2: 'variable.function.target.rig'}),
 	('example', B + r'=>' + A, {0: 'keyword.operator.arrow.rig'}),
-	('date', B + r'\d{4}-\d{2}-\d{2}' + A, {0: 'constant.numeric.date.rig'}),
-	('hash', B + r'#[0-9a-fA-F]+' + A, {0: 'constant.other.hash.rig'}),
+	('inline', B + r'(?:by|fail)' + A, {0: FLOW}),
+	('percent', B + r'\d+(?:\.\d+)?%' + A, {0: 'constant.numeric.rig'}),
+	('time', B + r'\d+[smhd]' + A, {0: 'constant.numeric.rig'}),
+	('bar', B + r'\|' + A, {0: 'punctuation.separator.rig'}),
 	('number', B + r'[-+]?\d+(?:\.\d+)?' + A, {0: 'constant.numeric.rig'}),
 	('constant', B + r'(?:on|off|true|false)' + A, {0: 'constant.language.rig'}),
 	('unknown', B + r'\?' + A, {0: 'constant.language.unknown.rig'}),
@@ -97,18 +80,6 @@ def tm_caps(scopes, start=1):
 
 def vscode():
 	patterns = [{'include': '#comment'}]
-	for lang, _, scope, _ in CASTS:
-		patterns.append({
-			'begin': cast_head(lang), 'beginCaptures': tm_caps([None] + CAST_SCOPES),
-			'while': r'^(?=\1[ \t]+\S|[ \t]*$)',
-			'contentName': f'meta.embedded.block.{lang}.rig',
-			'patterns': [{'include': scope}],
-		})
-	patterns.append({
-		'begin': cast_head(W), 'beginCaptures': tm_caps([None] + CAST_SCOPES),
-		'while': r'^(?=\1[ \t]+\S|[ \t]*$)',
-		'contentName': 'markup.raw.block.rig',
-	})
 	for rx, scopes, ids in HEADS:
 		if ids:
 			patterns.append({'begin': rx, 'beginCaptures': tm_caps(scopes), 'end': '$',
@@ -161,14 +132,6 @@ def sublime():
 		lines += [f'{pad}  {i}: {s}' for i, s in enumerate(scopes, start) if s]
 		return lines
 
-	escape = r'^(?!\1[ \t]+\S|[ \t]*$)'
-	for lang, _, _, scope in CASTS:
-		out += [f'    - match: {q(cast_head(lang))}'] + caps(CAST_SCOPES, 2)
-		out += [f'      embed: scope:{scope}',
-		        f'      embed_scope: meta.embedded.block.{lang}.rig {scope}',
-		        f'      escape: {q(escape)}']
-	out += [f'    - match: {q(cast_head(W))}'] + caps(CAST_SCOPES, 2)
-	out += ['      embed: cast-raw', '      embed_scope: markup.raw.block.rig', f'      escape: {q(escape)}']
 	for rx, scopes, ids in HEADS:
 		out += [f'    - match: {q(rx)}'] + caps(scopes)
 		if ids:
@@ -198,7 +161,6 @@ def sublime():
 	        r"        - match: '$\n?'", '          pop: true', '']
 	out += ['  rule-refs:', "    - match: '$\\n?'", '      pop: true', '    - include: comment',
 	        f'    - match: {q(W)}', f'      scope: {RULE_REF}', '']
-	out += ['  cast-raw:', '    - meta_include_prototype: false', '']
 	return '\n'.join(out)
 
 

@@ -27,11 +27,13 @@ Every tool has `tool.py`. It is the only door to the tool.
 |---|---|
 | `tool.py run '<inputs as JSON>'` | Start a run. Code walks the flow as far as it can. Options: `--preset NAME`, `--set group.name=value` (for this run only). |
 | `tool.py batch '<JSON list>' --report PATH` | Start a run for each item of a list (or of a file). Code runs the list and gives a summary; the report has the failures first. A batch stops after two errors in a row. |
-| `tool.py queues` | The runs that did not end, by who must act: `left_for_model`, `waits_for_person`, `errors`. |
-| `tool.py answer RUN '<JSON>'` | The model answers the node that the run waits at: `{"pass": true, "why": "..."}` for a gate, `{"result": ...}` for a step. |
-| `tool.py approve RUN yes\|no [NOTE]` | A person answers a human gate. |
-| `tool.py resume RUN` | Walk on after an error was fixed. |
-| `tool.py status RUN` | Show a run again. |
+| `tool.py queues` | The runs that did not end, by who must act: `left_for_model`, `waits_for_person`. |
+| `tool.py answer RUN '<JSON>' [--node ID]` | The model answers the node that the run waits at: `{"pass": true, "why": "..."}` for a gate, `{"result": ...}` for a step. With `--node`, the runner refuses the answer when the run waits at another node. |
+| `tool.py approve RUN [WORDS]` | A person answers a human gate: `yes` or `no`, or at a gate with `options`, the words of the answer (`yes` or nothing: the first option). |
+| `tool.py resume RUN` | Walk on after the process stopped (for example in the middle of a loop: it goes on from the next item). |
+| `tool.py status RUN` | Show a run again. It also applies a timeout that ran out. |
+| `tool.py rerun RUN --from ID [--set group.name=value]` | A new run with the state of the old run before the line ID, and changed rules. |
+| `tool.py replay RUN` | Run the flow again with the answers recorded in RUN and the current code; print the differences of the end and the path. No model. `rig.py test DIR --replay RUN` does the same. |
 | `tool.py rules` / `tool.py flow` | The values of the rules; the nodes of the flow. |
 | `tool.py call TOOL '<JSON>'` | Call a tool unit (level 1). |
 | `tool.py regress FILE [--baseline]` | Play the regression set. |
@@ -41,15 +43,19 @@ Each call prints one JSON line. The keys to read:
 | Key | Meaning |
 |---|---|
 | `outcome` | The run ended: `end` is the id of the end node. |
-| `waiting` | The run needs an answer: `node`, `kind` (`judge`, `step`, `human`), the text of the node, and `sees`: the facts of the run that the node names. `waiting.problems`: what failed after the last answer at this node, so that the next answer can fix it. It is not there at the first visit of a node. |
+| `waiting` | The run needs an answer: `node`, `kind` (`model`, `step`, `human`), the text of the node (`name`, `do`, `check`), and `sees`: the facts of the run that the node names. In a `for` block, `item` says which item. A step with an `out` type has `schema`; a human gate with options has `options` and `default`; a node with a timeout has `timeout` and `since`. `waiting.problems`: what failed after the last answer at this node, so that the next answer can fix it. It is not there at the first visit of a node. |
 | `result` | With `outcome`: what the run made (the value of the step that leads to the end). A run that a gate ended has none. |
-| `error` | A step failed: `node` and the error text. The run stays at that node. |
+| `error` | Code failed: `node` and the error text. The run ended with the outcome `error`, and `finally` ran. |
 | `refused` | The call is not allowed now. It is final. |
-| `problems` | Every failed gate so far, as text. A gate in code that ends a loop marks its fail with `"route": true`: that fail is a turn of the flow, and it is not a problem. |
+| `problems` | Every failed gate so far, as text. |
+| `left` | The items of a `for` block that a gate left with `fail -> continue`, with the reason. |
+| `note` | The flow changed since the run started. The run goes on with its own copy of the flow (`runs/RUN/flow.json`). |
 | `guessed` | The gates that the model decided. |
 | `path` | The nodes that the run went through. |
 
-Two settings of the runner can be rules of the source: `run.max_visits` (a run that enters one node more often stops: a loop; default 10) and `run.errors_stop` (a batch stops after this many errors in a row; default 2).
+Two settings of the runner can be rules of the source: `run.errors_stop` (a batch stops after this many errors in a row; default 2) and `run.sees_max` (the longest text in `sees`; default 6000 characters).
+
+Each run has a folder, `runs/<run id>/`: `run.json` (the run), `flow.json` and `rules.json` (the flow and the rule values when the run started), `answers.json` (every answer of the model and of the person, in order) and `marks.json` (the state before each line outside a loop, for `rerun`).
 
 ## 2. The front for Claude: a skill
 
@@ -67,7 +73,7 @@ python3 RIG plugin DIR --owner NAME
 
 This adds the folder `plugin/`: an LM Studio plugin. Its code is the same for every tool. Everything about the tool comes from `plugin/src/gen/front.json`, which the build compiles:
 
-- **The tools.** `start_run` (with the inputs of the unit), `answer_gate` (only when the flow has a gate for the model), `finish_step` (only when the flow has a step for the model), `run_status`, `start_batch`, `queues`, and one tool for each tool unit.
+- **The tools.** `start_run` (with the inputs of the unit), `answer_gate` (only when the flow has a gate for the model), `finish_<step>` for each step of the model with an `out` type (its `result` has the schema of that type, so the model cannot give another form), `finish_step` for the other steps of the model, `run_status`, `start_batch`, `queues`, and one tool for each tool unit.
 - **The rules text.** About ten short numbered lines. The plugin puts it before the first message of a chat.
 - **The driver.** The plugin starts it for each call, without a shell.
 
@@ -78,7 +84,8 @@ There is no tool for a human gate. The model can only show the operator what to 
 | `approve yes` | Answers the one run that waits for a person: yes. |
 | `approve no` | The same, no. |
 | `approve yes WORDS` | Yes, with words that the tool reads (for example the choices of a page). |
-| `approve RUN yes` | When more than one run waits: names the run. |
+| `approve WORDS` | At a gate with `options`: the answer. `approve yes` takes the first option. |
+| `approve RUN yes` | When more than one run waits: names the run (a run id has the form `20261125-101500-01`). |
 
 The plugin runs such a message before the model sees it (`operatorAnswer` in `src/bridge.ts`), and the model gets only the result. The model cannot do this: it is not a tool, and only a message of the operator goes through this step. A result that waits for a person also has `waiting.command`: the same answer as a command for a terminal, with the tool folder.
 
@@ -105,9 +112,9 @@ node --no-warnings agent.ts "the task" --then "approve yes"
 A small local model is not a small frontier model. It follows a short list well, and a long text badly.
 
 - **Few tools.** Each tool is one more thing to choose wrongly. The flow tools above are six at most. Do not give the model a tool for each step: the runner does the steps.
-- **A short rules text.** One line for each kind of result. The text of each decision arrives with the result (`brief`, `do`), when the model needs it and not before.
+- **A short rules text.** One line for each kind of result. The text of each decision arrives with the result (`check`, `do`), when the model needs it and not before.
 - **The result says what to do next.** The model reads `waiting` and acts. It does not plan the flow.
-- **Simple words.** Short sentences, one meaning for one word, the condition before the instruction. Write the `intent`, `brief` and `do` texts of the source for the small model; the large model reads them just as well.
+- **Simple words.** Short sentences, one meaning for one word, the condition before the instruction. Write the `intent`, `check` and `do` texts of the source for the small model; the large model reads them just as well.
 - **"Refused" is final.** Say it in the rules text. A small model repeats a failed call until it is told not to.
 - **Do not invent.** Say that names and numbers come only from results.
 - **One item at a time.** For many items, a loop in code runs them and gives the model a summary ([patterns.md](patterns.md), section 5).
