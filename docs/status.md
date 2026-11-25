@@ -24,7 +24,7 @@ The pattern comes from a private production agent. Only the concept and the mach
 | A second example, level 3, with what its runs taught | `examples/band-facts/` | passes its doctor; ran with two models |
 | A real tool, level 4: clean up an Edge bookmarks export | `examples/bookmarks/` | passes its doctor; 22 nodes in version 1 (35 in version 0). Version 0 of it ran end to end with a local Qwen 35B through the plugin code. Version 1 ran with the same model on a real export of the owner (below), not yet end to end |
 
-99 tests pass: `python3 -m unittest discover -s tests` (2026-11-25). Five of them (`tests/test_docs.py`) guard the texts: every relative link resolves, no text uses a word of version 0, and the docstring of each `tool.py` names the commands of `Kit.cli`. Each example has its own tests too (`rig.py test DIR`), and each passes its doctor.
+100 tests pass: `python3 -m unittest discover -s tests` (2026-11-25). Five of them (`tests/test_docs.py`) guard the texts: every relative link resolves, no text uses a word of version 0, and the docstring of each `tool.py` names the commands of `Kit.cli`. Each example has its own tests too (`rig.py test DIR`), and each passes its doctor.
 
 ## Language version 1 (2026-11-25)
 
@@ -84,6 +84,12 @@ Second chat: the model showed the page and the `say` line well. The operator wro
 Third chat (batch 1 of 5 to sort): the model got 60 bookmarks and the whole list of 227 folders, and read the list line by line for each bookmark. It wrote about 57,000 characters of thinking, repeated itself, and gave no answer. Fix in `examples/bookmarks` (no kit change): code finds the candidate folders of each bookmark once (`bm.candidates`, in `steps.loose`). The model sees only `prepare.batch`, `prepare.of`, `prepare.bookmarks` (each with at most `sort.choices` numbered choices) and `prepare.new_so_far`, and answers `{"id", "pick"}`. Later the same day the answer got a `topic` (`{"id", "topic", "pick"}`), and the batch got `prepare.map`, a map of the top folders. A site of `similar.skip_hosts` no longer makes a bookmark misfiled. `sort.batch` is 30, not 60. Tested on the fixture.
 
 The worker (same day). The chat took about 13 minutes for the 8 batches. Fix in the kit: the plugin gives a step of the model with `out` to a worker, one job in a new context each time (`work_run`, `src/worker.ts`). Real runs on the same 8 batches: thinking off, answer bound to the schema: 137 seconds, each batch passed `sort-ok` at the first answer, 92 of 120 decisions as in the chat run. Thinking on in a new context: 2.5 to 3 minutes for each batch, and only 41 of 60 decisions as in the chat run, so it was stopped after 2 batches. The bookmarks tool uses thinking off. Found on the way: without thinking the model picks a safe first choice (now the present folder takes its place by score), and a `why` field does not make it reason. The method is in the new guide page `skills/rig/guide/weak-model.md`, and in rule 5 of `guide/rules.md`.
+
+## Kit fix from the review of the texts (2026-11-25)
+
+| What was wrong | Fix | Where |
+|---|---|---|
+| A run id is the time to the second and a counter that starts at 1 in each process. A `rerun` in the same second as the old run got the same id, wrote over the old run folder, and named itself in `from`. | `new_id` takes the first counter whose run does not exist, and reserves its folder (`os.mkdir`). A bad rule value is refused before the id is reserved, so it leaves no folder. | `rigkit.py` (`new_id`, `run`), `tests/test_kit.py` |
 
 ## Not verified
 

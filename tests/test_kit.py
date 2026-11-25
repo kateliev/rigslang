@@ -371,6 +371,20 @@ class Pinned(unittest.TestCase):
 		with self.assertRaises(rigkit.Refused):
 			k.rerun(r['run'], 'nowhere')
 
+	def test_a_new_process_does_not_take_the_id_of_a_run(self):
+		'''Each process counts from 1. A rerun in the same second as the old run once got its id and wrote over it.'''
+		old = kit(runs=self.tmp).run({'n': 2})
+		k = kit(runs=self.tmp)  # a new process: its counter starts again
+		k.new_id = lambda real=k.new_id: real(stamp=old['run'][:15])  # the same second as the old run
+		again = k.rerun(old['run'], 'small')
+		self.assertNotEqual(again['run'], old['run'])
+		self.assertEqual(again['from'], {'run': old['run'], 'from': 'small'})
+		self.assertEqual(kit(runs=self.tmp).status(old['run'])['at'], old['at'])  # the old run is as it was
+		self.assertEqual(sorted(os.listdir(self.tmp)), sorted([old['run'], again['run']]))
+		with self.assertRaises((ValueError, KeyError)):
+			kit(runs=self.tmp).run({'n': 2}, rules={'limits.max': 'many'})  # refused before its id is reserved
+		self.assertEqual(len(os.listdir(self.tmp)), 2)
+
 	def test_replay(self):
 		k = loops(runs=self.tmp)
 		r = k.run({'n': 2})

@@ -319,9 +319,23 @@ class Kit(object):
 		p = os.path.join(self.folder(run_id), name + '.json')
 		return read_json(p) if os.path.exists(p) else default
 
-	def new_id(self):
-		self.count += 1
-		return datetime.datetime.now().strftime('%Y%m%d-%H%M%S') + '-{:02d}'.format(self.count)
+	def new_id(self, stamp=None):
+		'''A run id that no run has: the time to the second, and a counter. Each process counts from 1,
+		so the id is reserved: with a runs folder, its folder is made here (os.mkdir fails when it exists).'''
+		stamp = stamp or datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+		while True:
+			self.count += 1
+			rid = stamp + '-{:02d}'.format(self.count)
+			if self.runs is None:
+				if (rid, 'run') not in self.files:
+					return rid
+				continue
+			try:
+				os.makedirs(self.runs, exist_ok=True)
+				os.mkdir(os.path.join(self.runs, rid))
+				return rid
+			except FileExistsError:
+				continue
 
 	def load(self, run_id):
 		run = self.get(run_id, 'run')
@@ -378,17 +392,17 @@ class Kit(object):
 		bad = [k for k in inputs if names and k not in names] + ['missing ' + k for k in need if k not in inputs]
 		if bad:
 			raise Refused('Inputs: {}. This unit takes: {}.'.format(', '.join(bad), ', '.join(names) or 'nothing'))
+		R = Rules(self.catalogue, self.rules.session)
+		if preset:
+			R.preset(preset)
+		for rid, v in (rules or {}).items():
+			R.set(rid, v)  # refuse a bad rule value before the run exists, also before its id is reserved
 		run = {'id': run_id or self.new_id(), 'unit': self.catalogue.get('unit'), 'rig': 1, 'started': now(),
 			'inputs': inputs, 'rules': dict(rules or {}), 'preset': preset, 'state': copy.deepcopy(state) if state is not None else dict(inputs),
 			'at': at or self.start, 'trace': [], 'problems': [], 'guessed': [], 'left': [], 'waiting': None, 'since': None,
 			'error': None, 'outcome': None, 'ended': None, 'in_finally': False, 'loops': {}, 'rounds': {}, 'retries': {}, 'answered': {}}
 		if origin:
 			run['from'] = origin
-		R = Rules(self.catalogue, self.rules.session)
-		if preset:
-			R.preset(preset)
-		for rid, v in run['rules'].items():
-			R.set(rid, v)  # refuse a bad rule value before the run exists
 		self.put(run['id'], 'flow', self.catalogue)  # pin: resume walks this copy, also when the source changes
 		self.put(run['id'], 'rules', R.values())
 		self.put(run['id'], 'answers', [])
