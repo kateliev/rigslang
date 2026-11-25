@@ -194,10 +194,12 @@ def apply(state, R):
 def loose(state, R):
 	'''Find the bookmarks that code leaves alone, and cut the rest into batches for the model.'''
 	c, work = collection(state), work_of(state)
-	f = bm.fits(c, removed_so_far(work), R)
+	removed = removed_so_far(work)
+	f = bm.fits(c, removed, R)
 	todo = sorted(f['loose'] + f['misfiled'])
 	size = R('sort.batch')
 	f['batches'] = [todo[i:i + size] for i in range(0, len(todo), size)]
+	f['choices'] = dict((str(i), p) for i, p in bm.candidates(c, todo, removed, R).items())  # once, for every batch
 	save(work, 'loose.json', f)
 	return {'fit': len(f['fit']), 'loose': len(f['loose']), 'misfiled': len(f['misfiled']), 'batches': list(range(1, len(f['batches']) + 1))}
 
@@ -214,13 +216,25 @@ def made_folders(work):
 
 
 def prepare(state, R):
-	'''The batch of this turn of the loop (state["batch"]: its number), with the folder list and the new
-	folders of the earlier batches.'''
+	'''The batch of this turn of the loop (state["batch"]: its number). Each bookmark has its choices:
+	the folders that code found most like it and its present folder, whose number is "now" (steps.loose). "map": the top
+	folders with the names of their sub-folders, for a bookmark that no choice fits. "folders" is the
+	folder list for the gate; the model does not see it. "new_so_far": the new folders of the earlier batches.'''
 	c, work = collection(state), work_of(state)
-	batches = load(work, 'loose.json')['batches']
+	f = load(work, 'loose.json')
+	batches, chosen = f['batches'], f.get('choices', {})
 	k = state['batch']
 	made = made_folders(work)
-	return {'batch': k, 'of': len(batches), 'bookmarks': [bm.shown(c, c['bookmarks'][i], R) for i in batches[k - 1]],
+	shown = []
+	for i in batches[k - 1]:
+		b = bm.shown(c, c['bookmarks'][i], R)
+		b['choices'] = dict((str(n), p) for n, p in enumerate(chosen.get(str(i), []), 1))
+		here = b.pop('folder')  # the model reads the present folder only as a number among the choices
+		now = [n for n, p in b['choices'].items() if p == here]
+		if now:
+			b['now'] = int(now[0])
+		shown.append(b)
+	return {'batch': k, 'of': len(batches), 'bookmarks': shown, 'map': bm.folder_map(c, R),
 		'folders': [bm.path_of(c, x['id']) for x in c['folders'] if not (x['bar'] and R('keep.bar'))] + made, 'new_so_far': made}
 
 
@@ -230,8 +244,9 @@ def keep(state, R):
 	b = state['prepare']
 	known = [p for p in b['folders'] if p not in b['new_so_far']]
 	_, new = bm.sort_problems(state['sort'], b['bookmarks'], known, b['new_so_far'], R)
-	folder_of = dict((x['id'], x['folder']) for x in b['bookmarks'])
-	places = dict((a['id'], bm.clean_path(a['folder'])) for a in state['sort'])
+	c = collection(state)
+	folder_of = dict((x['id'], bm.path_of(c, c['bookmarks'][x['id']]['folder'])) for x in b['bookmarks'])
+	places = bm.places(state['sort'], b['bookmarks'])
 	moves = dict((str(i), p) for i, p in places.items() if p != folder_of[i])
 	save(work_of(state), 'sorted/batch-{:03d}.json'.format(b['batch']), {'batch': b['batch'], 'moves': moves, 'new': new})
 	return {'pass': True, 'batch': b['batch'], 'moved': len(moves), 'new': new}

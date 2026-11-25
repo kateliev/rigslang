@@ -62,6 +62,13 @@ class Steps(unittest.TestCase):
 		b = self.go(s, 'prepare')
 		self.assertEqual((b['batch'], b['of'], len(b['bookmarks'])), (1, 2, 10))
 		self.assertNotIn('Favorites bar', b['folders'])  # keep.bar
+		paprika = [x for x in b['bookmarks'] if x['title'] == 'Smoked paprika guide'][0]
+		self.assertEqual(paprika['choices'][str(paprika['now'])], 'Other favorites')  # its present folder, by number
+		self.assertNotIn('folder', paprika)
+		self.assertIn('Other favorites > Cooking', paprika['choices'].values())  # Cooking holds a page of its site
+		self.assertLessEqual(len(paprika['choices']), self.R('sort.choices'))
+		self.assertEqual(sorted(b['map']), ['Other favorites > Clubs', 'Other favorites > Cooking', 'Other favorites > Programming', 'Other favorites > Travel'])
+		self.assertIn('Python', b['map']['Other favorites > Programming'])
 		s['sort'] = [{'id': x['id'], 'folder': 'Other favorites > Hobbies', 'new': True} for x in b['bookmarks']]
 		self.assertEqual(self.go(s, 'keep'), {'pass': True, 'batch': 1, 'moved': 10, 'new': ['Other favorites > Hobbies']})
 		s['batch'] = 2
@@ -141,15 +148,17 @@ class Resume(unittest.TestCase):
 			r = tool.kit(runs).run({'file': FIXTURE}, rules=changes)
 			self.assertEqual(r['waiting']['node'], 'choose')
 			r = tool.kit(runs).approve(r['run'], ['yes'])
-			self.assertEqual(r['waiting']['sees']['prepare']['batch'], 1)
-			first = [{'id': x['id'], 'folder': x['folder']} for x in r['waiting']['sees']['prepare']['bookmarks']]
+			sees = r['waiting']['sees']
+			self.assertEqual(sees['prepare.batch'], 1)
+			self.assertNotIn('prepare', sees)  # the model gets the choices, not the whole folder list
+			first = [{'id': x['id'], 'topic': 'a test', 'pick': 1} for x in sees['prepare.bookmarks']]
 			r = tool.kit(runs).answer(r['run'], {'result': first})
-			self.assertEqual(r['waiting']['sees']['prepare']['batch'], 2)
+			self.assertEqual(r['waiting']['sees']['prepare.batch'], 2)
 			# a new process: the saved batch is not asked again
 			again = tool.kit(runs)
-			self.assertEqual(again.status(r['run'])['waiting']['sees']['prepare']['batch'], 2)
+			self.assertEqual(again.status(r['run'])['waiting']['sees']['prepare.batch'], 2)
 			self.assertEqual(again.queues()['left_for_model'][0]['run'], r['run'])
-			r = again.answer(r['run'], {'result': [{'id': x['id'], 'folder': x['folder']} for x in r['waiting']['sees']['prepare']['bookmarks']]})
+			r = again.answer(r['run'], {'result': [{'id': x['id'], 'topic': 'a test', 'pick': 1, 'folder': x['choices'][str(x['now'])]} for x in r['waiting']['sees']['prepare.bookmarks']]})
 			self.assertEqual(r['waiting']['node'], 'approve')
 			self.assertEqual(tool.kit(runs).queues()['waits_for_person'][0]['run'], r['run'])
 			self.assertIn('refused', json.dumps(_refused(lambda: tool.kit(runs).answer(r['run'], {'pass': True}))))  # the model cannot answer for the person

@@ -173,6 +173,7 @@ class Runs(unittest.TestCase):
 		r = k.answer(r['run'], {'pass': True, 'why': 'round'})
 		self.assertEqual(r['guessed'], ['nice'])
 		self.assertEqual(r['waiting']['kind'], 'human')
+		self.assertEqual(r['waiting']['say'], 'To answer, write one of these messages: approve {0} yes, approve {0} no.'.format(r['run']))
 		with self.assertRaises(rigkit.Refused):
 			k.answer(r['run'], {'pass': True})         # the model cannot answer for the person
 		r = k.approve(r['run'], ['yes'])
@@ -256,6 +257,7 @@ class Blocks(unittest.TestCase):
 		r = k.run({'n': 1})
 		r = k.answer(r['run'], {'result': {'v': 2}})
 		self.assertEqual((r['waiting']['options'], r['waiting']['default']), (['a', 'b c'], 'a'))
+		self.assertEqual(r['waiting']['say'], 'To answer, write one of these messages: approve {0} a, approve {0} b c. The first one is the default.'.format(r['run']))
 		with self.assertRaises(rigkit.Refused):
 			k.answer(r['run'], {'answer': 'a'})                  # only a person
 		r = k.approve(r['run'], ['zz'])
@@ -558,7 +560,7 @@ class Projects(unittest.TestCase):
 			with open(os.path.join(folder, 'plugin', 'src', 'gen', 'front.json'), encoding='utf-8') as f:
 				front = json.load(f)
 			self.assertEqual([t['name'] for t in front['tools']], ['start_run', 'answer_gate', 'run_status', 'start_batch', 'queues'])  # no tool for the human gate
-			self.assertIn('you cannot answer', front['prompt'])
+			self.assertIn('the operator decides, not you', front['prompt'])
 
 			def call(*args):
 				r = subprocess.run(['node', '--no-warnings', 'try.ts'] + list(args), cwd=os.path.join(folder, 'plugin'), capture_output=True, text=True)
@@ -575,12 +577,19 @@ class Projects(unittest.TestCase):
 	def test_a_step_with_out_gets_its_own_tool(self):
 		with open(os.path.join(BOOKMARKS, 'plugin', 'src', 'gen', 'front.json'), encoding='utf-8') as f:
 			front = json.load(f)
-		self.assertEqual([t['name'] for t in front['tools']], ['start_run', 'finish_sort', 'run_status', 'start_batch', 'queues'])  # no gate for the model
-		finish = front['tools'][1]
-		self.assertEqual((finish['kind'], finish['node']), ('finish_step', 'sort'))
-		self.assertEqual(finish['parameters']['properties']['result']['items']['required'], ['id', 'folder'])
+		self.assertEqual([t['name'] for t in front['tools']], ['start_run', 'work_run', 'run_status', 'start_batch', 'queues'])  # no gate for the model
+		self.assertEqual(front['tools'][1]['kind'], 'work')  # the step with "out" is a job for the worker, not for the chat
+		self.assertEqual(front['work'], {'max_calls': 50, 'max_tokens': 4000, 'think': False})  # rig.json of bookmarks sets think; the rest are the defaults
+		with open(os.path.join(RELEASE, 'plugin', 'src', 'gen', 'front.json'), encoding='utf-8') as f:
+			self.assertEqual(json.load(f)['work'], {'max_calls': 50, 'max_tokens': 4000, 'think': False})  # the defaults
+		self.assertIn('do not do the job yourself. Call work_run', front['prompt'])
+		node = [n for n in rigkit.read_json(os.path.join(BOOKMARKS, 'gen', 'bookmarks.json'))['flow'] if n['id'] == 'sort'][0]
+		item = node['schema']['items']  # the worker binds the answer of the model to this schema
+		self.assertEqual(item['required'], ['id', 'topic', 'pick'])  # a (maybe T) field is not required: "folder", "new"
+		self.assertEqual(list(item['properties']), ['id', 'topic', 'pick', 'folder', 'new'])  # in the order of the source: the topic before the pick
 		self.assertNotIn('answer_gate', front['prompt'])
-		self.assertIn('options', front['prompt'])
+		self.assertIn('do not call any tool, also no finish tool', front['prompt'])   # a first run: the model took finish_sort for a human gate
+		self.assertIn('"say" word for word', front['prompt'])
 
 	def test_examples_are_current_and_complete(self):
 		for folder in (RELEASE, BAND, BOOKMARKS):

@@ -163,6 +163,39 @@ class Fits(unittest.TestCase):
 		f = bm.fits(c, removed, rules(sort__loose_depth=0))
 		self.assertEqual(f['loose'], [])
 
+	def test_a_site_of_many_topics_does_not_make_a_bookmark_misfiled(self):
+		text = fixture().replace('<DT><A HREF="https://trailmaps.example/pyrenees"', '<DT><A HREF="https://github.com/someone/maps" ADD_DATE="1">Map tools</A>\n<DT><A HREF="https://trailmaps.example/pyrenees"')
+		c = bm.parse(text)
+		maps = by_url(c, 'https://github.com/someone/maps')[0]['id']
+		self.assertNotIn(maps, bm.fits(c, set(), rules())['misfiled'])  # Programming has two of github.com: no help
+		self.assertIn(maps, bm.fits(c, set(), rules(similar__skip_hosts=[]))['misfiled'])
+
+
+class Candidates(unittest.TestCase):
+	def test_the_folders_most_like_a_bookmark(self):
+		c = bm.parse(fixture())
+		removed = set(x['removed'] for x in bm.duplicates(c, rules()))
+		f = bm.fits(c, removed, rules())
+		todo = sorted(f['loose'] + f['misfiled'])
+		got = bm.candidates(c, todo, removed, rules())
+		self.assertEqual(sorted(got), todo)
+		one = lambda url: got[by_url(c, url)[0]['id']]
+		self.assertEqual(one('https://trailmaps.example/alps/north'), ['Other favorites > Travel', 'Other favorites'])  # its site and "trails"; a loose folder has no score
+		self.assertEqual(one('https://pylearn.example/tutorials/asyncio')[0], 'Other favorites > Programming > Python')
+		self.assertEqual(one('https://soup-pot.example/recipes/fish')[:2], ['Other favorites > Cooking', 'Other favorites > Travel'])  # its site wins over its present folder
+		for paths in got.values():
+			self.assertLessEqual(len(paths), rules()('sort.choices'))
+			self.assertNotIn('Favorites bar', paths)  # keep.bar
+			self.assertEqual(len(paths), len(set(paths)))
+		self.assertEqual(len(bm.candidates(c, todo, removed, rules(sort__choices=2))[todo[0]]), 2)
+		odd = bm.parse(fixture().replace('<DT><A HREF="https://jam-jar.example/plum"', '<DT><A HREF="https://qxz.example/" ADD_DATE="1">Qxz</A>\n<DT><A HREF="https://jam-jar.example/plum"'))
+		q = by_url(odd, 'https://qxz.example/')[0]['id']
+		self.assertEqual(bm.candidates(odd, [q], set(), rules())[q], list(bm.folder_map(odd, rules())) + ['Other favorites'])  # no word in common: the top folders
+
+	def test_words(self):
+		self.assertEqual(bm.words('Fonts of the Font-Foundry, 2024 (Wikipedia)'), {'font', 'foundry'})
+		self.assertEqual(bm.words('Кирилица и шрифтове'), {'кирилица', 'шрифтове'})  # letters of any script
+
 
 class Render(unittest.TestCase):
 	def test_remove_move_and_new_folders(self):

@@ -63,7 +63,7 @@ python3 tool.py regress tests/regression-set.json
 - The plugin, when the tool has one: `node --no-warnings try.ts` in `plugin/` shows the tools and the rules text that the model gets. Read them after a change of an `intent`, a `check` or a `do`.
 - A front that is not compiled (extra skill files, a guide in prose): the README of the tool lists them under "after a change, also update".
 
-Then write down what you learned: [guide/rules.md](guide/rules.md), rule 17.
+Then write down what you learned: [guide/rules.md](guide/rules.md), rule 18.
 
 ## Raise the level
 

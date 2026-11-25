@@ -67,3 +67,14 @@ See `docs/status.md` of the repository for the whole picture. For this tool, on 
 - Not verified: the plugin inside the LM Studio chat window (`lms dev`): the settings field, the rules text before the first message, and the `approve` message in the real chat. `agent.ts` runs the same code, outside the window.
 - Not verified: a real export of the owner, and a file of thousands of bookmarks with a model.
 - Seen: the model sometimes tells the operator to answer `yes`, not `approve yes`. A plain `yes` goes to the model, which cannot answer for the person.
+
+## Sorting with a local model (2026-11-25)
+
+Measured on a real Edge export, the same 8 batches of 30, with the local Qwen 35B (`qwen3.6-35b-a3b`):
+
+- Chat, thinking on: about 13 minutes for all batches.
+- Worker, thinking off (`rig.json` `"plugin": {"work": {"think": false}}`): 137 seconds; every batch passed `sort-ok` at the first answer; 92 of 120 decisions as in the chat run.
+- Worker, thinking on: 2.5 to 3 minutes for each batch; 41 of 60 decisions as in the chat run. Stopped after 2 batches.
+
+Two runs with thinking agree less with each other than the fast run agrees with the chat run: many misfiled bookmarks are close calls. So the tool uses thinking off. Code finds the candidates (`bm.candidates`): on 400 filed bookmarks with their folder hidden, the right folder was among the first 4 candidates for 60%.
+

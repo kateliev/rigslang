@@ -12,13 +12,13 @@ import frontJson from "./gen/front.json" with { type: "json" };
 
 export type FrontTool = {
   name: string;
-  kind: string; // run | batch | queues | answer_gate | finish_step | status | call
+  kind: string; // run | batch | queues | answer_gate | finish_step | work | status | call
   unit?: string; // kind "call": the name of the tool unit
   node?: string; // kind "finish_step": the one step that this tool answers (its schema is the "out" type)
   description: string;
   parameters: { type: string; properties: Record<string, unknown>; required: string[] };
 };
-export type Front = { name: string; prompt: string; driver: string[]; timeout_s: number; tools: FrontTool[] };
+export type Front = { name: string; prompt: string; driver: string[]; timeout_s: number; work?: { max_calls?: number; max_tokens?: number; think?: boolean }; tools: FrontTool[] };
 
 export const front = frontJson as Front;
 
@@ -81,10 +81,17 @@ async function drive(args: string[], root: string): Promise<string> {
   return JSON.stringify({ ok: false, error: (r.err || r.out || "the driver gave no result").trim().slice(-400) });
 }
 
+/** Run the driver with these arguments, in the tool folder of the setting. -> one JSON text. */
+export async function driver(args: string[], rootSetting?: string): Promise<string> {
+  const root = toolRoot(rootSetting);
+  if (!root) return refused("The tool folder is not found. Set \"Tool folder\" in LM Studio: in the settings of this plugin.");
+  return drive(args, root);
+}
+
 /** Run one tool call. The answer is always one JSON text: a result, a refusal or an error. */
 export async function callTool(tool: FrontTool, params: Record<string, unknown>, rootSetting?: string): Promise<string> {
   const root = toolRoot(rootSetting);
-  if (!root) return refused("The tool folder is not found. The operator must set \"Tool folder\" in the plugin settings: the folder that holds rig.json.");
+  if (!root) return refused("The tool folder is not found. The operator must set \"Tool folder\" in LM Studio: in the settings of this plugin, the folder that holds rig.json. It is not a setting of another program.");
   return drive(argvFor(tool, params), root);
 }
 
@@ -105,7 +112,7 @@ export async function operatorAnswer(text: string, rootSetting?: string): Promis
   const a = approval(text);
   if (!a) return null;
   const root = toolRoot(rootSetting);
-  if (!root) return refused("The tool folder is not found. Set \"Tool folder\" in the plugin settings.");
+  if (!root) return refused("The tool folder is not found. Set \"Tool folder\" in LM Studio: in the settings of this plugin.");
   let [run, words] = a;
   if (!run) {
     let waits: { run: string }[] = [];
@@ -118,5 +125,9 @@ export async function operatorAnswer(text: string, rootSetting?: string): Promis
 
 /** What the model reads in place of an approval message of the operator. */
 export function forModel(message: string, result: string): string {
+  let refusal = "";
+  try { refusal = JSON.parse(result)?.refused ?? ""; } catch { /* not JSON */ }
+  if (refusal) // the message of the operator was not taken: only the operator can fix it, so the model must not call a tool
+    return `The operator wrote "${message.trim()}", but the tool did not take it as an answer: ${refusal}\nTell the operator this, word for word, and wait for a new message. Do not call a tool.`;
   return `The operator answered a human gate with "${message.trim()}". The result of the tool: ${result}\nRead it and go on as the rules say.`;
 }

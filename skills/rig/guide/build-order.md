@@ -29,7 +29,7 @@ Ask the person before you write anything. Use these questions, and write the ans
 4. **Good or not.** How do you know that a result is good? Which part of that can be measured, and which part must be seen?
 5. **Harm.** What can the tool change that is hard to undo? What must it never touch?
 6. **The person.** Which decisions stay with you? What do you want to see before something is kept?
-7. **The models.** Who will run the tool: Claude, a local model, both? How small is the local model?
+7. **The models.** Who will run the tool: Claude, a local model, both? How small is the local model? When a local model will run it, design each job of the model for that model ([weak-model.md](weak-model.md)): Claude builds and tries the path, and the local model drives it later.
 8. **The end.** In which ways can one item end? (Done; skipped, with a reason; waits for a person; ...)
 
 Then choose the level with [levels.md](levels.md) and say it to the person.
@@ -162,7 +162,7 @@ python3 RIG build DIR
 
 This compiles the catalogue, the skill and the tool definitions. See [fronts.md](fronts.md) for the plugin of a local model and for how to install the skill.
 
-Test each front the way it will be used: give the model one item and watch the calls. The first run with a model always finds a text that the model reads in another way than you meant. Fix the text in the source (an `intent`, a `check`, a `do`), not in the compiled file. A step that the model does gets an `out` type when its answer has a form: the plugin then gives the model a tool with that schema, and the runner refuses another form.
+Test each front the way it will be used: give the model one item and watch the calls. The first run with a model always finds a text that the model reads in another way than you meant. Fix the text in the source (an `intent`, a `check`, a `do`), not in the compiled file. A step that the model does gets an `out` type when its answer has a form: the worker of the plugin then gives it to the model one job at a time, out of the chat, and the runner refuses another form ([fronts.md](fronts.md), section 3).
 
 **Done when:** each front did one whole item, and you read the trace of that run.
 

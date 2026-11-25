@@ -1380,7 +1380,7 @@ def skill(u, rules_path=None, preset=None, driver=None):
 			'   - `waiting`: the run stopped at a node that code cannot do. Read `kind`, `do` and `check`. `sees` holds the facts of the run that you need for this node: use them, and nothing else.',
 			'     - `model` (a gate): decide what `check` says. Answer: `{} answer <run> \'{{"pass": true}}\'` (or false, with `"why"`).'.format(driver),
 			'     - `step`: do what `do` says. Answer: `{} answer <run> \'{{"result": ...}}\'`. When `waiting` has `schema`, the result must have that form.'.format(driver),
-			'     - `human`: show the person the question (`name` and `check`) and `sees`, and wait. When `waiting` has `options`, show them: the first is the default. Then give the answer of the person, never your own: `{} approve <run> yes` (or `no`), or `{} approve <run> <the words of the person>`.'.format(driver, driver),
+			'     - `human`: show the person the question (`name` and `check`), `sees`, and the text of `say` as it is (it names the answers; the first option is the default). Then wait. Give the answer of the person, never your own: `{} approve <run> yes` (or `no`), or `{} approve <run> <the words of the person>`.'.format(driver, driver),
 			'   - `problems` in `waiting`: your last answer at this node failed. Fix these problems in the new answer.',
 			'   - `refused`: the call was out of order. It is final: do not repeat it. Read `at` and continue from there.',
 			'3. Repeat step 2 until the result has `outcome`. The outcome `error` means that code failed: report the error text. Do not answer for code.', '',

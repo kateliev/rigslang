@@ -43,7 +43,7 @@ Each call prints one JSON line. The keys to read:
 | Key | Meaning |
 |---|---|
 | `outcome` | The run ended: `end` is the id of the end node. |
-| `waiting` | The run needs an answer: `node`, `kind` (`model`, `step`, `human`), the text of the node (`name`, `do`, `check`), and `sees`: the facts of the run that the node names. In a `for` block, `item` says which item. A step with an `out` type has `schema`; a human gate with options has `options` and `default`; a node with a timeout has `timeout` and `since`. `waiting.problems`: what failed after the last answer at this node, so that the next answer can fix it. It is not there at the first visit of a node. |
+| `waiting` | The run needs an answer: `node`, `kind` (`model`, `step`, `human`), the text of the node (`name`, `do`, `check`), and `sees`: the facts of the run that the node names. In a `for` block, `item` says which item. A step with an `out` type has `schema`; a human gate has `say`: the exact messages that answer it, for the model to show as they are (a human gate with options also has `options` and `default`); a node with a timeout has `timeout` and `since`. `waiting.problems`: what failed after the last answer at this node, so that the next answer can fix it. It is not there at the first visit of a node. |
 | `result` | With `outcome`: what the run made (the value of the step that leads to the end). A run that a gate ended has none. |
 | `error` | Code failed: `node` and the error text. The run ended with the outcome `error`, and `finally` ran. |
 | `refused` | The call is not allowed now. It is final. |
@@ -73,7 +73,7 @@ python3 RIG plugin DIR --owner NAME
 
 This adds the folder `plugin/`: an LM Studio plugin. Its code is the same for every tool. Everything about the tool comes from `plugin/src/gen/front.json`, which the build compiles:
 
-- **The tools.** `start_run` (with the inputs of the unit), `answer_gate` (only when the flow has a gate for the model), `finish_<step>` for each step of the model with an `out` type (its `result` has the schema of that type, so the model cannot give another form), `finish_step` for the other steps of the model, `run_status`, `start_batch`, `queues`, and one tool for each tool unit.
+- **The tools.** `start_run` (with the inputs of the unit), `answer_gate` (only when the flow has a gate for the model), `work_run` when the flow has a step of the model with an `out` type (the worker, below), `finish_step` for the other steps of the model, `run_status`, `start_batch`, `queues`, and one tool for each tool unit.
 - **The rules text.** About ten short numbered lines. The plugin puts it before the first message of a chat.
 - **The driver.** The plugin starts it for each call, without a shell.
 
@@ -88,6 +88,27 @@ There is no tool for a human gate. The model can only show the operator what to 
 | `approve RUN yes` | When more than one run waits: names the run (a run id has the form `20261125-101500-01`). |
 
 The plugin runs such a message before the model sees it (`operatorAnswer` in `src/bridge.ts`), and the model gets only the result. The model cannot do this: it is not a tool, and only a message of the operator goes through this step. A result that waits for a person also has `waiting.command`: the same answer as a command for a terminal, with the tool folder.
+
+### The worker: jobs out of the chat
+
+A step of the model with an `out` type is a **job**: a small task with an answer of one form, often once for each item of a `for` block. The chat model does not do jobs. It calls `work_run` one time, and the worker (`src/worker.ts`) does them:
+
+1. It reads what the run waits for (`status`).
+2. It gives the job to the loaded model in a **new, empty context**: a short fixed rules text, the `do` text, the `sees` values, and the `problems` of the last answer.
+3. It gives the answer to the driver (`answer RUN ... --node ID`). The gates check it as always; a bad answer comes back with `problems`.
+4. It goes on until the run waits for a person, for a judgment of a `model` gate, or ends.
+
+The chat stays short, and no job sees the history of another. The settings are in `rig.json`, under `"plugin": {"work": {...}}`:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `think` | `false` | `true`: the model thinks first, then writes the JSON; the worker reads the JSON after the thinking. `false`: the answer is bound to the schema from its first token, so the model cannot think. |
+| `max_tokens` | 4000 | The most tokens of one job, thinking included. A job that reaches it fails, and the gate retries it. |
+| `max_calls` | 50 | The most jobs in one `work_run`. |
+
+Choose `think` with a test on real items ([weak-model.md](weak-model.md), section 4): without thinking a small model is fast, but it often takes the easy answer.
+
+From a terminal: `node --no-warnings work.ts RUN` does the same, with the progress on stderr.
 
 Try the plugin without LM Studio:
 
@@ -109,12 +130,13 @@ node --no-warnings agent.ts "the task" --then "approve yes"
 
 ### What a small model needs
 
-A small local model is not a small frontier model. It follows a short list well, and a long text badly.
+A small local model is not a small frontier model. It follows a short list well, and a long text badly. [weak-model.md](weak-model.md) says how to design the jobs of the model for it; this list is about the front.
 
 - **Few tools.** Each tool is one more thing to choose wrongly. The flow tools above are six at most. Do not give the model a tool for each step: the runner does the steps.
 - **A short rules text.** One line for each kind of result. The text of each decision arrives with the result (`check`, `do`), when the model needs it and not before.
 - **The result says what to do next.** The model reads `waiting` and acts. It does not plan the flow.
 - **Simple words.** Short sentences, one meaning for one word, the condition before the instruction. Write the `intent`, `check` and `do` texts of the source for the small model; the large model reads them just as well.
+- **No tool where the model has no job.** At a human gate, the rules text says: call no tool, show `say` word for word, stop. A first run with a local model showed why: the operator answered "1" to a menu that the model made up, and the model then took the tool of another step for the gate.
 - **"Refused" is final.** Say it in the rules text. A small model repeats a failed call until it is told not to.
 - **Do not invent.** Say that names and numbers come only from results.
 - **One item at a time.** For many items, a loop in code runs them and gives the model a summary ([patterns.md](patterns.md), section 5).

@@ -645,6 +645,12 @@ class Kit(object):
 			w['answer'] = '{"result": <what the step gave>}'
 		elif kind == 'human':
 			w['answer'] = 'a person answers: approve <run> ' + ('<words>; only "approve <run>" or "yes" takes the default "{}"'.format(node['options'][0]) if node.get('options') else 'yes|no')
+			run_id = run.get('id', '<run>')  # with the run id: when more than one run waits, a message without it is refused
+			replies = ['approve {} {}'.format(run_id, o) for o in node['options']] if node.get('options') else ['approve {} yes'.format(run_id), 'approve {} no'.format(run_id)]
+			if node.get('options') and node.get('fail') and 'no' not in [str(o) for o in node['options']]:
+				replies.append('approve {} no'.format(run_id))
+			w['say'] = 'To answer, write one of these messages: {}.'.format(', '.join(replies)) + \
+				(' The first one is the default.' if node.get('options') else '')  # the exact words for the person: a model shows them as they are
 		else:
 			w['answer'] = '{"pass": true or false, "why": "<one sentence>"}'
 		return w
@@ -780,6 +786,9 @@ class Kit(object):
 		run = self.load(run_id)
 		if self.expire(run):
 			run = self.load(run_id)
+		node = self.view_of(run).nodes.get(run['at'])
+		if run['outcome'] is None and run.get('waiting') and node:
+			run['waiting'] = self.waiting(node, self.rules_of(run), run)  # composed again: a fixed text of the runner reaches a waiting run too
 		return self.report(run)
 
 	def rerun(self, run_id, node, changes=None):

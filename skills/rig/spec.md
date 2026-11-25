@@ -265,7 +265,7 @@ The **runner** is `rigkit.py` (folder `kit/`). It reads the catalogue (Section 6
 - Code does the steps and decides the `hard` and `soft` gates.
 - At a `model` gate, a `human` gate, or a step that the model does, the run stops and waits for an answer. The runner refuses an answer for another node, an answer of the model at a `human` gate, and an answer for a node that code does.
 - A step whose answer does not have the form of its `out` type waits again, with the problems.
-- When a run waits, its result carries the values of the `sees` paths of that node, and the problems that failed after the last answer at that node.
+- When a run waits, its result carries the values of the `sees` paths of that node, and the problems that failed after the last answer at that node. At a `human` gate it also carries `say`: the exact messages that answer it, with the run id (`approve <run> yes`, `approve <run> no`, or `approve <run> <option>` for each option).
 - When a run ends at an end that a step leads to, its result carries `result`: the value of that step.
 
 **The run folder.** Each run has a folder: `runs/<run id>/`.

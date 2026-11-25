@@ -17,8 +17,9 @@ def file_ok(state, R):
 
 
 def sort_ok(state, R):
-	'''Every bookmark of the batch once, no other id, no changed URL or title, only known folders or
-	new folders under a known folder, and not too many new folders.'''
+	'''Every bookmark of the batch once, no other id, no changed URL or title, a pick that is one of the
+	choices of that bookmark, or a known folder or a new folder under a known folder, and not too many
+	new folders. The known folders come from prepare["folders"], which the model does not see.'''
 	b = state['prepare']
 	known = [p for p in b['folders'] if p not in b['new_so_far']]
 	problems, new = bm.sort_problems(state.get('sort'), b['bookmarks'], known, b['new_so_far'], R)

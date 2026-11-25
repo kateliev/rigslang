@@ -28,7 +28,7 @@ for (const [i, turn] of turns.entries()) {
   const text = answer === null ? turn : forModel(turn, answer);
   chat.append("user", i === 0 && front.prompt ? `${front.prompt}\n\n${text}` : text);
   if (i > 0) console.log(`\n--- operator: ${turn}\n`);
-  await model.act(chat, tools(undefined, log), {
+  await model.act(chat, tools(undefined, log, async () => model), {
     onMessage: (m) => {
       chat.append(m);
       if (m.getRole() === "assistant" && m.getText().trim()) console.log(m.getText());

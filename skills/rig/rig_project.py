@@ -98,7 +98,7 @@ def outputs(folder, m):
 	if m.get('plugin'):
 		sub = m['plugin'].get('folder', 'plugin')
 		out[os.path.join(sub, 'src', 'gen', 'front.json')] = json.dumps(front(m, files, main), ensure_ascii=False, indent=1) + '\n'
-		for rel in ('src/bridge.ts', 'src/index.ts', 'src/tools.ts', 'try.ts', 'agent.ts', 'tsconfig.json'):  # the same code for every tool: keep each copy current
+		for rel in ('src/bridge.ts', 'src/index.ts', 'src/tools.ts', 'src/worker.ts', 'try.ts', 'agent.ts', 'work.ts', 'tsconfig.json'):  # the same code for every tool: keep each copy current
 			out[os.path.join(sub, *rel.split('/'))] = read(os.path.join(TEMPLATES, 'plugin', *rel.split('/')))
 	return out
 
@@ -124,10 +124,10 @@ def front(m, files, main):
 					'why': {'type': 'string', 'description': 'The reason, in one sentence.'}}, 'required': ['run', 'pass']}})
 		model_steps = [f for f in c['flow'] if f['kind'] == 'step' and f['lane'] == 'model']
 		formed = [f for f in model_steps if f.get('schema')]
-		for f in formed:  # one tool for each step with an "out" type: the schema of the tool is the form of the answer
-			tools.append({'name': 'finish_' + f['id'].replace('-', '_'), 'kind': 'finish_step', 'node': f['id'],
-				'description': 'Give the result of the step "{}" when a run waits there ("waiting" has node "{}"). Do what its "do" says first.'.format(f['id'], f['id']),
-				'parameters': {'type': 'object', 'properties': {'run': run, 'result': dict(f['schema'], description='The result, in this form: ' + f['out'])}, 'required': ['run', 'result']}})
+		if formed:  # the steps with an "out" type are jobs for the worker: code gives them to the model one by one, out of the chat
+			tools.append({'name': 'work_run', 'kind': 'work',
+				'description': 'Do the jobs of a run that waits at {}: code gives each one to the model in a new context, with the answer in the form of "out", and goes on until the run needs you or the operator. It can take some minutes.'.format(' or '.join('"{}"'.format(f['id']) for f in formed)),
+				'parameters': {'type': 'object', 'properties': {'run': run}, 'required': ['run']}})
 		if len(formed) < len(model_steps):
 			tools.append({'name': 'finish_step', 'kind': 'finish_step',
 				'description': 'Give the result of the step that a run waits at, when "waiting" has kind "step". Do what its "do" says first.',
@@ -145,17 +145,14 @@ def front(m, files, main):
 		if model_gates:
 			rules.append('"waiting" with kind "model": decide what "check" says. Call answer_gate with the run id, pass true or false, and why in one sentence.')
 		if formed:
-			rules.append('"waiting" with kind "step": do what "do" says. Call the finish tool of that node ({}){} with the run id and the result.'.format(
-				', '.join('finish_{} for {}'.format(f['id'].replace('-', '_'), f['id']) for f in formed), ', else finish_step' if len(formed) < len(model_steps) else ''))
-		elif model_steps:
-			rules.append('"waiting" with kind "step": do what "do" says. Call finish_step with the run id and the result.')
+			rules.append('"waiting" with kind "step" and a "schema": do not do the job yourself. Call work_run with the run id, one time. Then read its result as the rules say; "work" tells how many jobs it did.')
+		if len(formed) < len(model_steps):
+			rules.append('"waiting" with kind "step" and no "schema" (only then): do what "do" says. Call finish_step with the run id and the result.')
 		rules.append('"waiting" has "problems": your last answer at that node failed for these reasons. Fix them in the new answer.')
 		humans = [f for f in c['flow'] if f['kind'] == 'human']
 		if humans:
-			text = '"waiting" with kind "human": you cannot answer. Show the operator the question ("name", "check") and "sees". The operator answers with a chat message: approve yes (or no). In a terminal, the command in "command" does the same. Stop, and wait for the result of that answer.'
-			if any(f.get('options') for f in humans):
-				text += ' When "waiting" has "options", show them: the operator answers approve and the words of the answer, for example approve {}. The first option is the default: approve yes takes it.'.format(next(f for f in humans if f.get('options'))['options'][0])
-			rules.append(text)
+			rules.append('"waiting" with kind "human": the operator decides, not you. No tool answers it: do not call any tool, also no finish tool and no work_run. Show the operator the question ("name", "check") and "sees". Then show the text of "say" word for word: it names the messages that answer. Do not number the answers and do not make a menu of your own. Stop, and wait.')
+			rules.append('A message of the operator that does not start with approve is not an answer to the gate. Then show the text of "say" again.')
 		rules.append('More than one item: call start_batch with the list. Show only its summary and the report path. Then, for each run in "left_for_model": call run_status, and answer it as in the rules above. Tell the operator the list "waits_for_person". To continue earlier work, call queues.')
 		rules += ['"refused": the call was wrong. It is final. Do not repeat it. Call run_status to see where the run is.',
 			'Do not invent names or numbers. Use only values from a result.',
@@ -171,7 +168,10 @@ def front(m, files, main):
 	if rules:
 		intent = ' '.join(rig.text_of(x) for x in main.kids('intent'))
 		prompt = 'Rules for the tool {}{}:\n'.format(m.get('name', main.word(0)), ' (' + rig.fill_values(main, intent) + ')' if intent else '') + '\n'.join('{}. {}'.format(i + 1, r) for i, r in enumerate(rules))
-	return {'name': m.get('name'), 'prompt': prompt, 'driver': shlex.split(driver), 'timeout_s': m['plugin'].get('timeout_s', 120), 'tools': tools}
+	out = {'name': m.get('name'), 'prompt': prompt, 'driver': shlex.split(driver), 'timeout_s': m['plugin'].get('timeout_s', 120), 'tools': tools}
+	if any(t['kind'] == 'work' for t in tools):
+		out['work'] = dict({'max_calls': 50, 'max_tokens': 4000, 'think': False}, **m['plugin'].get('work', {}))  # the limits of the worker (rig.json "plugin": {"work": ...})
+	return out
 
 
 def plugin(folder, owner):

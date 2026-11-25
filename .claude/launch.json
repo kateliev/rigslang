@@ -4,14 +4,38 @@
     {
       "name": "viewer-release",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["skills/rig/rig.py", "serve", "examples/release-tool/release.rig", "--port", "8765"],
+      "runtimeArgs": [
+        "skills/rig/rig.py",
+        "serve",
+        "examples/release-tool/release.rig",
+        "--port",
+        "8765"
+      ],
       "port": 8765
     },
     {
       "name": "viewer-bookmarks",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["skills/rig/rig.py", "serve", "examples/bookmarks/bookmarks.rig", "--port", "8766"],
+      "runtimeArgs": [
+        "skills/rig/rig.py",
+        "serve",
+        "examples/bookmarks/bookmarks.rig",
+        "--port",
+        "8766"
+      ],
       "port": 8766
+    },
+    {
+      "name": "viewer-band-facts",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "skills/rig/rig.py",
+        "serve",
+        "examples/band-facts/band-facts.rig",
+        "--port",
+        "8767"
+      ],
+      "port": 8767
     }
   ]
 }

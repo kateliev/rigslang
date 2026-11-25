@@ -6,6 +6,8 @@
     similar(c, removed, R)          groups of URLs on one site, where one path starts with another
     choices(note, page, yes)        the answer of the person for one page of groups -> decisions
     fits(c, removed, R)             the bookmarks that code leaves in their folder; the rest is sorted
+    candidates(c, todo, removed, R) for each bookmark to sort, the folders most like it
+    folder_map(c, R)                the top folders with the names of their sub-folders
     sort_problems(answer, batch, known, made, R)   what is wrong with an answer of the model
     render(c, plan, R)              the new bookmarks file as text
 
@@ -16,6 +18,7 @@ A collection is a dict:
 Folder None is the top level of the file. A title is kept as it was written (HTML text), so it never changes.
 """
 import html
+import math
 import re
 import urllib.parse
 
@@ -284,7 +287,9 @@ def fits(c, removed, R):
 	'''-> {"fit": [ids], "loose": [ids], "misfiled": [ids]}.
 	loose: in the top level of the file, or directly in a top folder that is not the favorites bar.
 	misfiled: in a deeper folder, no other bookmark of that folder has its site, and another folder
-	has at least sort.host_elsewhere bookmarks of its site. The rest fits, and code leaves it alone.'''
+	has at least sort.host_elsewhere bookmarks of its site. A site of similar.skip_hosts or
+	similar.skip_pattern (one site, many topics) says nothing about the folder: it never makes a
+	bookmark misfiled. The rest fits, and code leaves it alone.'''
 	live = [b for b in c['bookmarks'] if b['id'] not in removed]
 	host_of = dict((b['id'], (parts(b['url'], R) or (None,))[0]) for b in live)
 	in_folder = {}
@@ -302,13 +307,133 @@ def fits(c, removed, R):
 			out['fit'].append(b['id'])
 		elif depth(c, b['folder']) <= R('sort.loose_depth'):
 			out['loose'].append(b['id'])
-		elif per_host[h][b['folder']] > 1:
+		elif per_host[h][b['folder']] > 1 or skipped_host(h, R):
 			out['fit'].append(b['id'])
 		elif any(n >= R('sort.host_elsewhere') for f, n in per_host[h].items() if f != b['folder'] and depth(c, f) > R('sort.loose_depth')):
 			# a loose folder does not count: its bookmarks are not filed yet
 			out['misfiled'].append(b['id'])
 		else:
 			out['fit'].append(b['id'])
+	return out
+
+
+# - Candidate folders: code finds them, the model only picks -----
+STOP = set("""the and for with from your you this that are was not but all any our how what why who
+www com org net edu gov http https htm php asp aspx index wiki wikipedia free encyclopedia
+view item watch feature player embedded""".split())  # parts of URLs and words of any page; the weights (idf) do the rest
+WORD = re.compile(r'[^\W_]{3,}')
+K1, B, HOST, NAME = 1.2, 0.3, 1.0, 3  # BM25 values; HOST: the weight of a folder with pages of the same site; NAME: of a word of the folder name
+
+
+def words(text):
+	'''The words of a text for matching: lower case, three letters or more, no numbers and no common
+	words. A plural s and the end of a long word are cut, so "fonts" and "font" match.'''
+	out = set()
+	for w in WORD.findall((text or '').lower()):
+		if w.isdigit() or w in STOP:
+			continue
+		if len(w) > 4 and w.endswith('s'):
+			w = w[:-1]
+		out.add(w[:8])
+	return out
+
+
+def bookmark_words(b, R):
+	'''The words of the title, of the site name and of the path of the URL.'''
+	text = plain_title(b)
+	p = parts(b['url'], R)
+	if p:
+		text += ' ' + ' '.join(p[0].split(':')[0].split('.')[:-1]) + ' ' + ' '.join(p[1])
+	return words(text)
+
+
+def site(host):
+	'''The site of a host name: its last two labels, three when the second last is a label such as
+	"co" or "com" (shop.example.co.uk -> example.co.uk). So shop.example.com and example.com are one site.'''
+	labels = host.split(':')[0].split('.')
+	n = 3 if len(labels) > 2 and labels[-2] in ('co', 'com', 'org', 'net', 'gov', 'ac', 'edu') else 2
+	return '.'.join(labels[-n:])
+
+
+def targets(c, R):
+	'''The folders where code may put a bookmark: not the favorites bar itself (keep.bar), and not a
+	folder of loose bookmarks (sort.loose_depth): its bookmarks are not filed yet.'''
+	return [f['id'] for f in c['folders'] if not (f['bar'] and R('keep.bar')) and depth(c, f['id']) > R('sort.loose_depth')]
+
+
+def candidates(c, todo, removed, R):
+	'''-> {bookmark id: [folder paths]}: for each bookmark to sort, the folders most like it and its
+	present folder (when it has one), at most sort.choices in all, the most like it first. The present
+	folder is in the list at the place of its own score: a model that reads the list finds no safe default.
+	A folder is like a bookmark when they share words (the names of the folder and of its parents, the
+	words of the bookmarks that are filed in it), weighted so that a word of many folders counts less,
+	and when the folder holds bookmarks of the same site. A site of similar.skip_hosts gives no help.
+	A bookmark that no folder is like gets the top folders (folder_map) and its present folder.'''
+	todo_set = set(todo)
+	ids = targets(c, R)
+	profile, hosts = {}, {}
+	for f in ids:
+		p = {}
+		for n, name in enumerate(reversed(c['folders'][f]['path'])):
+			for w in words(html.unescape(name)):
+				p[w] = p.get(w, 0) + (NAME if n == 0 else 1)
+		profile[f], hosts[f] = p, {}
+	for b in c['bookmarks']:
+		f = b['folder']
+		if f not in profile or b['id'] in removed or b['id'] in todo_set:
+			continue
+		for w in bookmark_words(b, R):
+			profile[f][w] = profile[f].get(w, 0) + 1
+		h = (parts(b['url'], R) or (None,))[0]
+		if h and not skipped_host(h, R):
+			hosts[f][site(h)] = hosts[f].get(site(h), 0) + 1
+	df = {}
+	for p in profile.values():
+		for w in p:
+			df[w] = df.get(w, 0) + 1
+	n = max(1, len(profile))
+	idf = dict((w, math.log(1 + (n - k + 0.5) / (k + 0.5))) for w, k in df.items())
+	size = dict((f, sum(p.values())) for f, p in profile.items())
+	mean = (sum(size.values()) / n) or 1
+	by_word = {}  # BM25: a word that a folder has often counts more, a large folder counts less for each word
+	for f, p in profile.items():
+		norm = K1 * (1 - B + B * size[f] / mean)
+		for w, t in p.items():
+			by_word.setdefault(w, []).append((f, t * (K1 + 1) / (t + norm)))
+	tops = list(folder_map(c, R))
+	out = {}
+	for i in todo:
+		b = c['bookmarks'][i]
+		score = {}
+		for w in bookmark_words(b, R):
+			for f, x in by_word.get(w, []):
+				score[f] = score.get(f, 0) + x * idf[w]
+		h = (parts(b['url'], R) or (None,))[0]
+		if h and not skipped_host(h, R):
+			for f in ids:
+				k = hosts[f].get(site(h), 0)
+				if k:
+					score[f] = score.get(f, 0) + HOST * min(1.0, k / 2)
+		here = b['folder']
+		others = sorted((f for f in score if f != here and score[f] > 0), key=lambda f: (-score[f], f))
+		paths = [path_of(c, f) for f in others[:R('sort.choices') - (here is not None)]]
+		if not paths:  # no folder shares a word or a site: the top folders, so that a pick is always possible
+			paths = [p for p in tops if here is None or p != path_of(c, here)]
+		if here is not None:  # the present folder takes its place by score, so that it is no safe default at the first place
+			at = sum(1 for f in others[:len(paths)] if score[f] > score.get(here, 0)) if others else len(paths)
+			paths.insert(at, path_of(c, here))
+		out[i] = paths
+	return out
+
+
+def folder_map(c, R):
+	'''-> {path of a top folder: [names of its sub-folders]}: a small map of the file for the model, for
+	a bookmark that none of its choices fits. A top folder is a target folder (targets) whose parent is not one.'''
+	ids = set(targets(c, R))
+	out = {}
+	for f in c['folders']:
+		if f['id'] in ids and f['parent'] not in ids:
+			out[path_of(c, f['id'])] = [html.unescape(x['name']) for x in c['folders'] if x['parent'] == f['id']]
 	return out
 
 
@@ -330,10 +455,12 @@ def shown(c, b, R):
 
 def sort_problems(answer, batch, known, made, R):
 	'''What is wrong with the answer of the model for one batch. -> (problems, new folders of this answer).
-	answer: [{"id", "folder", "new"?}]; batch: the bookmarks as shown; known: the paths of the folders
-	of the file; made: the new paths of earlier batches.'''
+	answer: [{"id", "topic"?, "pick"?, "folder"?, "new"?}]; batch: the bookmarks as shown, each with its
+	"choices" ({"1": path, ...}); known: the paths of the folders of the file; made: the new paths of
+	earlier batches. "pick" is the number of a choice; a "folder" (a path) counts in place of the pick.
+	Use places(answer, batch) for the folder of each id after the answer passed.'''
 	if not isinstance(answer, list):
-		return ['the result is not a list: give one object {"id", "folder"} for each bookmark'], []
+		return ['the result is not a list: give one object {"id", "pick"} for each bookmark'], []
 	want = dict((b['id'], b) for b in batch)
 	seen, problems, new = {}, [], []
 	for a in answer:
@@ -347,10 +474,15 @@ def sort_problems(answer, batch, known, made, R):
 			continue
 		for k in ('title', 'url'):
 			if k in a and a[k] != want[i][k]:
-				problems.append('id {}: the {} was changed; give only "id" and "folder"'.format(i, k))
+				problems.append('id {}: the {} was changed; give only "id" and "pick"'.format(i, k))
+		if a.get('folder') is None and 'pick' in a:  # a "folder" counts in place of the pick
+			pick, chosen = a['pick'], want[i].get('choices', {})
+			if isinstance(pick, bool) or not isinstance(pick, int) or str(pick) not in chosen:
+				problems.append('id {}: "pick" {} is not one of its choices ({}); when none fits, give "folder"'.format(i, json_short(pick), ', '.join(chosen) or 'none'))
+			continue
 		folder = a.get('folder')
 		if not isinstance(folder, str) or not folder.strip():
-			problems.append('id {}: no "folder"'.format(i))
+			problems.append('id {}: no "pick" of its choices, and no "folder"'.format(i))
 			continue
 		folder = SEP.join(x.strip() for x in folder.split(SEP.strip()))
 		if folder in known or folder in made or folder in new:
@@ -378,6 +510,23 @@ def sort_problems(answer, batch, known, made, R):
 
 def clean_path(folder):
 	return SEP.join(x.strip() for x in folder.split(SEP.strip()))
+
+
+def json_short(v):
+	return str(v)[:40]
+
+
+def places(answer, batch):
+	'''-> {id: folder path} of an answer that passed sort_problems: the path of the choice that
+	"pick" names, else the "folder" of the answer.'''
+	chosen = dict((b['id'], b.get('choices', {})) for b in batch)
+	out = {}
+	for a in answer:
+		if a.get('folder') is None:
+			out[a['id']] = chosen[a['id']][str(a['pick'])]
+		else:
+			out[a['id']] = clean_path(a['folder'])
+	return out
 
 
 # - Write ------------------------------------------------

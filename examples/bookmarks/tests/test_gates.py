@@ -7,6 +7,7 @@ import unittest
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
+import bm  # noqa: E402
 import gates  # noqa: E402
 import rigkit  # noqa: E402
 
@@ -34,6 +35,24 @@ class Gates(unittest.TestCase):
 		self.assertFalse(v['pass'])
 		self.assertIn('JSON', v['problems'][0])
 		self.assertFalse(gates.file_ok({'read': {'ok': True, 'bookmarks': 0}}, rules())['pass'])
+
+	def test_sort_ok_with_picks(self):
+		batch = a_batch(bookmarks=[dict(x, choices={'1': 'Top', '2': 'Top > Cooking'}) for x in a_batch()['bookmarks']])
+		picks = [{'id': 1, 'pick': 2}, {'id': 2, 'pick': 1}]
+		self.assertTrue(gates.sort_ok({'prepare': batch, 'sort': picks}, rules())['pass'])
+		self.assertEqual(bm.places(picks, batch['bookmarks']), {1: 'Top > Cooking', 2: 'Top'})
+		mixed = [{'id': 1, 'pick': 2}, {'id': 2, 'folder': 'Top > Garden', 'new': True}]
+		self.assertTrue(gates.sort_ok({'prepare': batch, 'sort': mixed}, rules())['pass'])
+		self.assertEqual(bm.places(mixed, batch['bookmarks'])[2], 'Top > Garden')
+		for bad in (3, 0, '2', True):
+			v = gates.sort_ok({'prepare': batch, 'sort': [{'id': 1, 'pick': bad}, {'id': 2, 'pick': 1}]}, rules())
+			self.assertFalse(v['pass'], bad)
+			self.assertIn('is not one of its choices (1, 2); when none fits, give "folder"', v['problems'][0])
+		v = gates.sort_ok({'prepare': batch, 'sort': [{'id': 1}, {'id': 2, 'pick': 1}]}, rules())
+		self.assertIn('no "pick" of its choices, and no "folder"', v['problems'][0])
+		zero = [{'id': 1, 'topic': 'gardens', 'pick': 1, 'folder': 'Top > Garden', 'new': True}, {'id': 2, 'topic': 'soup', 'pick': 2}]  # the folder counts
+		self.assertTrue(gates.sort_ok({'prepare': batch, 'sort': zero}, rules())['pass'])
+		self.assertEqual(bm.places(zero, batch['bookmarks']), {1: 'Top > Garden', 2: 'Top > Cooking'})
 
 	def test_sort_ok(self):
 		good = [{'id': 1, 'folder': 'Top > Cooking'}, {'id': 2, 'folder': 'Top'}]

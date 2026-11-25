@@ -18,6 +18,7 @@ One `.rig` file is the source of a tool: its rules, steps, gates and ends. The o
 | Build a new tool or agent | [guide/README.md](guide/README.md) (the method, one page), then [guide/build-order.md](guide/build-order.md) |
 | Choose how much a tool needs | [guide/levels.md](guide/levels.md) |
 | Change a tool: a value, a gate, the flow, the code | [change.md](change.md) |
+| Design a step or a gate that a local model does | [guide/weak-model.md](guide/weak-model.md) |
 | Connect a tool to Claude or to a local model | [guide/fronts.md](guide/fronts.md) |
 | A tool that changes real files, works on many items, or needs the eye of a person | [guide/patterns.md](guide/patterns.md) |
 | A question about a word of the language | [spec.md](spec.md) |

@@ -7,6 +7,7 @@ This guide says how to build an **instrumental agent**: a model that operates to
 | [levels.md](levels.md) | You choose how much a tool needs. A simple tool needs little. |
 | [build-order.md](build-order.md) | You build a new tool, from the first question to the last check. |
 | [patterns.md](patterns.md) | The tool changes real files, works on many items, or needs the judgment of a person. |
+| [weak-model.md](weak-model.md) | A local model will run the tool. You design a step or a gate that the model does. |
 | [fronts.md](fronts.md) | You connect the tool to Claude, to a local model, or to both. |
 | [rules.md](rules.md) | Always. One page: the rules that have no exception. |
 
@@ -40,7 +41,7 @@ A gate has one of four kinds:
 | `model` | the model | A guess. The result says so. |
 | `human` | a person | The run waits. The model cannot answer. |
 
-The model keeps the work it is good at: a judgment that no rule can hold, a step that needs language, a case that the flow did not expect. Everything else is code.
+The model keeps the work it is good at: a judgment that no rule can hold, a step that needs language, a case that the flow did not expect. Everything else is code: also the search, the bookkeeping and the exact texts around that judgment. Design each job of the model for the weakest model that will run it ([weak-model.md](weak-model.md)).
 
 ## 3. How a run goes
 

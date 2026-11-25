@@ -15,6 +15,9 @@
  "plugin": {
   "folder": "plugin",
   "owner": "example",
-  "timeout_s": 120
+  "timeout_s": 120,
+  "work": {
+   "think": false
+  }
  }
 }
