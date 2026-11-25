@@ -81,11 +81,13 @@ There is no tool for a human gate. The model can only show the operator what to 
 
 | Message | What it does |
 |---|---|
-| `approve yes` | Answers the one run that waits for a person: yes. |
-| `approve no` | The same, no. |
-| `approve yes WORDS` | Yes, with words that the tool reads (for example the choices of a page). |
-| `approve WORDS` | At a gate with `options`: the answer. `approve yes` takes the first option. |
-| `approve RUN yes` | When more than one run waits: names the run (a run id has the form `20261125-101500-01`). |
+| `approve RUN yes` | Answers the run RUN: yes. A run id has the form `20261125-101500-01`. |
+| `approve RUN no` | The same, no. |
+| `approve RUN yes WORDS` | Yes, with words that the tool reads (for example the choices of a page). |
+| `approve RUN WORDS` | At a gate with `options`: the answer. `approve RUN yes` takes the first option. |
+| `approve yes`, `approve WORDS` | The short form, without the run id. It works only when exactly one run waits for a person. When more than one run waits, the plugin refuses it and names the runs. |
+
+The `say` text of a result that waits gives the long form, with the run id (`approve <run> <words>`). The model shows it as it is, so the operator can copy it.
 
 The plugin runs such a message before the model sees it (`operatorAnswer` in `src/bridge.ts`), and the model gets only the result. The model cannot do this: it is not a tool, and only a message of the operator goes through this step. A result that waits for a person also has `waiting.command`: the same answer as a command for a terminal, with the tool folder.
 
@@ -96,14 +98,14 @@ A step of the model with an `out` type is a **job**: a small task with an answer
 1. It reads what the run waits for (`status`).
 2. It gives the job to the loaded model in a **new, empty context**: a short fixed rules text, the `do` text, the `sees` values, and the `problems` of the last answer.
 3. It gives the answer to the driver (`answer RUN ... --node ID`). The gates check it as always; a bad answer comes back with `problems`.
-4. It goes on until the run waits for a person, for a judgment of a `model` gate, or ends.
+4. It goes on until the run waits for a person, for a judgment of a `model` gate, or ends. It also stops after `max_calls` jobs, and when the same job failed five times in a row.
 
 The chat stays short, and no job sees the history of another. The settings are in `rig.json`, under `"plugin": {"work": {...}}`:
 
 | Setting | Default | Meaning |
 |---|---|---|
 | `think` | `false` | `true`: the model thinks first, then writes the JSON; the worker reads the JSON after the thinking. `false`: the answer is bound to the schema from its first token, so the model cannot think. |
-| `max_tokens` | 4000 | The most tokens of one job, thinking included. A job that reaches it fails, and the gate retries it. |
+| `max_tokens` | 4000 | The most tokens of one job, thinking included. A job that reaches it gives no result: the step waits again with the problems, and the worker asks again. |
 | `max_calls` | 50 | The most jobs in one `work_run`. |
 
 Choose `think` with a test on real items ([weak-model.md](weak-model.md), section 4): without thinking a small model is fast, but it often takes the easy answer.
@@ -132,7 +134,7 @@ node --no-warnings agent.ts "the task" --then "approve yes"
 
 A small local model is not a small frontier model. It follows a short list well, and a long text badly. [weak-model.md](weak-model.md) says how to design the jobs of the model for it; this list is about the front.
 
-- **Few tools.** Each tool is one more thing to choose wrongly. The flow tools above are six at most. Do not give the model a tool for each step: the runner does the steps.
+- **Few tools.** Each tool is one more thing to choose wrongly. The flow tools above are seven at most, and a flow gets only the ones that it needs. Do not give the model a tool for each step: the runner does the steps.
 - **A short rules text.** One line for each kind of result. The text of each decision arrives with the result (`check`, `do`), when the model needs it and not before.
 - **The result says what to do next.** The model reads `waiting` and acts. It does not plan the flow.
 - **Simple words.** Short sentences, one meaning for one word, the condition before the instruction. Write the `intent`, `check` and `do` texts of the source for the small model; the large model reads them just as well.

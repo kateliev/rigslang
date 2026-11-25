@@ -18,13 +18,13 @@ The pattern comes from a private production agent. Only the concept and the mach
 | The runner: runs in their own folders (pin, record, marks), rerun, replay, refusals, batches, queues, reports, regression | `skills/rig/kit/rigkit.py` | tested |
 | Project commands: `new`, `build`, `doctor`, `test`, `plugin` | `skills/rig/rig_project.py` | tested at all four levels |
 | The front for Claude: a compiled skill | `rig.py build` | used by a real model |
-| The front for a local model: an LM Studio plugin, the same code for every tool | `skills/rig/kit/templates/plugin/` | used by a real model through `agent.ts` |
+| The front for a local model: an LM Studio plugin, the same code for every tool | `skills/rig/kit/templates/plugin/` | used by a real model through `agent.ts` (2026-11-23), and in the LM Studio chat window on the bookmarks tool (2026-11-25) |
 | The graph page: three lanes (code, model, person), the blocks as boxes, the path of one run; it has no parser, it draws what `rig.py` compiles | `viewer/index.html`, `rig.py serve` | checked in a browser (release and bookmarks, 2026-11-25) |
 | The pattern example, level 4 | `examples/release-tool/` | passes its doctor |
 | A second example, level 3, with what its runs taught | `examples/band-facts/` | passes its doctor; ran with two models |
-| A real tool, level 4: clean up an Edge bookmarks export | `examples/bookmarks/` | passes its doctor; 22 nodes in version 1 (35 in version 0). Version 0 of it ran end to end with a local Qwen 35B through the plugin code; version 1 has not run with a model |
+| A real tool, level 4: clean up an Edge bookmarks export | `examples/bookmarks/` | passes its doctor; 22 nodes in version 1 (35 in version 0). Version 0 of it ran end to end with a local Qwen 35B through the plugin code. Version 1 ran with the same model on a real export of the owner (below), not yet end to end |
 
-94 tests pass: `python3 -m unittest discover -s tests` (2026-11-25). Each example has its own tests too (`rig.py test DIR`), and each passes its doctor.
+99 tests pass: `python3 -m unittest discover -s tests` (2026-11-25). Five of them (`tests/test_docs.py`) guard the texts: every relative link resolves, no text uses a word of version 0, and the docstring of each `tool.py` names the commands of `Kit.cli`. Each example has its own tests too (`rig.py test DIR`), and each passes its doctor.
 
 ## Language version 1 (2026-11-25)
 
@@ -37,7 +37,7 @@ Made by the handout `docs/handout-language-v1.md`. What changed:
 | Words added | `for … in`, `until`, `if`, `else`, `section`, `finally`, `by model`, `out` (step), `check`, `options` (human gate, with `by`), `retry`, `timeout`, `fail -> continue`, `tolerate`, `range`. A `by` or a `fail` can stand on the line of its node. |
 | Catalogue | `"rig": 1`. Every edge is written out: `next`, `fail`, `back` (retry), `block`, `lane`; and `blocks` and `body`. |
 | Runner | Blocks, retry, `if`, options asked again, the `out` form checked, timeouts, `finally`, the outcome `error`. A run folder: `run.json`, `flow.json` and `rules.json` (pin), `answers.json` (record), `marks.json` (for `rerun`). Commands `rerun`, `replay`; `rig.py test DIR --replay RUN`. The visit limit (`run.max_visits`) and `"route": true` are gone: every loop is a block or a retry with a limit. |
-| Plugin front | A `by model` step with `out` is a job for the worker (`src/worker.ts`, tool `work_run`, `work.ts` in a terminal): each job goes to the loaded model in a new context, and the answer goes to the driver. Mode `think` off (the answer bound to the schema) or on, set in `rig.json`. An operator message `approve [RUN] WORDS` passes the words of an answer. |
+| Plugin front | A `by model` step with `out` is a job for the worker (`src/worker.ts`, tool `work_run`, `work.ts` in a terminal): each job goes to the loaded model in a new context, and the answer goes to the driver. Mode `think` off (the answer bound to the schema) or on, set in `rig.json`. An operator message `approve [RUN] WORDS` passes the words of an answer. The worker took the place of the `finish_<step>` tools of stage 7; a step of the model with no `out` gets the one tool `finish_step`. |
 | Examples | All three in version 1; each passes its doctor and its tests. The regression cases of release-tool and band-facts end where they ended in version 0 (new baselines for the paths). |
 | Text | The spec, `docs/logic.md` (open item 4), the guide pages, the skill, the editor grammars and the READMEs. |
 
@@ -63,25 +63,25 @@ On `examples/bookmarks` (2026-11-23): the local Qwen 35B through the plugin code
 
 | What was wrong | Fix | Where |
 |---|---|---|
-| A gate that ends a loop ("no page is left") added a line to the problems of the run at every loop end. | A gate in code can return `"route": true` with its fail: a turn of the flow, kept in the trace, not a problem. | `rigkit.py` (`verdict`, `after_gate`), `guide/build-order.md` |
-| A waiting node showed only the problems of the whole run, old ones too. In batch 2 the model saw the failure of batch 1. | `waiting.problems`: what failed after the last answer at this node. The plugin rules text names it. | `rigkit.py` (`waiting`, `answer`), `rig_project.front`, `spec.md` section 7, `guide/fronts.md` |
+| A gate that ends a loop ("no page is left") added a line to the problems of the run at every loop end. | Then: a gate in code returned `"route": true` with its fail. Version 1 removed it: a `for` block ends the loop, and the end of a loop is no problem. | `rigkit.py` (`control`) |
+| A waiting node showed only the problems of the whole run, old ones too. In batch 2 the model saw the failure of batch 1. | `waiting.problems`: what failed after the last answer at this node. The plugin rules text names it. | `rigkit.py` (`waiting`, `answer`), `rig_project.front`, `spec.md` section 4, `guide/fronts.md` |
 | At the plugin front, a human gate told the operator a command but not the folder; and in a chat the operator answers in the chat, which the model must not pass on. | The bridge adds `waiting.command` (with the tool folder). The plugin reads an operator message that starts with `approve` as the answer of the person, before the model sees it (`operatorAnswer`). Not a tool: the model cannot call it. | `templates/plugin/src/bridge.ts`, `src/index.ts`, `agent.ts`, `try.ts`, README, `guide/fronts.md` |
-| `answer_gate` was a tool even for a flow with no gate for the model. | The tool and its rule line only when a gate is `judge` or has no code. | `rig_project.front` |
-| No guide text for one large item with parts (a file of thousands of records). | A pattern: one run, a loop over parts saved as files, a `route` gate at the end. | `guide/patterns.md`, section 5 |
+| `answer_gate` was a tool even for a flow with no gate for the model. | The tool and its rule line only when a gate is `model` or has no code. | `rig_project.front` |
+| No guide text for one large item with parts (a file of thousands of records). | A pattern: one run, a loop over parts saved as files. In version 1 the loop is a `for` block. | `guide/patterns.md`, section 5 |
 
 ## First run of version 1 with a model (2026-11-25)
 
 The bookmarks plugin, installed in LM Studio, with a local Qwen 35B (`qwen3.6-35b-a3b`) on a real Edge export of the owner. Code read the file and made 7 pages of similar URLs; the run waited at the human gate `choose`. Then the chat stalled:
 
 - The model showed page 1, but cut the list at group 9 of 20, and made up its own numbered menu instead of the `approve` messages.
-- The owner answered "1". That is no `approve` message, so it went to the model. The model has no tool for a human gate; it took `finish_sort` (the tool of another step) for one, doubted it, and repeated its thinking for about 30,000 characters with no call.
+- The owner answered "1". That is no `approve` message, so it went to the model. The model has no tool for a human gate; it took `finish_sort` (then the tool of another step; the worker has taken its place) for one, doubted it, and repeated its thinking for about 30,000 characters with no call.
 - An earlier message: the refusal "set Tool folder in the plugin settings" made the model send the owner to the settings of Edge.
 
 Fixes: a waiting human gate now carries `say`, the exact messages that answer it (`rigkit.waiting`); the rules text of the plugin says to call no tool at a human gate, to show `say` word for word, and that a message that does not start with `approve` is no answer; the rule for steps says "(only then)"; `status` composes the waiting text again, so a run that waits gets fixed texts; the refusal names LM Studio; `similar.page_size` is 8, not 20.
 
 Second chat: the model showed the page and the `say` line well. The operator wrote `approve yes rest`, and the plugin refused it, because the run of the first chat waited for a person too, and a message without a run id is ambiguous. The model took the refusal as its own error, called `run_status` and showed the page again, so the chat went in a circle. Fixes: `say` names the run id in each message (`approve 20261125-111637-01 yes`); a refused message of the operator reaches the model as "tell the operator this, word for word, and do not call a tool" (`forModel` in `bridge.ts`). Not yet verified with the model. Open: a run that nobody will answer any more has no way to end; a command to drop it would keep `queues` clean.
 
-Third chat (batch 1 of 5 to sort): the model got 60 bookmarks and the whole list of 227 folders, and read the list line by line for each bookmark. It wrote about 57,000 characters of thinking, repeated itself, and gave no answer. Fix in `examples/bookmarks` (no kit change): code finds the candidate folders of each bookmark once (`bm.candidates`, in `steps.loose`). The model sees only `prepare.batch`, `prepare.of`, `prepare.bookmarks` (each with at most `sort.choices` numbered choices) and `prepare.new_so_far`, and answers `{"id", "pick"}`. A site of `similar.skip_hosts` no longer makes a bookmark misfiled. `sort.batch` is 30, not 60. Tested on the fixture.
+Third chat (batch 1 of 5 to sort): the model got 60 bookmarks and the whole list of 227 folders, and read the list line by line for each bookmark. It wrote about 57,000 characters of thinking, repeated itself, and gave no answer. Fix in `examples/bookmarks` (no kit change): code finds the candidate folders of each bookmark once (`bm.candidates`, in `steps.loose`). The model sees only `prepare.batch`, `prepare.of`, `prepare.bookmarks` (each with at most `sort.choices` numbered choices) and `prepare.new_so_far`, and answers `{"id", "pick"}`. Later the same day the answer got a `topic` (`{"id", "topic", "pick"}`), and the batch got `prepare.map`, a map of the top folders. A site of `similar.skip_hosts` no longer makes a bookmark misfiled. `sort.batch` is 30, not 60. Tested on the fixture.
 
 The worker (same day). The chat took about 13 minutes for the 8 batches. Fix in the kit: the plugin gives a step of the model with `out` to a worker, one job in a new context each time (`work_run`, `src/worker.ts`). Real runs on the same 8 batches: thinking off, answer bound to the schema: 137 seconds, each batch passed `sort-ok` at the first answer, 92 of 120 decisions as in the chat run. Thinking on in a new context: 2.5 to 3 minutes for each batch, and only 41 of 60 decisions as in the chat run, so it was stopped after 2 batches. The bookmarks tool uses thinking off. Found on the way: without thinking the model picks a safe first choice (now the present folder takes its place by score), and a `why` field does not make it reason. The method is in the new guide page `skills/rig/guide/weak-model.md`, and in rule 5 of `guide/rules.md`.
 
@@ -93,11 +93,11 @@ Language version 1 (2026-11-25):
 - Open: the `say` text of a human gate still asks the model to copy the long run id. A short id, or an `approve` without id for the run of this chat, would take that job away.
 - The editor grammars are built and their table is tested, but the syntax test (`editors/test-vscode.js`, `syntax_test_rig.rig`) was not run: it needs `vscode-textmate` from npm, which is not installed here.
 - The viewer was checked in one browser (the pane of the Claude desktop app), on the release and bookmarks examples, with one run. Not checked: dragging nodes with boxes, a flow with `until` or `else`, a phone-size screen.
-- The plugin code type-checks (`tsc`) and `try.ts` ran an approval; it was not run in the LM Studio chat window.
+- The plugin code type-checks (`tsc --noEmit` in `examples/bookmarks/plugin` and `examples/band-facts/plugin`, 2026-11-25), and the tests run `try.ts` with an approval. In the LM Studio chat window only the bookmarks plugin ran. Not run there: `work_run`. Not verified with the model: the `say` text with the run id, and the `forModel` text for a refused message (the second chat above).
 
 From before:
 
-- The plugin was **not** installed and run inside the LM Studio chat window (`lms dev`). So `src/index.ts` has not run: the settings field, the rules text before the first message, and the new `approve` message step in the preprocessor. It type-checks, and `agent.ts` runs the same bridge code.
+- The release-tool and band-facts plugins did not run in the LM Studio chat window; band-facts ran only through `agent.ts`, which runs the same bridge code.
 - Not tested with a real model: a refusal that the model must not repeat, a paragraph over the word limit.
 - The bookmarks tool has not seen a real Edge export, nor a file of thousands of bookmarks with a model.
 - A local model sometimes tells the operator to answer `yes` where the plugin needs `approve yes`.

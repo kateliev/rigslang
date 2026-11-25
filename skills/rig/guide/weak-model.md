@@ -22,7 +22,7 @@ A step of the model is a **job**. Give each job this shape:
 3. **Without history.** A new, empty context for each job. The worker of the plugin does this ([fronts.md](fronts.md), section 3). A long chat makes each answer slower and less sure.
 4. **Bound to a form.** The step has an `out` type. The answer must have that form, and the runner refuses another.
 5. **Checked.** A hard gate after the step checks every answer, with `retry` and then `fail -> continue`. A bad answer costs one retry, not the run.
-6. **Limited.** A cap on the tokens of one job. A model that repeats itself stops at the cap, and the gate retries.
+6. **Limited.** A cap on the tokens of one job (`max_tokens`). A model that repeats itself stops at the cap. The job then gives no result: the step waits again with the problems, and the worker asks again.
 
 ## 3. What a small model does wrong
 

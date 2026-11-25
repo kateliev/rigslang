@@ -4,7 +4,7 @@ For every agent that builds or changes a Rig tool. Read this page before each pi
 
 ## The source
 
-1. **Change the source, then build.** Never edit a compiled file (`gen/`, `skill/SKILL.md`, a tool definition, the tool's copy of `rigkit.py`).
+1. **Change the source, then build.** Never edit a compiled file (`gen/`, `skill/SKILL.md`, a tool definition, the tool's copy of `rigkit.py`, `plugin/src/gen/` and the plugin's copies of the template code).
 2. **Never put a number in code or in text.** A limit, a switch or a name is a rule in the `.rig` file. Code reads it with `R('group.name')`; text names it as `{group.name}`.
 3. **Never put a decision in a front.** A decision that code can make is a function in `gates.py`. The skill and the plugin read the verdict.
 4. **Every gate in code gets a test** that names its function, with the rule defaults and with one changed rule.
@@ -13,7 +13,7 @@ For every agent that builds or changes a Rig tool. Read this page before each pi
 
 ## The run
 
-7. **Never decide a hard or soft gate yourself.** Read `pass`, `problems` and the next node from the result.
+7. **Never decide a hard or soft gate yourself.** Read `outcome`, `waiting` and `problems` from the result: code decided these gates already.
 8. **Never answer a human gate.** Ask the person, wait, and pass their answer on.
 9. **A refused call is final.** Do not repeat it. Read where the run is, and go on from there.
 10. **Use only values from a result or from the rules.** Do not invent a name, an id or a number.

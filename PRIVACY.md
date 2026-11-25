@@ -6,8 +6,8 @@ This notice is written with the EU General Data Protection Regulation (GDPR, Reg
 
 - The repository, the viewer, the skill and `rig.py` do not collect, store or send personal data.
 - There are no accounts, no analytics, no tracking and no cookies.
-- The viewer (`viewer/index.html`) runs completely in your browser. A file that you open in it stays on your device. The viewer makes no network requests. It can remember a small setting (the last tab) in your browser's local storage. You can clear it at any time.
-- `rig.py` runs only on your computer. The `prove` command runs the code in a `.rig` file on your machine. Run it only on files you trust.
+- The viewer (`viewer/index.html`) runs in your browser. It sends requests only to the server that gave the page: `rig.py serve`, which listens on 127.0.0.1 only. A file that you open in it stays on your device. It can remember a small setting (the last tab) in your browser's local storage. You can clear it at any time.
+- `rig.py` runs only on your computer. `rig.py doctor` and `rig.py test` run the tests of a project, and a tool runs the code of its steps and gates on your machine. Run them only on projects you trust.
 
 ## 2. When you use the skill with an AI service
 

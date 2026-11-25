@@ -123,6 +123,8 @@ A gate is a pure function: `def name(state, R)`. No files, no network, no host. 
 
 A `model` gate, a `human` gate and a step that the model does need a `sees` line: the parts of the state that go with the question, for example `sees read.summary write`. The one who answers gets these values with the node, and nothing else. Without the line, the model judges blind, or it goes to look for the facts itself.
 
+Design each job of the model for the weakest model that will run it: a small, closed choice among candidates that code found ([weak-model.md](weak-model.md)).
+
 Each gate gets a test with the rule defaults, and a test with a changed rule. The checker counts a gate as tested only when the test file names its function.
 
 Two questions catch most missing gates:

@@ -1,4 +1,4 @@
-"""Project commands of rig.py: new, build, doctor, test. Standard library only.
+"""Project commands of rig.py: new, build, doctor, test, plugin. Standard library only.
 
 A project is a folder with one rig.json file:
 
@@ -13,7 +13,8 @@ A project is a folder with one rig.json file:
       "kit": "rigkit.py",              the tool's own copy of kit/rigkit.py
       "tests": "python3 -m unittest discover -s tests",
       "regression": "tests/regression-set.json",
-      "plugin": {"folder": "plugin", "owner": "local", "timeout_s": 120}   made by: rig.py plugin DIR
+      "plugin": {"folder": "plugin", "owner": "local", "timeout_s": 120}   made by: rig.py plugin DIR;
+                                       "work": {"think", "max_tokens", "max_calls"} sets the worker
     }
 
 build compiles the source to the files that the fronts read. doctor checks the project

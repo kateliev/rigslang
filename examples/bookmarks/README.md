@@ -22,7 +22,7 @@ Sync is on, so a change in Edge goes to every device. Do it in this order:
 |---|---|---|
 | `file-ok`, `sort-ok`, `share`, `verify`, `target` | hard gate | code |
 | `choose` (similar URLs, a page at a time), `new-ok` (new folders), `approve` (the report) | human gate | the person. `choose` and `new-ok` have `options`: code (`steps.apply`, `steps.accept`) reads the answer, and the gate asks again when it does not understand it |
-| `sort` (one batch of bookmarks into folders) | step | the model; its answer has the type of `out`, and the plugin tool `finish_sort` has that schema |
+| `sort` (one batch of bookmarks into folders) | step | the model; its answer has the type of `out`. In the plugin, the worker gives each batch to the model in a new context (`work_run`), with the answer bound to that schema |
 | `read`, `similar`, `show`, `loose`, `prepare`, `folders`, `report`, `build`, `place` | step | code |
 
 The flow is written in language version 1: 18 steps and gates and 4 ends (version 0 had 30 and 5). The lines run in order. Two `for` blocks hold the loops: `for page in similar.pages` (the pages of choices) and `for batch in loose.batches` (the batches to sort). The runner saves the run after each page and each batch.
@@ -32,7 +32,7 @@ What code does, in order:
 1. **Read.** Every folder with its path, every bookmark with its title, URL, folder and date. The folders of the file are never renamed or deleted.
 2. **Exact duplicates.** Two URLs are the same when they differ only in http or https, `www.`, a last `/`, a `#part`, or tracking parameters (`dupes.tracking`). A `#/route` or `#!route` stays: it is a page of a one-page site. The copy in the deeper folder stays, else the oldest.
 3. **Similar URLs.** On one site, URLs where one path starts with another form a group (`home.org`, `home.org/events`, `home.org/users/account`). Plain variants such as `/index.html` or `/default.aspx` fold into the short URL with no question (`similar.index_names`). Sites with many separate pages are never grouped (`similar.skip_hosts`, `similar.skip_pattern`). Every other group goes to the person, a page at a time.
-4. **Sort.** Code leaves alone each bookmark that shares its site with another bookmark of its folder, and every bookmark on the favorites bar. The model gets the loose bookmarks (the top level, and the top folders such as Other favorites) and the likely misfiled ones (alone in their folder, while another folder has `sort.host_elsewhere` of their site), in batches of `sort.batch`. A site of `similar.skip_hosts` (one site, many topics) never makes a bookmark misfiled. Before the first batch, code finds for each bookmark the folders most like it: its present folder, then the folders that share the most words with it (folder names and the titles filed there, weighted so that a common word counts less) or hold pages of its site; `sort.choices` in all. The model does not get the folder list. It picks a number for each bookmark (`{"id": 12, "pick": 2}`), or gives a new folder under a choice. The gate `sort-ok` checks every answer: each bookmark once, no other id, no changed URL or title, a pick that is one of the choices, or a folder of the file or a new folder under one, at most `sort.new_per_batch` and `sort.new_max` new folders. A bad answer goes back to the model at most `sort.rounds` times (`retry`). Then the batch is left unsorted (`fail -> continue`). When more than 20% of the batches are left (`tolerate 20%`), the run ends at `held`.
+4. **Sort.** Code leaves alone each bookmark that shares its site with another bookmark of its folder, and every bookmark on the favorites bar. The model gets the loose bookmarks (the top level, and the top folders such as Other favorites) and the likely misfiled ones (alone in their folder, while another folder has `sort.host_elsewhere` of their site), in batches of `sort.batch`. A site of `similar.skip_hosts` (one site, many topics) never makes a bookmark misfiled. Before the first batch, code finds for each bookmark the folders most like it: the folders that share the most words with it (folder names and the titles filed there, weighted so that a common word counts less) or hold pages of its site, and its present folder at the place of its own score; `sort.choices` in all (`bm.candidates`). The model does not get the folder list: it gets the numbered choices of each bookmark, and a small map of the top folders with the names of their sub-folders. For each bookmark it writes a short topic and picks a number (`{"id": 12, "topic": "bread recipes", "pick": 2}`). When no choice fits, it also gives a folder of the map, or a new folder under one (`"new": true`). The gate `sort-ok` checks every answer: each bookmark once, no other id, no changed URL or title, a pick that is one of the choices, or a folder of the file or a new folder under one, at most `sort.new_per_batch` and `sort.new_max` new folders. A bad answer goes back to the model at most `sort.rounds` times (`retry`). Then the batch is left unsorted (`fail -> continue`). When more than 20% of the batches are left (`tolerate 20%`), the run ends at `held`.
 5. **Dry run.** The report counts and lists what would be removed, folded, moved and made. Nothing else is written. The gate `share` holds back a plan that removes more than `safety.max_removed` percent.
 6. **Write.** After the person agrees, code writes the file into the work folder, reads it again, and the gate `verify` checks it. Then it copies it to `out/`.
 
@@ -59,7 +59,7 @@ The model starts a run. When the run needs you, the model shows the question and
 | `approve no` | Similar URLs: keep every URL, here and later. New folders: make none. Report: write nothing. |
 | `approve yes 2=no` | New folders: make all but number 2. |
 
-The plugin passes your `approve` message to the tool as your answer before the model reads it. The model cannot answer for you. If more than one run waits, write the run id: `approve 20261123-232451-01 yes`. The same answer works in a terminal: the result has the command in `waiting.command`.
+The short forms above work only when exactly one run waits for you. When more than one run waits, the plugin refuses them and names the runs: then write the run id, for example `approve 20261123-232451-01 yes`. The `say` text of the question gives each answer in this long form. The plugin passes your `approve` message to the tool as your answer before the model reads it. The model cannot answer for you. The same answer works in a terminal: the result has the command in `waiting.command`.
 
 A long file does not fit in one chat. When the chat is full, open a new chat and write "Go on with my bookmarks run". The model calls `queues`, finds the run, and goes on from the last saved batch.
 
@@ -80,7 +80,7 @@ python3 tool.py approve RUN yes 1=all
 ```
 
 ```bash
-python3 tool.py answer RUN '{"result": [{"id": 4, "folder": "Other favorites > Cooking"}]}'
+python3 tool.py answer RUN '{"result": [{"id": 4, "topic": "cooking", "pick": 2}]}'
 ```
 
 ```bash

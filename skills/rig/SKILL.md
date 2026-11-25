@@ -38,7 +38,7 @@ The pattern to copy is the example tool `examples/release-tool` of the Rig repos
 | `RIG plugin DIR --owner NAME` | Add the LM Studio plugin: the front for a local model. |
 | `RIG check FILE` | Validate a `.rig` file. Show the status and the coverage of each unit. |
 | `RIG serve FILE --json OUT` | Show the file as tables and as a graph on 127.0.0.1. Values can be changed there. |
-| `python3 tool.py run '<JSON>'` | In a project: start a run. `answer`, `approve`, `resume`, `status`, `rerun`, `replay`, `rules`, `flow`, `regress`: see [guide/fronts.md](guide/fronts.md). |
+| `python3 tool.py run '<JSON>'` | In a project: start a run. `batch`, `queues`, `answer`, `approve`, `resume`, `status`, `rerun`, `replay`, `rules`, `flow`, `call`, `regress`: see [guide/fronts.md](guide/fronts.md). |
 | `RIG compile json\|skill\|tool FILE`, `RIG from-json FILE` | One unit to one form, and a catalogue back to Rig. `build` uses the same compilers. |
 
 ## How to work

@@ -129,7 +129,7 @@ The method was taken from a private production agent, where one procedure runs o
 
 ## Status
 
-Version 0, in work. The kit, the guide and the example are new (2026-11-15), and the language can still change. [docs/status.md](docs/status.md) says what is done and what is open.
+Language version 1, in work (2026-11-25). The kit, the guide and the first example came on 2026-11-15, and the language can still change. [docs/status.md](docs/status.md) says what is done and what is open.
 
 To give the skill to an agent, copy or link `skills/rig/` into the agent's skills folder (for example `.claude/skills/rig/`).
 

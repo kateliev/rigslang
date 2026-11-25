@@ -25,7 +25,7 @@ node --no-warnings try.ts
 ```
 
 ```bash
-node --no-warnings try.ts start_run '{"item": "a longer item"}'
+node --no-warnings try.ts start_run '{"file": "tests/fixtures/export.html"}'
 ```
 
 A live run with the loaded model, without the chat window. Each `--then` is a later message of the operator in the same chat:
@@ -46,6 +46,6 @@ Its settings are in `rig.json` of the tool: `"plugin": {"work": {"think": false,
 
 ## What the model cannot do
 
-- It cannot answer a `human` gate: there is no tool for that. The operator answers with a chat message that starts with `approve`: `approve yes`, `approve no`, or `approve RUN yes WORDS` when more than one run waits. The plugin runs that message before the model sees it, and the model reads only the result. The command in `waiting.command` does the same in a terminal.
+- It cannot answer a `human` gate: there is no tool for that. The operator answers with a chat message that starts with `approve`, as the `say` text of the result gives it: `approve RUN yes`, `approve RUN no`, or, at a gate with options, `approve RUN` and the words of the answer (`approve RUN yes` takes the first option). The short form without the run id (`approve yes`) works only when exactly one run waits for a person; else the plugin refuses it and names the runs. The plugin runs that message before the model sees it, and the model reads only the result. The command in `waiting.command` does the same in a terminal.
 - It cannot decide a gate that code decides: the driver refuses.
 - It cannot send code: the bridge passes JSON only, and starts the driver without a shell.

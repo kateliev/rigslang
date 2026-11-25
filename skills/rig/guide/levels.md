@@ -52,10 +52,10 @@ unit word-count tool
 What the doctor checks:
 
 - The source has no errors.
-- Every unit has code, an intent, and a type and a text for every input. The model reads the intent and the texts as the description of the tool, so they are part of the tool.
+- Every unit has code (a `code` line) or a flow, an intent, and a type and a text for every input. The model reads the intent and the texts as the description of the tool, so they are part of the tool.
 - The compiled files are current.
 - No number stands in the text of a node.
-- The tests pass.
+- `rig.json` names the tests command, and the tests pass.
 
 ## Level 2: checked
 
@@ -77,7 +77,7 @@ At this level the tool already runs without a model up to its first `model` gate
 
 What the doctor adds:
 
-- The flow has an end node, every node can be reached, and the flow ends at an end line, not past its last line. (The checker already refuses a `hard`, `model` or yes/no `human` gate with no `fail` line.)
+- A unit has a flow. The flow has an end node, every node can be reached, and the flow ends at an end line, not past its last line. (The checker already refuses a `hard`, `model` or yes/no `human` gate with no `fail` line.)
 - `rig.json` names the driver (the runner command) and the compiled skill.
 - A regression set exists, every case has an expected result, and the set passes.
 - Every end node is the end of a regression case. A note: every gate is on the path of a case.
@@ -102,7 +102,7 @@ A run of a real model is a second kind of flow test. Its folder keeps every answ
 What the doctor adds:
 
 - `README.md`, `notes/project-facts.md`, `notes/failures-log.md`, `bugs-and-fixes.md` and `reports/` exist.
-- A rule of the group `permissions` guards every change that cannot be undone. Its default is the safe value.
+- A rule of the group `permissions` exists. It must guard every change that cannot be undone, and its default must be the safe value. The doctor checks only that the rule exists.
 - A `human` gate holds the judgment of the person. If the tool needs none, `rig.json` says why in `"human"`.
 
 The doctor cannot check the rest of level 4. It is in [patterns.md](patterns.md): work on a copy, a way back, state that survives a restart, queues by who must act, and the review that starts from the marks of the person.

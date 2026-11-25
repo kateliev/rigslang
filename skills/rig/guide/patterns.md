@@ -73,7 +73,7 @@ The runner has this: `tool.py batch` runs a list and writes a report, and `tool.
 
 **Failure:** the host was restarted, and the tool no longer knew what it had pasted where.
 
-- The runner saves each run as a file after every node. A new process reads it and goes on.
+- The runner saves each run as a file when the run waits, when it ends, and after each item of a `for` block and each round of an `until` block. A new process reads it and goes on (`tool.py resume RUN`).
 - Anything else that a later step needs (what was changed, how many rounds were done) is in the state of the run, not in the memory of a process.
 - When the item changed since the run was saved, the saved run is stale: say so, and do not go on from it.
 
