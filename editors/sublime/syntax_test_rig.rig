@@ -1,11 +1,10 @@
 ; SYNTAX TEST "Packages/Rig/Rig.sublime-syntax"
 ; Run in Sublime Text: open this file, then Tools > Build.
 
-unit sort-tool agent  ; a comment
+unit sort-tool  ; a comment
 ; <- storage.type.unit.rig
 ;    ^^^^^^^^^ entity.name.type.unit.rig
-;              ^^^^^ storage.modifier.scale.rig
-;                     ^^^^^^^^^^^ comment.line.semicolon.rig
+;               ^^^^^^^^^^^ comment.line.semicolon.rig
   note "keep the hyphens"
 ; ^^^^ keyword.other.context.rig
 ;      ^^^^^^^^^^^^^^^^^^ string.quoted.double.rig
@@ -14,32 +13,27 @@ unit sort-tool agent  ; a comment
 ;        ^^^^^^^^^^^^^^^^^^^^^^^^^^^ string.quoted.double.rig
 ;             ^^ constant.character.escape.rig
 ;                   ^^^^^ - comment
+    never "write without approval" -> ok
+;   ^^^^^ keyword.other.matrix.rig
+;                                  ^^ keyword.operator.arrow.rig
+;                                     ^^ variable.function.target.rig
   in text str
 ; ^^ keyword.other.matrix.rig
 ;    ^^^^ variable.parameter.input.rig
 ;         ^^^ support.type.rig
-  out str
+  out {id: int, folder?: str}
 ; ^^^ keyword.other.matrix.rig
-;     ^^^ support.type.rig
-  example (1 2.5 -3) => "x"
-; ^^^^^^^ keyword.other.matrix.rig
-;         ^ punctuation.section.parens.begin.rig
-;          ^ constant.numeric.rig
-;            ^^^ constant.numeric.rig
-;                ^^ constant.numeric.rig
-;                  ^ punctuation.section.parens.end.rig
-;                    ^^ keyword.operator.arrow.rig
-;                       ^^^ string.quoted.double.rig
-  check "only a-z"
-; ^^^^^ keyword.other.matrix.rig
-;       ^^^^^^^^^^ string.quoted.double.rig
+;     ^ punctuation.section.braces.begin.rig
+;        ^ punctuation.separator.key-value.rig
+;          ^^^ support.type.rig
+;             ^ punctuation.separator.comma.rig
+;                     ^ keyword.operator.optional.rig
+;                        ^^^ support.type.rig
+;                           ^ punctuation.section.braces.end.rig
   code steps steps.py
 ; ^^^^ keyword.other.context.rig
     test tests/test_steps.py
 ;   ^^^^ keyword.other.context.rig
-  uses helper other.rig
-; ^^^^ keyword.other.context.rig
-;      ^^^^^^ entity.other.inherited-class.rig
   rule sort.batch 60 "Bookmarks in one batch"
 ; ^^^^ storage.type.rule.rig
 ;      ^^^^^^^^^^ entity.name.constant.rule.rig
@@ -48,6 +42,24 @@ unit sort-tool agent  ; a comment
     range 10 100
 ;   ^^^^^ keyword.other.context.rig
 ;         ^^ constant.numeric.rig
+  rule sort.bounds (0.5, 2.0) "Scale bounds"
+;                  ^ punctuation.section.parens.begin.rig
+;                   ^^^ constant.numeric.rig
+;                      ^ punctuation.separator.comma.rig
+;                        ^^^ constant.numeric.rig
+;                           ^ punctuation.section.parens.end.rig
+  rule sort.tags ["utm_", "fbclid"] "Tags"
+;                ^ punctuation.section.brackets.begin.rig
+;                 ^^^^^^ string.quoted.double.rig
+;                       ^ punctuation.separator.comma.rig
+;                                 ^ punctuation.section.brackets.end.rig
+  rule sort.weights {fast: 10, careful: 30} "Weights"
+;                   ^ punctuation.section.braces.begin.rig
+;                        ^ punctuation.separator.key-value.rig
+;                          ^^ constant.numeric.rig
+;                            ^ punctuation.separator.comma.rig
+;                                       ^^ constant.numeric.rig
+;                                         ^ punctuation.section.braces.end.rig
   rule sort.mode fast "Mode"
     options fast | careful
 ;   ^^^^^^^ keyword.other.context.rig
@@ -65,9 +77,10 @@ unit sort-tool agent  ; a comment
 ; ^^^^ storage.type.node.rig
 ;      ^^^^ entity.name.function.node.rig
 ;                  ^^ keyword.control.flow.rig
-    do "read the file, at most {sort.batch} at a time"
+    do "read the file, at most {sort.batch} and {sort.weights.fast} at a time"
 ;   ^^ keyword.control.flow.rig
 ;                              ^^^^^^^^^^^^ variable.other.constant.rule.rig
+;                                               ^^^^^^^^^^^^^^^^^^^ variable.other.constant.rule.rig
     reads sort.batch sort.mode
 ;   ^^^^^ keyword.control.flow.rig
 ;         ^^^^^^^^^^ variable.other.constant.rule.rig
@@ -91,8 +104,9 @@ unit sort-tool agent  ; a comment
 ;   ^^^^^^^^ keyword.control.flow.rig
 ;            ^^^ constant.numeric.rig
     step sort by model
-      out (list (record id int folder str))
+      out list[{id: int, folder?: str}]
 ;     ^^^ keyword.other.matrix.rig
+;         ^^^^ support.type.rig
       timeout 5m
 ;     ^^^^^^^ keyword.control.flow.rig
 ;             ^^ constant.numeric.rig
@@ -123,6 +137,9 @@ unit sort-tool agent  ; a comment
   end held "Held back"
 ; ^^^ storage.type.node.rig
 ;     ^^^^ entity.name.function.node.rig
+  rollback
+; ^^^^^^^^ keyword.control.block.rig
+    step undo by steps.undo
   finally
 ; ^^^^^^^ keyword.control.block.rig
     step summary by steps.summary

@@ -10,7 +10,7 @@ Before any change of a level 3 (production) tool, read its `notes/project-facts.
 
 | For | Do |
 |---|---|
-| One run, to try something | `python3 tool.py run '<JSON>' --set group.name=value` (or `--preset NAME`). The source does not change. |
+| One run, to try something | `python3 tool.py run '<JSON>' --set group.name=value` (or `--set group.name.key=value` on a `dict` rule, or `--preset NAME`). The source does not change. |
 | To keep | Change the value of the `rule` in the `.rig` file, or on the page of `RIG serve FILE --json gen/NAME.json`. Then `RIG build DIR`. |
 
 Say which rule changed and why, with the evidence, and write the reason into the `note` of the rule. Do not change a limit to make one item pass.

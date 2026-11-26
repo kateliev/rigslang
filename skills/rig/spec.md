@@ -20,8 +20,8 @@ Two limits hold:
 ```
 node     := head arg* [comment] NEWLINE [children]
 children := INDENT node+ DEDENT
-arg      := word | number | "string" | /regex/ | ( arg* )
-comment  := ; text            (outside strings, to the end of the line)
+arg      := word | number | "string" | /regex/ | [list] | (tuple) | {dict} | type
+comment  := ; text            (outside strings and brackets, to the end of the line)
 ```
 
 - Every line is a **node**: a head word, then arguments.
@@ -29,8 +29,11 @@ comment  := ; text            (outside strings, to the end of the line)
 - Indent with spaces (2 per level is the convention). A tab in the indentation is an error.
 - A **string** is in double quotes. Use `\"` for a quote and `\\` for a backslash.
 - A **regex** is between slashes: `/^[a-z]+$/`.
-- A **word** is any run of characters without spaces: `slugify`, `->`, `release.min_words`, `20%`.
-- `( ... )` holds a short inline list: `rule dupes.tracking (utm_ fbclid)`.
+- A **word** is any run of characters without spaces or brackets: `slugify`, `->`, `release.min_words`, `20%`.
+- **Data literals** use Python/JS bracket notation, parsed safely with Python's `ast` parser (no expressions):
+  - `[a, b]` is a variable-length **list**: `rule dupes.tracking ["utm_", "fbclid"]`.
+  - `(a, b)` is a fixed-length **tuple**: `rule scale.bounds (0.5, 2.0)` (a 1-item tuple takes a trailing comma: `(1,)`).
+  - `{k: v, ...}` is a key-value **dict** (bare identifier keys or quoted string keys): `rule limits.depth {small: 8, medium: 16, large: 28}`.
 - Blank lines and comments are ignored.
 - **On the line of its node.** `by <name>` can stand at the end of a `step`, `gate` or `queue` line, and `fail -> <end> ["why"]` at the end of a `gate` line. `step read by steps.read` is the same as a `step read` line with a `by steps.read` line under it.
 
@@ -55,7 +58,7 @@ A file holds one or more `unit` nodes. Every other word goes inside a unit.
 | ↳ `style "text"` | Optional child of `intent`: tone, format or length guidance. |
 | ↳ `never "text" [-> <gate-id>]` | Optional child of `intent` (repeatable): an invariant boundary. Linking `-> <gate-id>` binds the boundary to an explicit `hard`, `model` or `human` gate (tracked by `rig.py doctor`). |
 
-**Types.** A type is a word or a short list:
+**Types.** Types use Python/TypeScript bracket notation, parsed via Python's `ast`:
 
 | Type | Values |
 |---|---|
@@ -63,12 +66,13 @@ A file holds one or more `unit` nodes. Every other word goes inside a unit.
 | `int` | a whole number |
 | `float` | a number |
 | `bool` | `true` or `false` |
-| `list`, `dict`, `any` | any list, any record, any value |
-| `(list T)` | a list; each item has the type T |
-| `(tuple T1 T2 …)` | a list with one item of each type, in this order |
-| `(record name1 T1 name2 T2 …)` | a record with these fields |
-| `(maybe T)` | a value of type T, or no value. In a `record`, the field can be missing. |
-| `(one-of v1 v2 …)` | one of these values |
+| `list`, `dict`, `any` | any list, any dict, any value |
+| `list[T]` | a list; each item has type `T` |
+| `tuple[T1, T2, …]` or `(T1, T2, …)` | a fixed-length list with one item of each type, in order |
+| `dict[str, T]` (or `dict[T]`) | a dict with string keys where every value has type `T` |
+| `{name1: T1, name2?: T2, …}` | a record with fixed fields (`name?: T` marks an optional field that can be omitted or `null`) |
+| `T?` or `T \| None` | a value of type `T`, or `null` (optional on an `in` port or record field) |
+| `"v1" \| "v2"` or `T1 \| T2` | one of these literal values (`Literal[...]`), or a union of types |
 
 The checker warns about a type that it does not know. Each `in` port compiles its type to a JSON Schema (`schema`), and the runner validates inputs against those schemas at runtime (`Kit.run`), refusing a mismatch.
 
@@ -80,13 +84,13 @@ The checker warns about a type that it does not know. Each `in` port compiles it
 | `code <prefix> <path>` | The functions of the steps, gates, tools and queue of this unit live in the file at `path` (relative to the `.rig` file). A `by` or `tools` entry names one as `prefix.function`, for example `by gates.notes_ok`. |
 | ↳ `test <path>` | Optional child of `code`: the test file of that code. For Python (`.py`) files, the checker parses the AST to confirm the function is defined and referenced in code (not only in comments or docstrings) in the test file; other languages fall back to name matching. Such a function is **tested**. |
 | `queue ["name"] by <prefix.function>` | Optional external item discovery step. Returns a list of input records for `queues` and chunked unattended `next-batch` runs. May carry `reads` and `note`. |
-| `rule <group.name> <value> ["label"]` | A parameter. The id has a group and a name, joined by a dot. The value is a number, `on`/`off`, a word, a string, a `/regex/` or a `( list )`. Put the unit of the value in the label: `rule sort.batch 60 "Bookmarks in one batch"`. |
-| ↳ `range <min> <max>` | Optional child of `rule`: the limits of a number. |
+| `rule <group.name> <value> ["label"]` | A parameter. The id has a group and a name, joined by a dot. The value is a number, `on`/`off`, a word, a `"string"`, a `/regex/`, a `[list]`, a `(tuple)`, or a `{key: value}` dict. Put the unit of the value in the label: `rule sort.batch 60 "Bookmarks in one batch"`. |
+| ↳ `range <min> <max>` | Optional child of `rule`: the limits of a number, or of every number in a numeric list, tuple, or dict. |
 | ↳ `options a \| b \| c` | Optional child of `rule`: the values that the rule can have. |
 | ↳ `ui [toggle\|select\|slider\|number\|input]` | Optional child of `rule`: exposes the rule as a control in compiled UI fronts (web dashboard, plugin settings, viewer), wired to per-run rule overrides. The widget defaults from the rule type. |
 | ↳ `note "text"` | Where the value comes from. |
 | `preset <name>` | A named set of rule values, for example a fast mode and a careful mode. |
-| ↳ `set <rule-id> <value>` | Child of `preset`: one rule and its value in this preset. The same limits apply. |
+| ↳ `set <rule-id> <value>` | Child of `preset`: one rule and its value in this preset. The same limits (and tuple length) apply. |
 
 ```rig
 unit sizes
@@ -95,7 +99,7 @@ unit sizes
     style "short numeric summary"
     never "accept an over-long text" -> fit
   in text str "the text to measure"
-  out (record words int characters int) "the counts"
+  out {words: int, characters: int} "the counts"
   code steps steps.py
     test tests/test_steps.py
   code gates gates.py
@@ -104,6 +108,9 @@ unit sizes
     range 1 100000
     ui
     note "longer texts did not come up in the tests"
+  rule size.tiers {short: 200, standard: 1000} "Tier limits, in characters"
+    range 1 100000
+    note "per-tier character caps"
   rule size.mode fast "Mode"
     options fast | careful
     ui
@@ -113,14 +120,14 @@ unit sizes
     do "count words and characters"
     reads size.mode
   gate fit hard "Within limit"
-    check "at most {size.max} characters"
+    check "at most {size.max} characters (short tier: {size.tiers.short})"
     by gates.fit
     fail -> too-long "over limit"
   end done "Measured"
   end too-long "Too long"
 ```
 
-**Rule names in text.** In any string of a unit, `{group.name}` names a rule of the unit. The checker refuses a name that is not a rule. The compilers write the value of the rule in its place (Section 6). Text in braces without a dot, for example `{word}`, is plain text.
+**Rule names in text.** In any string of a unit, `{group.name}` names a rule of the unit (and `{group.name.key}` names a key of a `dict` rule). The checker refuses a name or dict key that is not defined. The compilers write the value in its place (Section 6), and `--set group.name.key=value` overrides one key of a `dict` rule for a run. Text in braces without a dot, for example `{word}`, is plain text.
 
 ### The flow
 
@@ -175,7 +182,7 @@ reason plan "Propose folder options"
   mode creative
   candidates 2
   sees read
-  out (list (record id int folder str))
+  out list[{id: int, folder: str}]
 gate plan-ok hard "Every bookmark once" by gates.plan_ok
   retry 2
   fail -> held "the answer is not good"
@@ -216,7 +223,7 @@ for batch in loose.batches
   step sort by model
     do "sort the batch"
     sees batch
-    out (list str)
+    out list[str]
   gate sort-ok hard by gates.sort_ok
     retry 2
     fail -> continue "no good answer"
@@ -233,7 +240,7 @@ until draft.done
   step draft by model
     if style.failed
     do "improve the text; say done when it is good"
-    out (record done bool text str)
+    out {done: bool, text: str}
 section "Output"
   step report by steps.report
 end done
@@ -259,7 +266,7 @@ finally
 
 ## 3. Removed words
 
-Version 2 refuses words removed in version 0 and version 1 (`next`, `pass`, `when`, `ensure`, `judge`, `min`, `max`, `label`, `external`, `cast`, `probe`, `evidence`, `snippet`, `example`, `uses`, `tool`/`agent` scopes, prefix-less `code <path>`, `brief` under `gate`). The error names what to write instead.
+Version 2 refuses words removed in version 0 and version 1 (`next`, `pass`, `when`, `ensure`, `judge`, `min`, `max`, `label`, `external`, `cast`, `probe`, `evidence`, `snippet`, `example`, `uses`, `tool`/`agent` scopes, prefix-less `code <path>`, `brief` under `gate`), as well as S-expression lists `(a b)` and S-expression types (`(list ...)`, `(record ...)`, `(tuple ...)`, `(maybe ...)`, `(one-of ...)`). The error names what to write instead.
 
 ## 4. Runs
 

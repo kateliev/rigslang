@@ -493,7 +493,7 @@
     "prepare.map",
     "prepare.new_so_far"
    ],
-   "out": "(list (record id int topic str pick int folder (maybe str) new (maybe bool)))",
+   "out": "list[{id: int, topic: str, pick: int, folder?: str, new?: bool}]",
    "schema": {
     "type": "array",
     "items": {

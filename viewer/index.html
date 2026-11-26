@@ -315,14 +315,40 @@ const units = () => S.B ? S.B.units : [];
 const curUnit = () => units().find(u => u.name === S.unit) || units()[0] || null;
 const cat = U => U && U.catalogue;
 const ruleOf = (U, id) => cat(U) ? cat(U).rules.find(r => r.id === id) : null;
+function fmtVal(v, rtype) {
+  if (typeof v === "boolean") return v ? "on" : "off";
+  if (Array.isArray(v)) {
+    if (rtype === "tuple") return "(" + v.map(x => JSON.stringify(x)).join(", ") + (v.length === 1 ? "," : "") + ")";
+    return "[" + v.map(x => JSON.stringify(x)).join(", ") + "]";
+  }
+  if (v && typeof v === "object") {
+    return "{" + Object.entries(v).map(([k, x]) => (/^[A-Za-z_][\w-]*$/.test(k) ? k : JSON.stringify(k)) + ": " + JSON.stringify(x)).join(", ") + "}";
+  }
+  return String(v);
+}
 function shown(U, id) {  // a rule value as the text a person reads
   const s = U.rules_src[id];
   if (s) return s.shown;
   const r = ruleOf(U, id);
-  if (!r) return "?";
-  return typeof r.value === "boolean" ? (r.value ? "on" : "off") : Array.isArray(r.value) ? "(" + r.value.join(" ") + ")" : String(r.value);
+  if (r) return fmtVal(r.value, r.type);
+  const d = id.lastIndexOf(".");
+  if (d > 0) {
+    const base = ruleOf(U, id.slice(0, d)), key = id.slice(d + 1);
+    if (base && base.type === "dict" && base.value && has(base.value, key)) return fmtVal(base.value[key]);
+  }
+  return "?";
 }
-const fillText = (U, t) => (t || "").replace(PLACE, (m, id) => ruleOf(U, id) ? shown(U, id) : m);
+function resolvePlaceholder(U, ph) {
+  const r = ruleOf(U, ph);
+  if (r) return { rule: r, id: ph, shown: shown(U, ph) };
+  const d = ph.lastIndexOf(".");
+  if (d > 0) {
+    const baseId = ph.slice(0, d), key = ph.slice(d + 1), base = ruleOf(U, baseId);
+    if (base && base.type === "dict" && base.value && has(base.value, key)) return { rule: base, id: baseId, shown: fmtVal(base.value[key]) };
+  }
+  return null;
+}
+const fillText = (U, t) => (t || "").replace(PLACE, (m, id) => { const p = resolvePlaceholder(U, id); return p ? p.shown : m; });
 const isChanged = (U, id) => S.changed.has(U.name + "/" + id);
 
 function load(B) {
@@ -438,11 +464,12 @@ function chips(U, text, onPick) {
   const out = []; let last = 0;
   for (const m of (text || "").matchAll(PLACE)) {
     out.push(text.slice(last, m.index)); last = m.index + m[0].length;
-    const r = ruleOf(U, m[1]);
-    if (!r) { out.push(m[0]); continue; }
-    out.push(el("span", { class: "chip" + (isChanged(U, m[1]) ? " changed" : ""), title: r.label + ". Click to edit.",
-      onclick: () => onPick(m[1]), onpointerenter: () => onPick.hover && onPick.hover(m[1]), onpointerleave: () => onPick.hover && onPick.hover(null) },
-      el("span", { class: "rid" }, m[1]), el("b", {}, shown(U, m[1]))));
+    const resolved = resolvePlaceholder(U, m[1]);
+    if (!resolved) { out.push(m[0]); continue; }
+    const r = resolved.rule, baseId = resolved.id;
+    out.push(el("span", { class: "chip" + (isChanged(U, baseId) ? " changed" : ""), title: r.label + ". Click to edit.",
+      onclick: () => onPick(baseId), onpointerenter: () => onPick.hover && onPick.hover(baseId), onpointerleave: () => onPick.hover && onPick.hover(null) },
+      el("span", { class: "rid" }, m[1]), el("b", {}, resolved.shown)));
   }
   out.push((text || "").slice(last));
   return out;
@@ -549,7 +576,7 @@ function rulesTable(U) {
   const rows = [];
   for (const r of c.rules) {
     if (r.group !== group) { group = r.group; rows.push(el("tr", {}, el("th", { colspan: 4, style: "text-transform:none" }, group))); }
-    const lim = [has(r, "min") && "min " + r.min, has(r, "max") && "max " + r.max, has(r, "options") && "options: " + r.options.join(", ")].filter(Boolean).join(" · ");
+    const lim = [r.type === "tuple" && r.length != null && "tuple[" + r.length + "]", r.type === "dict" && "dict", r.type === "list" && "list", has(r, "min") && "min " + r.min, has(r, "max") && "max " + r.max, has(r, "options") && "options: " + r.options.join(", ")].filter(Boolean).join(" · ");
     rows.push(el("tr", { class: isChanged(U, r.id) ? "changed" : "" },
       el("td", { style: "width:40%" }, el("b", {}, r.label), r.ui ? el("span", { class: "st", style: "margin-left:6px" }, "ui: " + r.ui) : null, el("div", { class: "code" }, r.id),
         r.note ? el("div", { class: "dim", style: "font-size:12px" }, r.note) : null, r.evidence ? el("div", { class: "faint", style: "font-size:12px" }, "evidence: " + r.evidence) : null),

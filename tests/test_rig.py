@@ -122,7 +122,7 @@ FLOW = unit('''  in n int "a number"
     fail -> held "too many left"
     step draft "Draft" by model
       do "give a number"
-      out (record v int)
+      out {v: int}
     gate ok hard "Even"
       check "the number is even and at most {limits.max}"
       by code.even
@@ -233,7 +233,7 @@ class Blocks(unittest.TestCase):
 
 	def test_by_model_and_out(self):
 		d = node(self.c, 'draft')
-		self.assertEqual((d['lane'], d['out']), ('model', '(record v int)'))
+		self.assertEqual((d['lane'], d['out']), ('model', '{v: int}'))
 		self.assertEqual(d['schema'], {'type': 'object', 'properties': {'v': {'type': 'integer'}}, 'required': ['v'], 'additionalProperties': False})
 		self.assertNotIn('by', d)
 		self.assertEqual(node(self.c, 'make')['lane'], 'code')
@@ -526,30 +526,82 @@ class RigV2Language(unittest.TestCase):
 		self.assertEqual(c['rules'][1]['ui'], 'toggle')
 
 
-class Types(unittest.TestCase):
-	def t(self, s):
-		return rig.tokenize(s, 1)[0]
+	def test_dict_tuple_and_list_rules_and_ranges(self):
+		src = unit('''  rule scale.bounds (0.5, 2.0) "Scale (min, max)"
+    range 0.1 5.0
+  rule tiers.depth {small: 8, medium: 16, large: 32} "Depth per tier"
+    range 0 100
+    ui
+  rule tags.skip ["utm_", "fbclid"] "Ignored tags"
+  preset compact
+    set scale.bounds (0.6, 1.5)
+    set tiers.depth {small: 6, medium: 12, large: 24}
+  step check_it by code.check_it
+    reads scale.bounds tags.skip
+  gate ok hard by code.ok
+    check "large tier at most {tiers.depth.large}"
+    fail -> bad
+  end done
+  end bad
+''')
+		self.assertEqual(errors(src), [])
+		self.assertEqual(warnings(src), [])
+		c = catalogue(src)
+		by_id = dict((r['id'], r) for r in c['rules'])
+		self.assertEqual((by_id['scale.bounds']['type'], by_id['scale.bounds']['length'], by_id['scale.bounds']['value']), ('tuple', 2, [0.5, 2.0]))
+		self.assertEqual((by_id['tiers.depth']['type'], by_id['tiers.depth']['value']), ('dict', {'small': 8, 'medium': 16, 'large': 32}))
+		self.assertEqual((by_id['tags.skip']['type'], by_id['tags.skip']['value']), ('list', ['utm_', 'fbclid']))
+		self.assertIn('tiers.depth', node(c, 'ok')['reads'])
+		sk = rig.skill(rig.units(rig.parse(src))[0])
+		self.assertIn('large tier at most 32', sk)
+		sk_p = rig.skill(rig.units(rig.parse(src))[0], None, 'compact')
+		self.assertIn('large tier at most 24', sk_p)
 
+		# Tuple arity, range violations, unknown dict key in placeholder, and legacy (a b) list refused
+		self.assertTrue(any('expected 2 items' in t for _, t in errors(unit(
+			'  rule a.b (1, 2)\n  preset p\n    set a.b (1, 2, 3)\n  step s by code.s\n    reads a.b\n  end e\n'))))
+		self.assertTrue(any('key "large": the value is above the range' in t for _, t in errors(unit(
+			'  rule a.b {small: 5, large: 250}\n    range 0 100\n  step s by code.s\n    reads a.b\n  end e\n'))))
+		self.assertTrue(any('item 1: the value is above the range' in t for _, t in errors(unit(
+			'  rule a.b (0.5, 9.0)\n    range 0.1 5.0\n  step s by code.s\n    reads a.b\n  end e\n'))))
+		self.assertTrue(any('not in dict rule' in t for _, t in errors(unit(
+			'  rule a.b {small: 5}\n  gate g hard by code.g\n    check "at most {a.b.missing}"\n    fail -> e\n  end e\n'))))
+		self.assertTrue(any('use [a, b] for a list' in t for _, t in errors(unit(
+			'  rule a.b (utm_ fbclid)\n  step s by code.s\n    reads a.b\n  end e\n'))))
+
+
+class Types(unittest.TestCase):
 	def test_type_problems(self):
-		self.assertIsNone(rig.type_problem(self.t('(list (tuple str int))')))
-		self.assertIsNone(rig.type_problem(self.t('(record a str b (maybe int))')))
-		self.assertIn('not known', rig.type_problem(self.t('strng')))
-		self.assertIn('takes one type', rig.type_problem(self.t('(list str int)')))
+		self.assertIsNone(rig.type_problem('list[tuple[str, int]]'))
+		self.assertIsNone(rig.type_problem('list[(str, int)]'))
+		self.assertIsNone(rig.type_problem('{a: str, b?: int, pass: bool, from?: str}'))
+		self.assertIsNone(rig.type_problem('dict[str, float]'))
+		self.assertIsNone(rig.type_problem('int?'))
+		self.assertIsNone(rig.type_problem('"done" | "error"'))
+		self.assertIn('not known', rig.type_problem('strng'))
+		self.assertIn('takes one type', rig.type_problem('list[str, int]'))
+		self.assertIn('write list[T]', rig.type_problem('(list str)'))
+		self.assertIn('write {field: type', rig.type_problem('(record a int)'))
+		self.assertIn('write T?', rig.type_problem('(maybe int)'))
 		_, warn = rig.check(rig.parse('unit x\n  in a strng\n'))
 		self.assertTrue(any('not known' in t for _, t in warn))
 		self.assertTrue(any('not known' in t for _, t in errors(unit('  step s by model\n    do "x"\n    out strng\n  end e\n'))))
 
 	def test_type_ok(self):
-		rec = self.t('(record end (one-of done error) n (maybe int))')
+		rec = '{end: "done" | "error", n?: int}'
 		self.assertTrue(rig.type_ok({'end': 'done'}, rec))
+		self.assertTrue(rig.type_ok({'end': 'done', 'n': None}, rec))
 		self.assertFalse(rig.type_ok({'end': 'other'}, rec))
+		self.assertFalse(rig.type_ok({'end': 'done', 'extra': 1}, rec))
 		self.assertFalse(rig.type_ok({'n': 1}, rec))
-		self.assertFalse(rig.type_ok(True, self.t('int')))
-		self.assertTrue(rig.type_ok([['a', 1]], self.t('(list (tuple str int))')))
+		self.assertFalse(rig.type_ok(True, 'int'))
+		self.assertTrue(rig.type_ok([['a', 1]], 'list[tuple[str, int]]'))
+		self.assertTrue(rig.type_ok({'small': 1.5, 'large': 3}, 'dict[str, float]'))
+		self.assertFalse(rig.type_ok({'small': 'bad'}, 'dict[str, float]'))
 
 	def test_tool_definition(self):
-		u = rig.units(rig.parse('unit search\n  intent "search; give the first {search.n} results"\n  in query str "the words to search for"\n  in page (maybe int)\n'
-			'  out (record end (one-of done error) results (list str) reason (maybe str))\n  rule search.n 5 "Results"\n  code s search.py\n  step run by s.run\n  end done\n'))[0]
+		u = rig.units(rig.parse('unit search\n  intent "search; give the first {search.n} results"\n  in query str "the words to search for"\n  in page int?\n'
+			'  out {end: "done" | "error", results: list[str], reason?: str}\n  rule search.n 5 "Results"\n  code s search.py\n  step run by s.run\n  end done\n'))[0]
 		d = rig.tool_def(u)
 		self.assertEqual(d['name'], 'search')
 		self.assertIn('the first 5 results', d['description'])

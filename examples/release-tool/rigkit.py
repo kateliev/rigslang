@@ -128,6 +128,16 @@ def _json_in(text):
 	return text[a:b + 1] if a >= 0 and b > a else text
 
 
+def _is_optional_port(p):
+	if p.get('optional'):
+		return True
+	t = (p.get('type') or '').strip()
+	if t.startswith('(maybe') or t.endswith('?'):
+		return True
+	any_of = (p.get('schema') or {}).get('anyOf')
+	return isinstance(any_of, list) and any(isinstance(x, dict) and x.get('type') == 'null' for x in any_of)
+
+
 def _input_schema(ports):
 	'''Build a JSON Schema object from catalogue "in" ports.'''
 	props, req = {}, []
@@ -136,7 +146,7 @@ def _input_schema(ports):
 		if p.get('text'):
 			s['description'] = p['text']
 		props[p['name']] = s
-		if not (p.get('type') or '').startswith('(maybe'):
+		if not _is_optional_port(p):
 			req.append(p['name'])
 	return {'type': 'object', 'properties': props, 'required': req}
 
@@ -297,9 +307,41 @@ class Timeout(Exception):
 
 
 # - Rules ---------------------------------------------
+def _check_num(rid, value, rule, where='', default_sample=None):
+	if isinstance(value, bool):
+		raise ValueError('{}{}: a number, not {!r}'.format(rid, where, value))
+	v = float(value)
+	want_int = isinstance(default_sample, int) and not isinstance(default_sample, bool)
+	if v == int(v) and (want_int or (default_sample is None and isinstance(value, int))):
+		v = int(v)
+	if 'min' in rule and v < rule['min']:
+		raise ValueError('{}{}: at least {}'.format(rid, where, rule['min']))
+	if 'max' in rule and v > rule['max']:
+		raise ValueError('{}{}: at most {}'.format(rid, where, rule['max']))
+	return v
+
+
+def _coerce_like(rid, value, sample, where=''):
+	if isinstance(sample, bool):
+		if isinstance(value, bool):
+			return value
+		text = str(value).strip().lower()
+		if text in ('1', 'true', 'on', 'yes'):
+			return True
+		if text in ('0', 'false', 'off', 'no'):
+			return False
+		raise ValueError('{}{}: true or false, not {!r}'.format(rid, where, value))
+	if isinstance(sample, (int, float)):
+		return _check_num(rid, value, {}, where=where, default_sample=sample)
+	if isinstance(sample, str) and not isinstance(value, str):
+		raise ValueError('{}{}: a text, not {!r}'.format(rid, where, value))
+	return value
+
+
 def check_value(rule, value):
 	'''The value in the type of the rule, or ValueError.'''
 	t, rid = rule.get('type', 'text'), rule['id']
+	has_bounds = 'min' in rule or 'max' in rule
 	if t == 'switch':
 		if isinstance(value, bool):
 			return value
@@ -314,20 +356,60 @@ def check_value(rule, value):
 			raise ValueError('{}: one of {}, not {!r}'.format(rid, ', '.join(str(o) for o in rule.get('options', [])), value))
 		return value
 	if t == 'number':
-		if isinstance(value, bool):
-			raise ValueError('{}: a number, not {!r}'.format(rid, value))
-		v = float(value)
-		if v == int(v) and isinstance(rule.get('default'), int):
-			v = int(v)
-		if 'min' in rule and v < rule['min']:
-			raise ValueError('{}: at least {}'.format(rid, rule['min']))
-		if 'max' in rule and v > rule['max']:
-			raise ValueError('{}: at most {}'.format(rid, rule['max']))
-		return v
+		return _check_num(rid, value, rule, default_sample=rule.get('default'))
+	if t == 'tuple':
+		if isinstance(value, str):
+			try:
+				value = json.loads(value)
+			except ValueError:
+				pass
+		if not isinstance(value, (list, tuple)):
+			raise ValueError('{}: a tuple (JSON list), not {!r}'.format(rid, value))
+		defaults = rule.get('default') if isinstance(rule.get('default'), list) else []
+		want_len = rule.get('length', len(defaults))
+		if len(value) != want_len:
+			raise ValueError('{}: expected {} items in tuple, got {}'.format(rid, want_len, len(value)))
+		out = []
+		for idx, item in enumerate(value):
+			sample = defaults[idx] if idx < len(defaults) else None
+			if has_bounds:
+				out.append(_check_num(rid, item, rule, where='[{}]'.format(idx), default_sample=sample))
+			elif sample is not None:
+				out.append(_coerce_like(rid, item, sample, where='[{}]'.format(idx)))
+			else:
+				out.append(item)
+		return out
 	if t == 'list':
+		if isinstance(value, str):
+			try:
+				value = json.loads(value)
+			except ValueError:
+				pass
 		if not isinstance(value, list):
 			raise ValueError('{}: a list'.format(rid))
-		return value
+		if has_bounds:
+			return [_check_num(rid, item, rule, where='[{}]'.format(i)) for i, item in enumerate(value)]
+		return list(value)
+	if t == 'dict':
+		if isinstance(value, str):
+			try:
+				value = json.loads(value)
+			except ValueError:
+				pass
+		if not isinstance(value, dict):
+			raise ValueError('{}: a dict (JSON object), not {!r}'.format(rid, value))
+		defaults = rule.get('default') if isinstance(rule.get('default'), dict) else {}
+		out = {}
+		for k, item in value.items():
+			ks = str(k)
+			sample = defaults.get(ks)
+			if has_bounds:
+				out[ks] = _check_num(rid, item, rule, where='.{}'.format(ks), default_sample=sample)
+			elif sample is not None:
+				out[ks] = _coerce_like(rid, item, sample, where='.{}'.format(ks))
+			else:
+				out[ks] = item
+		return out
 	return str(value)
 
 
@@ -351,11 +433,17 @@ class Rules(object):
 	get = __call__
 
 	def set(self, rid, value):
-		'''Change a rule for this session only. The source does not change.'''
-		if rid not in self.by_id:
-			raise KeyError('Unknown rule {}.'.format(rid))
-		self.session[rid] = check_value(self.by_id[rid], value)
-		return self.session[rid]
+		'''Change a rule for this session only (supports group.name.key on dict rules). The source does not change.'''
+		if rid in self.by_id:
+			self.session[rid] = check_value(self.by_id[rid], value)
+			return self.session[rid]
+		base, dot, key = rid.rpartition('.')
+		if dot and base in self.by_id and self.by_id[base].get('type') == 'dict':
+			merged = dict(self(base) or {})
+			merged[key] = value
+			self.session[base] = check_value(self.by_id[base], merged)
+			return self.session[base][key]
+		raise KeyError('Unknown rule {}.'.format(rid))
 
 	def preset(self, name):
 		if name not in self.catalogue.get('presets', {}):
@@ -367,12 +455,24 @@ class Rules(object):
 		return dict((rid, self(rid)) for rid in self.by_id)
 
 	def fill(self, text):
-		'''Write the value of each rule in place of {group.name}.'''
+		'''Write the value of each rule in place of {group.name} (or {group.name.key} on a dict rule).'''
+		def fmt(v):
+			if isinstance(v, bool):
+				return 'on' if v else 'off'
+			if isinstance(v, (list, dict)):
+				return json.dumps(v, ensure_ascii=False)
+			return str(v)
+
 		def show(m):
-			if m.group(1) not in self.by_id:
-				return m.group(0)
-			v = self(m.group(1))
-			return ('on' if v else 'off') if isinstance(v, bool) else str(v)
+			ph = m.group(1)
+			if ph in self.by_id:
+				return fmt(self(ph))
+			base, dot, key = ph.rpartition('.')
+			if dot and base in self.by_id and self.by_id[base].get('type') == 'dict':
+				cur = self(base)
+				if isinstance(cur, dict) and key in cur:
+					return fmt(cur[key])
+			return m.group(0)
 		return PLACE.sub(show, text or '')
 
 
@@ -530,10 +630,17 @@ def schema_problems(v, s, where='result'):
 		for k in s.get('required', []):
 			if k not in v:
 				out.append('{}: "{}" is missing'.format(where, k))
-		if s.get('additionalProperties') is False:
+		ap = s.get('additionalProperties')
+		if ap is False:
 			for k in v:
 				if k not in s.get('properties', {}):
 					out.append('{}: "{}" is not a field'.format(where, k))
+		elif isinstance(ap, dict):
+			for k, val in v.items():
+				if k not in s.get('properties', {}):
+					out += schema_problems(val, ap, '{}.{}'.format(where, k))
+					if len(out) > 5:
+						break
 		for k, x in s.get('properties', {}).items():
 			if k in v:
 				out += schema_problems(v[k], x, '{}.{}'.format(where, k))
@@ -875,7 +982,7 @@ class Kit(object):
 		inputs = dict(inputs or {})
 		ports = self.catalogue.get('in', [])
 		names = [x['name'] for x in ports]
-		need = [x['name'] for x in ports if not (x.get('type') or '').startswith('(maybe')]
+		need = [x['name'] for x in ports if not _is_optional_port(x)]
 		bad = [k for k in inputs if names and k not in names] + ['missing ' + k for k in need if k not in inputs]
 		if bad:
 			raise Refused('Inputs: {}. This unit takes: {}.'.format(', '.join(bad), ', '.join(names) or 'nothing'))
@@ -2423,6 +2530,8 @@ class Kit(object):
 				mx = ' max="{}"'.format(r['max']) if 'max' in r else ''
 				itype = 'range' if (ctrl == 'slider' and 'min' in r and 'max' in r) else 'number'
 				inp = '<input type="{}" data-rule="{}" data-type="number" value="{}"{}{}>'.format(itype, erid, _html.escape(str(val)), mn, mx)
+			elif r.get('type') in ('list', 'tuple', 'dict'):
+				inp = '<input type="text" data-rule="{}" data-type="{}" value="{}">'.format(erid, _html.escape(r['type']), _html.escape(json.dumps(val, ensure_ascii=False)))
 			else:
 				inp = '<input type="text" data-rule="{}" data-type="text" value="{}">'.format(erid, _html.escape(str(val)))
 			rows.append('<label class="rule-row"><span><strong>{}</strong> <small>{}</small></span>{}</label>'.format(elbl, erid, inp))

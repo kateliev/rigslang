@@ -15,11 +15,11 @@ VSCODE = os.path.join(HERE, 'vscode', 'syntaxes', 'rig.tmLanguage.json')
 SUBLIME = os.path.join(HERE, 'sublime', 'Rig.sublime-syntax')
 
 # - Regex parts (Oniguruma; both editors read the same patterns)
-W = r'[^\s();"][^\s();]*'          # a word that can be a name
-E = r'(?=[\s;]|$)'                 # the end of a word
-B = r'(?<![^\s(])'                 # the start of an argument
-A = r'(?=[\s();]|$)'               # the end of an argument
-PH = r'\{[A-Za-z_][\w-]*(?:\.[\w-]+)+\}'  # a rule named in a string: {group.name}
+W = r'[^\s()\[\]{},:?";][^\s()\[\]{},:?;]*'  # a word that can be a name
+E = r'(?=[\s;]|$)'                           # the end of a head word
+B = r'(?<![^\s(\[{,:])'                      # the start of an argument or collection item
+A = r'(?=[\s()\[\]{},:?;]|$)'                # the end of an argument or collection item
+PH = r'\{[A-Za-z_][\w-]*(?:\.[\w-]+)+\}'     # a rule named in a string: {group.name} or {group.name.key}
 
 # - Scopes
 MATRIX = 'keyword.other.matrix.rig'
@@ -55,16 +55,24 @@ HEADS = [
 # - Arguments, in order of priority
 ITEMS = [
 	('comment', r';.*$', {0: 'comment.line.semicolon.rig'}),
-	('regex', B + r'/(?:\\.|[^/\\])*/(?=[\s)]|$)', {0: 'string.regexp.rig'}),
+	('regex', B + r'/(?:\\.|[^/\\])*/(?=[\s)\],}]|$)', {0: 'string.regexp.rig'}),
 	('arrow', B + rf'(->)(?:\s+({W}))?', {1: 'keyword.operator.arrow.rig', 2: 'variable.function.target.rig'}),
 	('inline', B + r'(?:by|fail)' + A, {0: FLOW}),
 	('percent', B + r'\d+(?:\.\d+)?%' + A, {0: 'constant.numeric.rig'}),
 	('time', B + r'\d+[smhd]' + A, {0: 'constant.numeric.rig'}),
-	('bar', B + r'\|' + A, {0: 'punctuation.separator.rig'}),
+	('bar', r'\|', {0: 'punctuation.separator.rig'}),
 	('number', B + r'[-+]?\d+(?:\.\d+)?' + A, {0: 'constant.numeric.rig'}),
-	('constant', B + r'(?:on|off|true|false)' + A, {0: 'constant.language.rig'}),
+	('constant', B + r'(?:on|off|true|false|True|False|null|none|None)' + A, {0: 'constant.language.rig'}),
+	('builtin-type', B + r'(?:str|text|word|path|int|float|bool|list|dict|tuple|any|Literal)' + A, {0: 'support.type.rig'}),
+	('optional', r'\?', {0: 'keyword.operator.optional.rig'}),
+	('colon', r':', {0: 'punctuation.separator.key-value.rig'}),
+	('comma', r',', {0: 'punctuation.separator.comma.rig'}),
 	('paren-open', r'\(', {0: 'punctuation.section.parens.begin.rig'}),
 	('paren-close', r'\)', {0: 'punctuation.section.parens.end.rig'}),
+	('bracket-open', r'\[', {0: 'punctuation.section.brackets.begin.rig'}),
+	('bracket-close', r'\]', {0: 'punctuation.section.brackets.end.rig'}),
+	('brace-open', r'\{', {0: 'punctuation.section.braces.begin.rig'}),
+	('brace-close', r'\}', {0: 'punctuation.section.braces.end.rig'}),
 ]
 STRING = 'string.quoted.double.rig'
 ESCAPE = 'constant.character.escape.rig'

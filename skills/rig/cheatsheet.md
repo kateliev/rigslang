@@ -17,10 +17,14 @@ unit my-flow
   code steps steps.py
     test tests/test_steps.py
 
-  rule limits.max 100 "Max items"       ; number, on/off, choice, text, /regex/, (list)
-    range 1 1000
+  rule limits.max 100 "Max items"       ; number, on/off, choice, text, /regex/, [list], (tuple), {dict}
+    range 1 1000                        ; checks number, or every number in [list], (tuple), {dict}
     ui                                  ; expose as UI control (toggle|select|slider|number|input)
     note "where the value comes from"
+  rule limits.tiers {fast: 20, careful: 100} "Max items per mode"
+    range 1 1000
+  rule limits.bounds (0.5, 2.0) "Allowed scale (min, max)"
+    range 0.1 5.0
   rule batch.size 10 "Items per chunk"
     range 1 100
     ui
@@ -51,7 +55,7 @@ unit my-flow
     budget 3                            ; hard tool-call budget
     candidates 2                        ; return 2 distinct items of out type
     sees read classify
-    out (record title str summary str)
+    out {title: str, summary: str, note?: str}
   gate plan-ok hard "Plan valid" by gates.plan_ok
     retry 2
     fail -> stop "invalid plan"
@@ -80,9 +84,9 @@ unit my-flow
     step summary by steps.summary
 ```
 
-- **Types:** `str`, `text`, `word`, `path`, `int`, `float`, `bool`, `list`, `dict`, `any`, `(list T)`, `(tuple T1 T2 ...)`, `(record k1 T1 k2 T2 ...)`, `(maybe T)`, `(one-of v1 v2 ...)`.
+- **Types (AST-parsed Python/TS style):** `str`, `text`, `word`, `path`, `int`, `float`, `bool`, `list`, `dict`, `any`, `list[T]`, `tuple[T1, T2]` (or `(T1, T2)`), `dict[str, T]` (or `dict[T]`), `{k1: T1, k2?: T2}`, `T?` (or `T | None`), `"a" | "b"` (or `T1 | T2`).
 - **Paths (in `if`, `until`, `for`, `sees`):** dotted keys only (`a.b`), never expressions. Truthy = not missing, `null`, `false`, `""`, `[]`, `{}` (`0` is truthy).
-- **Rule reads:** inferred automatically from `R('group.name')` / `R.get('group.name')` in Python, `{group.name}` in text, and `retry`/`budget`/`candidates` rules.
+- **Rule reads & overrides:** inferred automatically from `R('group.name')` / `R.get('group.name')` in Python, `{group.name}` / `{group.name.key}` in text, and `retry`/`budget`/`candidates` rules. Override whole rules (`--set k=v`) or single dict keys (`--set group.name.key=v`).
 
 ## 2. Exact Python signatures
 

@@ -23,12 +23,12 @@ unit bookmarks
     note "relative to the tool folder; the export stays where it is"
   rule keep.bar on "Leave the favorites bar alone"
     note "a bookmark directly on the favorites bar is a shortcut that the person put there: it is never removed, grouped or moved"
-  rule dupes.tracking (utm_ fbclid gclid dclid msclkid mc_cid mc_eid igshid _hsenc _hsmi yclid) "Tracking parameters to ignore"
+  rule dupes.tracking ["utm_", "fbclid", "gclid", "dclid", "msclkid", "mc_cid", "mc_eid", "igshid", "_hsenc", "_hsmi", "yclid"] "Tracking parameters to ignore"
     note "a name that ends with _ is a prefix. These parameters do not change the page"
-  rule similar.skip_hosts (github.com youtube.com youtu.be google.com wikipedia.org stackoverflow.com reddit.com amazon.com medium.com x.com twitter.com facebook.com) "Sites with many separate pages: never group"
+  rule similar.skip_hosts ["github.com", "youtube.com", "youtu.be", "google.com", "wikipedia.org", "stackoverflow.com", "reddit.com", "amazon.com", "medium.com", "x.com", "twitter.com", "facebook.com"] "Sites with many separate pages: never group"
     note "on these sites a longer path is another page with its own content, not a variant. Add a site here to stop its groups. A sub-domain counts too (bg.wikipedia.org). Such a site has pages of many topics, so in sorting it never makes a bookmark misfiled and never points to a folder"
   rule similar.skip_pattern /^(docs|developer|developers|support|help|wiki)\./ "Host names of documentation sites: never group"
-  rule similar.index_names (index index.html index.htm index.php home default.aspx default.htm) "Last parts of a path that name the same page as the folder"
+  rule similar.index_names ["index", "index.html", "index.htm", "index.php", "home", "default.aspx", "default.htm"] "Last parts of a path that name the same page as the folder"
     note "home.org/index.html is home.org; code folds such a variant when the short URL is a bookmark too"
   rule similar.max_group 8 "Largest group to show to the person"
     range 2 50
@@ -109,7 +109,7 @@ unit bookmarks
       step sort "Sort the batch" by model
         do "for each bookmark of the batch, first write topic: what the page is about, in a few words. Name the subject, not the site: for a shop, what it sells; for a profile, what the person makes. Then pick the choice whose folder is about that topic. now is the number of its present folder: pick now when that folder fits the topic, and move the bookmark only when another choice fits clearly better. Look only at the choices of that bookmark, and decide each bookmark once. When no choice fits, keep pick and also give \"folder\": the whole path of a folder of map, with > between the names; folder then counts in place of pick. When no folder fits at all, give as folder the whole path of a new folder under a folder of a choice or of map, and \"new\": true; at most {sort.new_per_batch} new folders in this batch. A folder of new_so_far needs no \"new\". Give the result as a list with one object for each bookmark: {\"id\": <id>, \"topic\": \"<a few words>\", \"pick\": <number>}. Do not change a URL or a title. When waiting has problems, your last answer failed: fix them"
         sees prepare.batch prepare.of prepare.bookmarks prepare.map prepare.new_so_far
-        out (list (record id int topic str pick int folder (maybe str) new (maybe bool)))
+        out list[{id: int, topic: str, pick: int, folder?: str, new?: bool}]
       gate sort-ok hard "Every bookmark once, in a known folder"
         check "the answer has every id of the batch once and no other id, no changed URL or title, a pick that is one of the choices of that bookmark, or a folder (it counts in place of the pick) of the file or a new folder under one, at most {sort.new_per_batch} new folders in the batch and {sort.new_max} in all"
         by gates.sort_ok

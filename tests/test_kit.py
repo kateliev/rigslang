@@ -56,7 +56,7 @@ LOOPS = '''unit loops
     fail -> held "too many left"
     step draft by model
       do "give a number"
-      out (record v int)
+      out {v: int}
       timeout 1h
     gate even hard
       check "the number is even"
@@ -169,17 +169,20 @@ class Runs(unittest.TestCase):
 		with self.assertRaises(rigkit.Refused):
 			kit().run({'n': True})
 
-	def test_schema_problems_maybe_and_tuple(self):
-		maybe_int = rig.type_schema(rig.tokenize('(maybe int)', 1)[0])
+	def test_schema_problems_optional_tuple_and_dict(self):
+		maybe_int = rig.type_schema('int?')
 		self.assertEqual(rigkit.schema_problems(None, maybe_int), [])
 		self.assertEqual(rigkit.schema_problems(5, maybe_int), [])
 		self.assertTrue(rigkit.schema_problems('banana', maybe_int))
 		self.assertTrue(rigkit.schema_problems(True, maybe_int))
-		pair = rig.type_schema(rig.tokenize('(tuple str int)', 1)[0])
+		pair = rig.type_schema('tuple[str, int]')
 		self.assertEqual(rigkit.schema_problems(['a', 1], pair), [])
 		self.assertTrue(rigkit.schema_problems(['a'], pair))
 		self.assertTrue(rigkit.schema_problems(['a', 1, 2], pair))
 		self.assertTrue(rigkit.schema_problems(['a', 'b'], pair))
+		dyn_map = rig.type_schema('dict[str, float]')
+		self.assertEqual(rigkit.schema_problems({'x': 1.5, 'y': 2}, dyn_map), [])
+		self.assertTrue(rigkit.schema_problems({'x': 'bad'}, dyn_map))
 
 	def test_answers_and_refusals(self):
 		k = kit()
@@ -381,7 +384,7 @@ class Blocks(unittest.TestCase):
 				if s['x'] == 2 and len(seen) < 4:
 					raise KeyboardInterrupt  # the process stops in the middle of item 2
 				return True
-			text = LOOPS.replace('    step draft by model\n      do "give a number"\n      out (record v int)\n      timeout 1h\n', '')
+			text = LOOPS.replace('    step draft by model\n      do "give a number"\n      out {v: int}\n      timeout 1h\n', '')
 			text = text.replace('      retry loop.rounds\n', '')
 			with self.assertRaises(KeyboardInterrupt):
 				loops(runs=tmp, text=text, even=even).run({'n': 4})
@@ -1588,6 +1591,53 @@ class RigV2Runtime(unittest.TestCase):
 			finally:
 				srv.shutdown()
 				srv.server_close()
+		finally:
+			shutil.rmtree(tmp)
+
+	def test_dict_and_tuple_rule_overrides_and_cli_dotted_set(self):
+		src = '''unit cfg
+  intent "check {tiers.depth.large} and {scale.bounds}"
+  in x int? "optional x"
+  out dict[str, int]
+  code s s.py
+  rule tiers.depth {small: 10, large: 40} "Depth per tier"
+    range 0 100
+    ui
+  rule scale.bounds (0.5, 2.0) "Scale range"
+    range 0.1 5.0
+  step calc by s.calc
+    reads tiers.depth scale.bounds
+  end done "Done"
+'''
+		tmp = tempfile.mkdtemp()
+		try:
+			seen = {}
+
+			def calc(st, R):
+				seen['depth'] = dict(R('tiers.depth'))
+				seen['bounds'] = list(R('scale.bounds'))
+				seen['filled'] = R.fill('large={tiers.depth.large}')
+				return seen['depth']
+
+			k = rigkit.Kit(catalogue(src), runs=os.path.join(tmp, 'runs')).bind('s', {'calc': calc})
+			# Optional input omitted -> accepted
+			r1 = k.run({})
+			self.assertEqual(r1['outcome']['end'], 'done')
+			self.assertEqual(seen['depth'], {'small': 10, 'large': 40})
+			self.assertEqual(seen['bounds'], [0.5, 2.0])
+			self.assertEqual(seen['filled'], 'large=40')
+			# CLI dotted key override on dict rule + JSON tuple override
+			lines = []
+			code = k.cli(['run', '{}', '--set', 'tiers.depth.large=55', '--set', 'scale.bounds=[0.8, 1.8]'], out=lines.append)
+			self.assertEqual(code, 0, lines)
+			self.assertEqual(seen['depth'], {'small': 10, 'large': 55})
+			self.assertEqual(seen['bounds'], [0.8, 1.8])
+			self.assertEqual(seen['filled'], 'large=55')
+			# Out-of-range dict key and wrong tuple arity are refused
+			with self.assertRaises(ValueError):
+				k.run({}, rules={'tiers.depth.large': 250})
+			with self.assertRaises(ValueError):
+				k.run({}, rules={'scale.bounds': [0.8]})
 		finally:
 			shutil.rmtree(tmp)
 

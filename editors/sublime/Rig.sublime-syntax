@@ -10,16 +10,16 @@ file_extensions: [rig]
 contexts:
   main:
     - include: comment
-    - match: '^(unit)\s+([^\s();"][^\s();]*)'
+    - match: '^(unit)\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*)'
       captures:
         1: storage.type.unit.rig
         2: entity.name.type.unit.rig
-    - match: '^\s*(in)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?(?:\s+([^\s();"][^\s();]*))?'
+    - match: '^\s*(in)(?=[\s;]|$)(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?'
       captures:
         1: keyword.other.matrix.rig
         2: variable.parameter.input.rig
         3: support.type.rig
-    - match: '^\s*(out)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?'
+    - match: '^\s*(out)(?=[\s;]|$)(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?'
       captures:
         1: keyword.other.matrix.rig
         2: support.type.rig
@@ -29,44 +29,44 @@ contexts:
     - match: '^\s*(code|test|queue)(?=[\s;]|$)'
       captures:
         1: keyword.other.context.rig
-    - match: '^\s*(rule)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?'
+    - match: '^\s*(rule)(?=[\s;]|$)(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?'
       captures:
         1: storage.type.rule.rig
         2: entity.name.constant.rule.rig
-    - match: '^\s*(preset)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?'
+    - match: '^\s*(preset)(?=[\s;]|$)(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?'
       captures:
         1: storage.type.rule.rig
         2: entity.name.constant.preset.rig
-    - match: '^\s*(set)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?'
+    - match: '^\s*(set)(?=[\s;]|$)(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?'
       captures:
         1: keyword.other.context.rig
         2: variable.other.constant.rule.rig
     - match: '^\s*(note|options|range|ui)(?=[\s;]|$)'
       captures:
         1: keyword.other.context.rig
-    - match: '^\s*(step|reason|end)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?'
+    - match: '^\s*(step|reason|end)(?=[\s;]|$)(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?'
       captures:
         1: storage.type.node.rig
         2: entity.name.function.node.rig
-    - match: '^\s*(gate)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?(?:\s+(hard|soft|model|human)(?=[\s;]|$))?'
+    - match: '^\s*(gate)(?=[\s;]|$)(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?(?:\s+(hard|soft|model|human)(?=[\s;]|$))?'
       captures:
         1: storage.type.node.rig
         2: entity.name.function.node.rig
         3: storage.modifier.gate.rig
-    - match: '^\s*(for)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?(?:\s+(in)(?=[\s;]|$))?(?:\s+([^\s();"][^\s();]*))?'
+    - match: '^\s*(for)(?=[\s;]|$)(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?(?:\s+(in)(?=[\s;]|$))?(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?'
       captures:
         1: keyword.control.block.rig
         2: variable.other.item.rig
         3: keyword.control.block.rig
         4: variable.other.path.rig
-    - match: '^\s*(until|if)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?'
+    - match: '^\s*(until|if)(?=[\s;]|$)(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?'
       captures:
         1: keyword.control.block.rig
         2: variable.other.path.rig
     - match: '^\s*(else|section|rollback|finally)(?=[\s;]|$)'
       captures:
         1: keyword.control.block.rig
-    - match: '^\s*(by)(?=[\s;]|$)(?:\s+([^\s();"][^\s();]*))?'
+    - match: '^\s*(by)(?=[\s;]|$)(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?'
       captures:
         1: keyword.control.flow.rig
         2: support.function.rig
@@ -97,46 +97,70 @@ contexts:
     - include: bar
     - include: number
     - include: constant
+    - include: builtin-type
+    - include: optional
+    - include: colon
+    - include: comma
     - include: paren-open
     - include: paren-close
+    - include: bracket-open
+    - include: bracket-close
+    - include: brace-open
+    - include: brace-close
 
   comment:
     - match: ';.*$'
       scope: comment.line.semicolon.rig
 
   regex:
-    - match: '(?<![^\s(])/(?:\\.|[^/\\])*/(?=[\s)]|$)'
+    - match: '(?<![^\s(\[{,:])/(?:\\.|[^/\\])*/(?=[\s)\],}]|$)'
       scope: string.regexp.rig
 
   arrow:
-    - match: '(?<![^\s(])(->)(?:\s+([^\s();"][^\s();]*))?'
+    - match: '(?<![^\s(\[{,:])(->)(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?'
       captures:
         1: keyword.operator.arrow.rig
         2: variable.function.target.rig
 
   inline:
-    - match: '(?<![^\s(])(?:by|fail)(?=[\s();]|$)'
+    - match: '(?<![^\s(\[{,:])(?:by|fail)(?=[\s()\[\]{},:?;]|$)'
       scope: keyword.control.flow.rig
 
   percent:
-    - match: '(?<![^\s(])\d+(?:\.\d+)?%(?=[\s();]|$)'
+    - match: '(?<![^\s(\[{,:])\d+(?:\.\d+)?%(?=[\s()\[\]{},:?;]|$)'
       scope: constant.numeric.rig
 
   time:
-    - match: '(?<![^\s(])\d+[smhd](?=[\s();]|$)'
+    - match: '(?<![^\s(\[{,:])\d+[smhd](?=[\s()\[\]{},:?;]|$)'
       scope: constant.numeric.rig
 
   bar:
-    - match: '(?<![^\s(])\|(?=[\s();]|$)'
+    - match: '\|'
       scope: punctuation.separator.rig
 
   number:
-    - match: '(?<![^\s(])[-+]?\d+(?:\.\d+)?(?=[\s();]|$)'
+    - match: '(?<![^\s(\[{,:])[-+]?\d+(?:\.\d+)?(?=[\s()\[\]{},:?;]|$)'
       scope: constant.numeric.rig
 
   constant:
-    - match: '(?<![^\s(])(?:on|off|true|false)(?=[\s();]|$)'
+    - match: '(?<![^\s(\[{,:])(?:on|off|true|false|True|False|null|none|None)(?=[\s()\[\]{},:?;]|$)'
       scope: constant.language.rig
+
+  builtin-type:
+    - match: '(?<![^\s(\[{,:])(?:str|text|word|path|int|float|bool|list|dict|tuple|any|Literal)(?=[\s()\[\]{},:?;]|$)'
+      scope: support.type.rig
+
+  optional:
+    - match: '\?'
+      scope: keyword.operator.optional.rig
+
+  colon:
+    - match: ':'
+      scope: punctuation.separator.key-value.rig
+
+  comma:
+    - match: ','
+      scope: punctuation.separator.comma.rig
 
   paren-open:
     - match: '\('
@@ -145,6 +169,22 @@ contexts:
   paren-close:
     - match: '\)'
       scope: punctuation.section.parens.end.rig
+
+  bracket-open:
+    - match: '\['
+      scope: punctuation.section.brackets.begin.rig
+
+  bracket-close:
+    - match: '\]'
+      scope: punctuation.section.brackets.end.rig
+
+  brace-open:
+    - match: '\{'
+      scope: punctuation.section.braces.begin.rig
+
+  brace-close:
+    - match: '\}'
+      scope: punctuation.section.braces.end.rig
 
   string:
     - match: '"'
@@ -165,5 +205,5 @@ contexts:
     - match: '$\n?'
       pop: true
     - include: comment
-    - match: '[^\s();"][^\s();]*'
+    - match: '[^\s()\[\]{},:?";][^\s()\[\]{},:?;]*'
       scope: variable.other.constant.rule.rig

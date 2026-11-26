@@ -3,22 +3,28 @@
 		"lineComment": ";"
 	},
 	"brackets": [
-		["(", ")"]
+		["(", ")"],
+		["[", "]"],
+		["{", "}"]
 	],
 	"autoClosingPairs": [
 		{ "open": "(", "close": ")" },
+		{ "open": "[", "close": "]" },
+		{ "open": "{", "close": "}" },
 		{ "open": "\"", "close": "\"", "notIn": ["string", "comment"] }
 	],
 	"surroundingPairs": [
 		["(", ")"],
+		["[", "]"],
+		["{", "}"],
 		["\"", "\""]
 	],
 	"folding": {
 		"offSide": true
 	},
-	"wordPattern": "[^\s();\"]+",
+	"wordPattern": "[^\\s()\\[\\]{},:;\"]+",
 	"indentationRules": {
-		"increaseIndentPattern": "^\s*(unit|rule|step|gate|note|code|preset|for|until|if|else|section|finally)\b.*$",
-		"decreaseIndentPattern": "^\s*$"
+		"increaseIndentPattern": "^\\s*(unit|intent|rule|step|reason|gate|queue|note|code|preset|for|until|if|else|section|rollback|finally)\\b.*$",
+		"decreaseIndentPattern": "^\\s*$"
 	}
 }

@@ -47,7 +47,15 @@ UI_CONTROLS = ('toggle', 'select', 'slider', 'number', 'input')
 LEVELS = ('none', 'code', 'tested')  # low to high; "model" and "human" are apart
 MATRIX = ('in', 'out', 'intent')
 BASE_TYPES = ('str', 'text', 'word', 'path', 'int', 'float', 'bool', 'list', 'dict', 'any')
-TYPE_LISTS = ('list', 'tuple', 'record', 'maybe', 'one-of')
+PAIRS = {'(': ')', '[': ']', '{': '}'}
+CLOSERS = {')': '(', ']': '[', '}': '{'}
+LEGACY_TYPES = {
+	'list': 'write list[T] instead of (list T)',
+	'tuple': 'write tuple[T1, T2] or (T1, T2) instead of (tuple ...)',
+	'record': 'write {field: type, ...} instead of (record ...)',
+	'maybe': 'write T? or T | None instead of (maybe T)',
+	'one-of': 'write "a" | "b" instead of (one-of ...)',
+}
 NODE_KIDS = {
 	'step': {'do', 'by', 'reads', 'sees', 'out', 'brief', 'timeout', 'if', 'note'},
 	'reason': {'intent', 'do', 'mode', 'reads', 'sees', 'tools', 'budget', 'candidates', 'out', 'brief', 'timeout', 'if', 'note'},
@@ -115,15 +123,45 @@ class Node(object):
 
 
 # - Parsing ------------------------------------------
+def _scan_balanced(s, i, line):
+	'''Scan balanced (...), [...], or {...} starting at i (where s[i] in PAIRS), skipping quoted strings.'''
+	n = len(s)
+	stack = [s[i]]
+	j = i + 1
+	while j < n and stack:
+		ch = s[j]
+		if ch in ('"', "'"):
+			q = ch
+			j += 1
+			while j < n and s[j] != q:
+				j += 2 if s[j] == '\\' else 1
+			if j >= n:
+				raise RigError(line, 'the string is not closed')
+			j += 1
+			continue
+		if ch in PAIRS:
+			stack.append(ch)
+		elif ch in CLOSERS:
+			if stack[-1] != CLOSERS[ch]:
+				raise RigError(line, '"{}" does not match "{}"'.format(ch, stack[-1]))
+			stack.pop()
+		j += 1
+	if stack:
+		raise RigError(line, 'a "{}" is not closed'.format(stack[-1]))
+	if j < n and s[j] == '?':
+		j += 1
+	return j
+
+
 def tokenize(s, line, spans=None):
-	'''One line (without its indentation) -> a list of args: (kind, text) or ('list', [...]).
+	'''One line (without its indentation) -> a list of args: (kind, text).
 	spans: a list that gets (start, end) of each top-level arg in s.'''
-	out, stack, i, n = [], [], 0, len(s)
+	out, i, n = [], 0, len(s)
 	start = 0
 	while i < n:
-		if spans is not None and not stack and len(spans) < len(out):
+		if spans is not None and len(spans) < len(out):
 			spans.append((start, i))
-		if not stack and s[i] not in ' \t':
+		if s[i] not in ' \t':
 			start = i
 		c = s[i]
 		if c in ' \t':
@@ -131,6 +169,8 @@ def tokenize(s, line, spans=None):
 			continue
 		if c == ';':
 			break
+		if c in CLOSERS:
+			raise RigError(line, 'a "{}" without "{}"'.format(c, CLOSERS[c]))
 		if c == '"':
 			j = i + 1
 			while j < n and s[j] != '"':
@@ -140,42 +180,41 @@ def tokenize(s, line, spans=None):
 			out.append(('str', s[i:j + 1]))
 			i = j + 1
 			continue
-		if c == '(':
-			stack.append(out)
-			out = []
-			i += 1
-			continue
-		if c == ')':
-			if not stack:
-				raise RigError(line, 'a ")" without "("')
-			inner, out = out, stack.pop()
-			out.append(('list', inner))
-			i += 1
+		if c in PAIRS:
+			j = _scan_balanced(s, i, line)
+			out.append(('expr', s[i:j]))
+			i = j
 			continue
 		if c == '/':
 			j = i + 1
 			while j < n and s[j] != '/':
 				j += 2 if s[j] == '\\' else 1
-			if j < n and (j + 1 == n or s[j + 1] in ' \t)'):
+			if j < n and (j + 1 == n or s[j + 1] in ' \t)]};'):
 				out.append(('re', s[i:j + 1]))
 				i = j + 1
 				continue
 		j = i
-		while j < n and s[j] not in ' \t();':
+		while j < n and s[j] not in ' \t;([{}])':
 			j += 1
+		if j < n and s[j] == '[':
+			j = _scan_balanced(s, j, line)
+			out.append(('expr', s[i:j]))
+			i = j
+			continue
 		w = s[i:j]
-		out.append(('num' if NUMBER.match(w) else 'word', w))
+		if w.endswith('?') and len(w) > 1:
+			out.append(('expr', w))
+		else:
+			out.append(('num' if NUMBER.match(w) else 'word', w))
 		i = j
-	if stack:
-		raise RigError(line, 'a "(" is not closed')
 	if spans is not None and len(spans) < len(out):
 		spans.append((start, i))
 	return out
 
 
-
-
 def ser(arg):
+	if isinstance(arg, str):
+		return arg
 	kind, v = arg
 	return '(' + ' '.join(ser(a) for a in v) + ')' if kind == 'list' else v
 
@@ -222,8 +261,129 @@ def parse(text):
 	return root
 
 
-# - Values and types ---------------------------------
-def value(arg):
+# - Values and types (parsed via Python AST) ---------
+KEY_IDENT = re.compile(r'[A-Za-z_][\w-]*')
+
+
+class _ParseProblem(Exception):
+	pass
+
+
+def _prep_python_expr(raw, allow_opt=False):
+	'''Normalize JS-style bare object keys ({Light: 20, a?: str}) and postfix T? into valid Python AST syntax.'''
+	out, stack, i, n = [], [], 0, len(raw)
+	expect_key = False
+	while i < n:
+		ch = raw[i]
+		if ch in ('"', "'"):
+			q = ch
+			j = i + 1
+			while j < n and raw[j] != q:
+				j += 2 if raw[j] == '\\' else 1
+			if j >= n:
+				raise _ParseProblem('the string is not closed')
+			lit = raw[i:j + 1]
+			i = j + 1
+			if allow_opt and stack and stack[-1] == '{' and expect_key:
+				k = i
+				while k < n and raw[k] in ' \t':
+					k += 1
+				if raw[k:k + 2] == '?:':
+					key_val = ast.literal_eval(lit)
+					out.append(repr('__opt__' + str(key_val)) + ':')
+					i = k + 2
+					expect_key = False
+					continue
+			out.append(lit)
+			if stack and stack[-1] == '{' and expect_key:
+				k = i
+				while k < n and raw[k] in ' \t':
+					k += 1
+				if raw[k:k + 1] == ':':
+					expect_key = False
+			continue
+		if ch in PAIRS:
+			stack.append(ch)
+			expect_key = (ch == '{')
+			out.append(ch)
+			i += 1
+			continue
+		if ch in CLOSERS:
+			if stack:
+				stack.pop()
+			expect_key = False
+			out.append(ch)
+			i += 1
+			continue
+		if ch == ',':
+			if stack and stack[-1] == '{':
+				expect_key = True
+			out.append(ch)
+			i += 1
+			continue
+		if stack and stack[-1] == '{' and expect_key and (ch.isalpha() or ch == '_'):
+			m = KEY_IDENT.match(raw, i)
+			if m:
+				k = m.end()
+				while k < n and raw[k] in ' \t':
+					k += 1
+				if allow_opt and raw[k:k + 2] == '?:':
+					out.append(repr('__opt__' + m.group(0)) + ':')
+					i = k + 2
+					expect_key = False
+					continue
+				if raw[k:k + 1] == ':':
+					out.append(repr(m.group(0)) + ':')
+					i = k + 1
+					expect_key = False
+					continue
+		if allow_opt and ch == '?':
+			out.append(' | None')
+			i += 1
+			continue
+		out.append(ch)
+		i += 1
+	return ''.join(out)
+
+
+def _eval_ast_val(node):
+	if isinstance(node, ast.Constant):
+		if isinstance(node.value, (str, int, float, bool)) or node.value is None:
+			return node.value
+		raise _ParseProblem('unsupported literal value')
+	if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)) and isinstance(node.operand, ast.Constant):
+		v = node.operand.value
+		if isinstance(v, (int, float)) and not isinstance(v, bool):
+			return -v if isinstance(node.op, ast.USub) else +v
+	if isinstance(node, ast.Name):
+		return {'true': True, 'True': True, 'false': False, 'False': False, 'null': None, 'none': None, 'None': None}.get(node.id, node.id)
+	if isinstance(node, ast.List):
+		return [_eval_ast_val(x) for x in node.elts]
+	if isinstance(node, ast.Tuple):
+		return [_eval_ast_val(x) for x in node.elts]
+	if isinstance(node, ast.Dict):
+		d = {}
+		for k_node, v_node in zip(node.keys, node.values):
+			if k_node is None:
+				raise _ParseProblem('dict unpacking is not allowed in a literal')
+			if isinstance(k_node, ast.Constant) and isinstance(k_node.value, str):
+				k = k_node.value
+			elif isinstance(k_node, ast.Name):
+				k = k_node.id
+			else:
+				raise _ParseProblem('dict keys must be strings or names')
+			if k in d:
+				raise _ParseProblem('duplicate key "{}" in dict'.format(k))
+			d[k] = _eval_ast_val(v_node)
+		return d
+	raise _ParseProblem('expressions are not allowed: write a static literal ([list], (tuple), or {key: value})')
+
+
+def parse_literal(arg):
+	'''Parse a value token -> (kind_name, python_value, error_or_None).
+	kind_name is one of: str, number, pattern, switch, list, tuple, dict, word.'''
+	if arg is None:
+		return None, None, 'no value'
 	kind, v = arg
 	if kind == 'str':
 		out, i = [], 1
@@ -235,127 +395,342 @@ def value(arg):
 			else:
 				out.append(v[i])
 				i += 1
-		return ''.join(out)
+		return 'str', ''.join(out), None
 	if kind == 'num':
-		return float(v) if '.' in v else int(v)
-	if kind == 'list':
-		return [value(a) for a in v]
+		return 'number', (float(v) if '.' in v else int(v)), None
 	if kind == 're':
-		return v[1:-1]
-	return {'true': True, 'false': False, 'on': True, 'off': False, 'none': None}.get(v, v)
+		return 'pattern', v[1:-1], None
+	if kind == 'list':  # synthetic compatibility if constructed directly
+		return 'list', [value(a) for a in v], None
+	if kind == 'expr':
+		raw = v.strip()
+		if not raw or raw[0] not in '([{':
+			return 'word', raw, 'write a value: number, "string", on/off, [list], (tuple), or {key: value}'
+		try:
+			norm = _prep_python_expr(raw, allow_opt=False)
+			body = ast.parse(norm, mode='eval').body
+		except (_ParseProblem, SyntaxError):
+			if raw.startswith('(') and ',' not in raw:
+				return 'tuple', None, 'use [a, b] for a list, or (a, b) with commas for a tuple'
+			return {'[': 'list', '(': 'tuple', '{': 'dict'}[raw[0]], None, 'invalid {} literal: write valid Python/JS syntax (for example [1, 2], (0.5, 2.0), or {{Light: 20, Heavy: 48}})'.format({'[': 'list', '(': 'tuple', '{': 'dict'}[raw[0]])
+		if raw.startswith('(') and not isinstance(body, ast.Tuple):
+			return 'tuple', None, 'a single-item tuple needs a trailing comma: write (x,), or [x] for a list'
+		try:
+			val = _eval_ast_val(body)
+		except _ParseProblem as e:
+			return {'[': 'list', '(': 'tuple', '{': 'dict'}[raw[0]], None, str(e)
+		if isinstance(body, ast.List):
+			return 'list', val, None
+		if isinstance(body, ast.Tuple):
+			return 'tuple', val, None
+		if isinstance(body, ast.Dict):
+			return 'dict', val, None
+		return 'word', val, 'invalid literal value'
+	mapped = {'true': True, 'false': False, 'on': True, 'off': False, 'none': None}
+	if v in ('on', 'off'):
+		return 'switch', v == 'on', None
+	return 'word', mapped.get(v, v), None
 
 
-def type_parts(t):
-	'''A type list -> (its head word, the rest of its items).'''
-	items = t[1]
-	return (items[0][1] if items and items[0][0] == 'word' else None), items[1:]
+def value(arg):
+	_, val, err = parse_literal(arg)
+	if err is not None:
+		return arg[1] if isinstance(arg, tuple) else arg
+	return val
 
 
-def is_maybe(t):
-	return t is not None and t[0] == 'list' and type_parts(t)[0] == 'maybe'
+def _flatten_bitor(node):
+	if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+		return _flatten_bitor(node.left) + _flatten_bitor(node.right)
+	return [node]
+
+
+def _lit_const(node):
+	if isinstance(node, ast.Constant):
+		if isinstance(node.value, (str, int, float, bool)) or node.value is None:
+			return node.value
+	if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)) and isinstance(node.operand, ast.Constant):
+		v = node.operand.value
+		if isinstance(v, (int, float)) and not isinstance(v, bool):
+			return -v if isinstance(node.op, ast.USub) else +v
+	if isinstance(node, ast.Name):
+		if node.id in ('true', 'True'):
+			return True
+		if node.id in ('false', 'False'):
+			return False
+		if node.id in ('null', 'none', 'None'):
+			return None
+	raise _ParseProblem('not a literal')
+
+
+def _subscript_args(node, src):
+	if not isinstance(node.slice, ast.Tuple):
+		return [node.slice]
+	seg = ast.get_source_segment(src, node) if src else None
+	if seg and '[' in seg and seg.endswith(']'):
+		inner = seg[seg.index('[') + 1:-1].strip()
+		if inner.startswith('(') and _scan_balanced(inner, 0, 0) == len(inner):
+			return [node.slice]
+	return list(node.slice.elts)
+
+
+def _ast_to_type_ir(node, src=''):
+	if isinstance(node, ast.Name):
+		if node.id in BASE_TYPES:
+			return ('base', node.id)
+		if node.id in ('None', 'null', 'none'):
+			return ('null',)
+		raise _ParseProblem('type "{}" is not known: use {}, list[T], tuple[T1, T2], dict[str, T], {{field: T}}, T?, or "a" | "b"'.format(node.id, ', '.join(BASE_TYPES)))
+	if isinstance(node, ast.Constant) or (isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd))):
+		v = _lit_const(node)
+		return ('null',) if v is None else ('lit', v)
+	if isinstance(node, ast.Subscript):
+		if not isinstance(node.value, ast.Name):
+			raise _ParseProblem('a generic type starts with list, tuple, dict, or Literal')
+		head = node.value.id
+		elts = _subscript_args(node, src)
+		if head == 'list':
+			if len(elts) != 1:
+				raise _ParseProblem('list[T] takes one type')
+			return ('list', _ast_to_type_ir(elts[0], src))
+		if head == 'tuple':
+			if not elts:
+				raise _ParseProblem('tuple[T1, T2, ...] needs types')
+			return ('tuple', [_ast_to_type_ir(e, src) for e in elts])
+		if head == 'dict':
+			if len(elts) == 1:
+				return ('dict_of', _ast_to_type_ir(elts[0], src))
+			if len(elts) == 2:
+				kt = _ast_to_type_ir(elts[0], src)
+				if kt[0] != 'base' or kt[1] not in ('str', 'text', 'word', 'path', 'any'):
+					raise _ParseProblem('dict[K, V] key type must be str (JSON object keys are strings)')
+				return ('dict_of', _ast_to_type_ir(elts[1], src))
+			raise _ParseProblem('write dict[str, T]')
+		if head == 'Literal':
+			if not elts:
+				raise _ParseProblem('Literal[...] needs values')
+			vals = []
+			for e in elts:
+				vals.append(e.id if isinstance(e, ast.Name) and e.id not in ('true', 'True', 'false', 'False', 'null', 'none', 'None') else _lit_const(e))
+			return ('enum', vals)
+		raise _ParseProblem('type "{}[...]" is not known: use list[T], tuple[T1, T2], dict[str, T], or Literal[...]'.format(head))
+	if isinstance(node, ast.Tuple):
+		if not node.elts:
+			raise _ParseProblem('tuple type needs at least one type')
+		return ('tuple', [_ast_to_type_ir(e, src) for e in node.elts])
+	if isinstance(node, ast.Dict):
+		if not node.keys:
+			raise _ParseProblem('record type {} needs at least one field (use dict for any object)')
+		fields, seen = [], set()
+		for k_node, v_node in zip(node.keys, node.values):
+			if not (isinstance(k_node, ast.Constant) and isinstance(k_node.value, str)):
+				raise _ParseProblem('a record field name must be a word or string')
+			raw_k = k_node.value
+			opt = raw_k.startswith('__opt__')
+			fname = raw_k[7:] if opt else raw_k
+			if not fname:
+				raise _ParseProblem('empty record field name')
+			if fname in seen:
+				raise _ParseProblem('duplicate field "{}" in record type'.format(fname))
+			seen.add(fname)
+			ft = _ast_to_type_ir(v_node, src)
+			if opt and not _ir_nullable(ft):
+				ft = ('nullable', ft)
+			elif _ir_nullable(ft):
+				opt = True
+			fields.append((fname, ft, opt))
+		return ('record', fields)
+	if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+		parts = [_ast_to_type_ir(x, src) for x in _flatten_bitor(node)]
+		has_null = any(p[0] == 'null' for p in parts)
+		non_null = [p for p in parts if p[0] != 'null']
+		if not non_null:
+			return ('null',)
+		if all(p[0] in ('lit', 'enum') for p in non_null):
+			vals = []
+			for p in non_null:
+				for x in ([p[1]] if p[0] == 'lit' else p[1]):
+					if x not in vals:
+						vals.append(x)
+			enum_ir = ('enum', vals)
+			return ('nullable', enum_ir) if has_null else enum_ir
+		if len(non_null) == 1 and has_null:
+			return ('nullable', non_null[0])
+		branches = list(non_null) + ([('null',)] if has_null else [])
+		return ('union', branches)
+	raise _ParseProblem('invalid type syntax: use {}, list[T], tuple[T1, T2], dict[str, T], {{field: T}}, T?, or "a" | "b"'.format(', '.join(BASE_TYPES)))
+
+
+def _ir_nullable(ir):
+	if ir is None:
+		return False
+	if ir[0] in ('null', 'nullable'):
+		return True
+	if ir[0] == 'union':
+		return any(_ir_nullable(b) for b in ir[1])
+	return False
+
+
+def parse_type(t):
+	'''Parse a type string or token -> (ir, error_or_None).'''
+	if t is None:
+		return None, None
+	raw = (ser(t) if isinstance(t, tuple) else str(t)).strip()
+	if not raw:
+		return None, 'empty type'
+	m_leg = re.match(r'^\(\s*(list|tuple|record|maybe|one-of)\b', raw)
+	if m_leg:
+		return None, LEGACY_TYPES[m_leg.group(1)]
+	if raw.startswith('(') and ',' not in raw:
+		return None, 'write tuple[T1, T2] or (T1, T2) with commas for a tuple type'
+	try:
+		norm = _prep_python_expr(raw, allow_opt=True)
+		body = ast.parse(norm, mode='eval').body
+		return _ast_to_type_ir(body, norm), None
+	except _ParseProblem as e:
+		return None, str(e)
+	except SyntaxError:
+		return None, 'invalid type "{}": use {}, list[T], tuple[T1, T2], dict[str, T], {{field: T}}, T?, or "a" | "b"'.format(raw, ', '.join(BASE_TYPES))
+
+
+def is_optional(t):
+	ir, err = parse_type(t)
+	return False if err or ir is None else _ir_nullable(ir)
+
+
+is_maybe = is_optional
 
 
 def type_problem(t):
 	'''-> None, or a short text that says what is wrong with the type.'''
-	if t[0] == 'word':
-		return None if t[1] in BASE_TYPES else 'type "{}" is not known: use {} or a type list'.format(t[1], ', '.join(BASE_TYPES))
-	if t[0] != 'list':
-		return 'a type is a word or a list'
-	head, rest = type_parts(t)
-	if head not in TYPE_LISTS:
-		return 'a type list starts with ' + ', '.join(TYPE_LISTS)
-	if head in ('list', 'maybe'):
-		return type_problem(rest[0]) if len(rest) == 1 else '({} T) takes one type'.format(head)
-	if head == 'tuple':
-		return next((p for p in map(type_problem, rest) if p), None) if rest else '(tuple T …) needs types'
-	if head == 'record':
-		if not rest or len(rest) % 2:
-			return 'write (record name type …)'
-		for i in range(0, len(rest), 2):
-			if rest[i][0] != 'word':
-				return 'a record field name is a word'
-			p = type_problem(rest[i + 1])
-			if p:
-				return p
-		return None
-	return None if rest else '(one-of …) needs values'
+	_, err = parse_type(t)
+	return err
 
 
-def type_ok(v, t):
-	'''Does the value v (as JSON gives it) match the type token t?'''
-	if t is None:
+def _val_eq(a, b):
+	if isinstance(a, bool) or isinstance(b, bool):
+		return type(a) is type(b) and a == b
+	if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+		return a == b
+	return type(a) is type(b) and a == b
+
+
+def _ir_ok(v, ir):
+	kind = ir[0]
+	if kind == 'base':
+		w = ir[1]
+		if w in ('str', 'text', 'word', 'path'):
+			return isinstance(v, str)
+		if w == 'int':
+			return isinstance(v, int) and not isinstance(v, bool)
+		if w == 'float':
+			return isinstance(v, (int, float)) and not isinstance(v, bool)
+		if w == 'bool':
+			return isinstance(v, bool)
+		if w == 'list':
+			return isinstance(v, list)
+		if w == 'dict':
+			return isinstance(v, dict)
 		return True
-	if t[0] == 'list':
-		head, rest = type_parts(t)
-		if head == 'maybe':
-			return v is None or type_ok(v, rest[0])
-		if head == 'list':
-			return isinstance(v, list) and all(type_ok(x, rest[0]) for x in v)
-		if head == 'tuple':
-			return isinstance(v, list) and len(v) == len(rest) and all(type_ok(x, tt) for x, tt in zip(v, rest))
-		if head == 'record':
-			if not isinstance(v, dict):
-				return False
-			for i in range(0, len(rest) - 1, 2):
-				name, tt = rest[i][1], rest[i + 1]
-				if name not in v:
-					if not is_maybe(tt):
-						return False
-				elif not type_ok(v[name], tt):
+	if kind == 'null':
+		return v is None
+	if kind == 'lit':
+		return _val_eq(v, ir[1])
+	if kind == 'enum':
+		return any(_val_eq(v, x) for x in ir[1])
+	if kind == 'nullable':
+		return v is None or _ir_ok(v, ir[1])
+	if kind == 'list':
+		return isinstance(v, list) and all(_ir_ok(x, ir[1]) for x in v)
+	if kind == 'tuple':
+		return isinstance(v, (list, tuple)) and len(v) == len(ir[1]) and all(_ir_ok(x, tt) for x, tt in zip(v, ir[1]))
+	if kind == 'dict_of':
+		return isinstance(v, dict) and all(isinstance(k, str) and _ir_ok(val, ir[1]) for k, val in v.items())
+	if kind == 'record':
+		if not isinstance(v, dict):
+			return False
+		known = set(fname for fname, _, _ in ir[1])
+		if any(k not in known for k in v):
+			return False
+		for fname, ft, opt in ir[1]:
+			if fname not in v:
+				if not opt:
 					return False
-			return True
-		if head == 'one-of':
-			return v in [value(x) for x in rest]
+			elif not _ir_ok(v[fname], ft):
+				return False
 		return True
-	w = t[1]
-	if w in ('str', 'text', 'word', 'path'):
-		return isinstance(v, str)
-	if w == 'int':
-		return isinstance(v, int) and not isinstance(v, bool)
-	if w == 'float':
-		return isinstance(v, (int, float)) and not isinstance(v, bool)
-	if w == 'bool':
-		return isinstance(v, bool)
-	if w == 'list':
-		return isinstance(v, list)
-	if w == 'dict':
-		return isinstance(v, dict)
+	if kind == 'union':
+		return any(_ir_ok(v, b) for b in ir[1])
 	return True
 
 
+def type_ok(v, t):
+	'''Does the value v (as JSON gives it) match the type t?'''
+	if t is None:
+		return True
+	ir, err = parse_type(t)
+	return True if (err or ir is None) else _ir_ok(v, ir)
+
+
+def _ir_schema(ir):
+	kind = ir[0]
+	if kind == 'base':
+		return {'str': {'type': 'string'}, 'text': {'type': 'string'}, 'word': {'type': 'string'}, 'path': {'type': 'string'},
+			'int': {'type': 'integer'}, 'float': {'type': 'number'}, 'bool': {'type': 'boolean'},
+			'list': {'type': 'array'}, 'dict': {'type': 'object'}}.get(ir[1], {})
+	if kind == 'null':
+		return {'type': 'null'}
+	if kind == 'lit':
+		return {'enum': [ir[1]]}
+	if kind == 'enum':
+		return {'enum': list(ir[1])}
+	if kind == 'nullable':
+		return {'anyOf': [_ir_schema(ir[1]), {'type': 'null'}]}
+	if kind == 'list':
+		return {'type': 'array', 'items': _ir_schema(ir[1])}
+	if kind == 'tuple':
+		return {'type': 'array', 'prefixItems': [_ir_schema(x) for x in ir[1]], 'minItems': len(ir[1]), 'maxItems': len(ir[1])}
+	if kind == 'dict_of':
+		return {'type': 'object', 'additionalProperties': _ir_schema(ir[1])}
+	if kind == 'record':
+		props, req = {}, []
+		for fname, ft, opt in ir[1]:
+			props[fname] = _ir_schema(ft)
+			if not opt:
+				req.append(fname)
+		return {'type': 'object', 'properties': props, 'required': req, 'additionalProperties': False}
+	if kind == 'union':
+		return {'anyOf': [_ir_schema(b) for b in ir[1]]}
+	return {}
+
+
 def type_schema(t):
-	'''A type token -> JSON Schema.'''
+	'''A type string or token -> JSON Schema.'''
 	if t is None:
 		return {}
-	if t[0] == 'list':
-		head, rest = type_parts(t)
-		if head == 'list':
-			return {'type': 'array', 'items': type_schema(rest[0]) if rest else {}}
-		if head == 'tuple':
-			return {'type': 'array', 'prefixItems': [type_schema(x) for x in rest], 'minItems': len(rest), 'maxItems': len(rest)}
-		if head == 'record':
-			props, req = {}, []
-			for i in range(0, len(rest) - 1, 2):
-				props[rest[i][1]] = type_schema(rest[i + 1])
-				if not is_maybe(rest[i + 1]):
-					req.append(rest[i][1])
-			return {'type': 'object', 'properties': props, 'required': req, 'additionalProperties': False}
-		if head == 'maybe':
-			return {'anyOf': [type_schema(rest[0]) if rest else {}, {'type': 'null'}]}
-		if head == 'one-of':
-			return {'enum': [value(x) for x in rest]}
-		return {}
-	return {'str': {'type': 'string'}, 'text': {'type': 'string'}, 'word': {'type': 'string'}, 'path': {'type': 'string'},
-		'int': {'type': 'integer'}, 'float': {'type': 'number'}, 'bool': {'type': 'boolean'},
-		'list': {'type': 'array'}, 'dict': {'type': 'object'}}.get(t[1], {})
+	ir, err = parse_type(t)
+	return {} if (err or ir is None) else _ir_schema(ir)
+
+
+def out_type_str(n):
+	'''Type string from a step/reason "out" child node.'''
+	return ' '.join(ser(a) for a in n.args).strip() if n.args else None
 
 
 def in_parts(n):
-	'''An "in" or "out" node -> (name, type token or None, text). An "out" node: the name is None.'''
-	args = n.args[1:] if n.head == 'in' else n.args
-	t = next((a for a in args if a[0] != 'str'), None)
-	text = next((value(a) for a in args if a[0] == 'str'), '')
-	return (n.word(0) if n.head == 'in' else None), t, text
+	'''An "in" or "out" node -> (name, type string or None, text). An "out" node: the name is None.'''
+	name = n.word(0) if n.head == 'in' else None
+	rest = n.args[1:] if n.head == 'in' else n.args
+	if not rest:
+		return name, None, ''
+	if len(rest) == 1 and rest[0][0] == 'str':
+		return name, None, value(rest[0])
+	if len(rest) >= 2 and rest[-1][0] == 'str' and rest[-2] != ('word', '|'):
+		t_args, text = rest[:-1], value(rest[-1])
+	else:
+		t_args, text = rest, ''
+	t_str = ' '.join(ser(a) for a in t_args).strip() or None
+	return name, t_str, text
 
 
 def seconds(word):
@@ -740,13 +1115,19 @@ def node_reads(f, u=None, ctx=None):
 	'''The rules that a step, reason or gate reads: its "reads" lines, placeholders in its strings,
 	retry/budget/candidates rules, and R("group.name") calls inferred from bound Python code.'''
 	out = []
+	byrule = dict((r.word(0), r) for r in u.kids('rule')) if u is not None else None
 	for c in f.kids('reads'):
 		for a in c.args:
 			if a[1] not in out:
 				out.append(a[1])
 	for rid in placeholders(f):
-		if rid not in out:
-			out.append(rid)
+		target = rid
+		if byrule is not None and rid not in byrule:
+			base, _, _ = rid.rpartition('.')
+			if base in byrule and rule_type(byrule[base]) == 'dict':
+				target = base
+		if target not in out:
+			out.append(target)
 	for kind in ('retry', 'budget', 'candidates'):
 		for c in f.kids(kind):
 			if c.args and c.args[0][0] == 'word' and c.word(0) not in out:
@@ -787,9 +1168,32 @@ def rule_type(r):
 		return 'choice'
 	if a is None:
 		return 'text'
-	if a[0] == 'word' and a[1] in ('on', 'off'):
-		return 'switch'
-	return {'num': 'number', 're': 'pattern', 'list': 'list'}.get(a[0], 'text')
+	kind, _, err = parse_literal(a)
+	if err is None and kind in ('switch', 'number', 'pattern', 'list', 'tuple', 'dict'):
+		return kind
+	if kind in ('list', 'tuple', 'dict'):
+		return kind
+	return 'text'
+
+
+def _num_range_problem(v, lo, hi, prefix=''):
+	if not isinstance(v, (int, float)) or isinstance(v, bool):
+		return '{}use a number'.format(prefix)
+	if lo is not None and v < lo:
+		return '{}the value is below the range: at least {}'.format(prefix, lo)
+	if hi is not None and v > hi:
+		return '{}the value is above the range: at most {}'.format(prefix, hi)
+	return None
+
+
+def _slot_type_matches(dv, cv):
+	if isinstance(dv, bool) or isinstance(cv, bool):
+		return isinstance(dv, bool) and isinstance(cv, bool)
+	if isinstance(dv, (int, float)):
+		return isinstance(cv, (int, float))
+	if isinstance(dv, str):
+		return isinstance(cv, str)
+	return True
 
 
 def rule_problem(r, a):
@@ -797,21 +1201,68 @@ def rule_problem(r, a):
 	t = rule_type(r)
 	if a is None:
 		return 'no value'
-	if t == 'switch' and not (a[0] == 'word' and a[1] in ('on', 'off')):
-		return 'use on or off'
+	lo, hi = rule_range(r)
+	has_range = lo is not None or hi is not None
+	if t == 'switch':
+		if has_range:
+			return 'range is for numbers (or a list, tuple or dict of numbers)'
+		return None if (a[0] == 'word' and a[1] in ('on', 'off')) else 'use on or off'
 	if t == 'choice':
+		if has_range:
+			return 'range is for numbers (or a list, tuple or dict of numbers)'
 		opts = options_of(r.kids('options')[0])
 		if value(a) not in opts and ser(a) not in [str(o) for o in opts]:
 			return 'use one of: ' + ', '.join(str(o) for o in opts)
+		return None
+	kind, v, err = parse_literal(a)
+	if err is not None:
+		return err
 	if t == 'number':
-		if a[0] != 'num':
+		if kind != 'number':
 			return 'use a number'
-		v = value(a)
-		lo, hi = rule_range(r)
-		if lo is not None and v < lo:
-			return 'the value is below the range: at least {}'.format(lo)
-		if hi is not None and v > hi:
-			return 'the value is above the range: at most {}'.format(hi)
+		return _num_range_problem(v, lo, hi)
+	if t == 'tuple':
+		if kind != 'tuple':
+			return 'use a tuple, for example (0.5, 2.0)'
+		def_a = r.args[1] if len(r.args) > 1 else None
+		if def_a is not None and a is not def_a:
+			_, def_v, def_err = parse_literal(def_a)
+			if def_err is None and isinstance(def_v, list):
+				if len(v) != len(def_v):
+					return 'expected {} items in tuple, got {}'.format(len(def_v), len(v))
+				for idx, (dv, cv) in enumerate(zip(def_v, v)):
+					if not _slot_type_matches(dv, cv):
+						return 'item {} of tuple does not match default type'.format(idx)
+		if has_range:
+			if not v:
+				return 'a tuple with range needs at least one number'
+			for idx, x in enumerate(v):
+				p = _num_range_problem(x, lo, hi, 'item {}: '.format(idx))
+				if p:
+					return p
+		return None
+	if t == 'list':
+		if kind != 'list':
+			return 'use a list, for example ["a", "b"]'
+		if has_range:
+			for idx, x in enumerate(v):
+				p = _num_range_problem(x, lo, hi, 'item {}: '.format(idx))
+				if p:
+					return p
+		return None
+	if t == 'dict':
+		if kind != 'dict':
+			return 'use a dict, for example {Light: 20, Heavy: 48}'
+		if has_range:
+			if not v:
+				return 'a dict with range needs at least one entry'
+			for k, x in v.items():
+				p = _num_range_problem(x, lo, hi, 'key "{}": '.format(k))
+				if p:
+					return p
+		return None
+	if has_range:
+		return 'range is for numbers (or a list, tuple or dict of numbers)'
 	return None
 
 
@@ -1085,8 +1536,17 @@ def check(root, path=None, ctx=None):
 				err.append((r.line, 'rule "{}": {}'.format(rid, bad)))
 		for n, t in walk_strings(u):
 			for m in PLACE.finditer(t):
-				if m.group(1) not in rules:
-					err.append((n.line, '{{{}}} names a rule that is not defined in this unit'.format(m.group(1))))
+				ph = m.group(1)
+				if ph in rules:
+					continue
+				base_r, _, key_r = ph.rpartition('.')
+				if base_r in byrule and rule_type(byrule[base_r]) == 'dict':
+					dval = value(byrule[base_r].args[1]) if len(byrule[base_r].args) > 1 else {}
+					if isinstance(dval, dict) and key_r in dval:
+						continue
+					err.append((n.line, '{{{}}} names key "{}" which is not in dict rule "{}"'.format(ph, key_r, base_r)))
+				else:
+					err.append((n.line, '{{{}}} names a rule that is not defined in this unit'.format(ph)))
 		# Validate structured intent children (unit-level and reason-level)
 		intent_hosts = [u] + [f for f in flow_nodes(u) if f.head == 'reason'] if has_flow(u) else [u]
 		flow_gates = dict((f.word(0), f) for f in flow_nodes(u) if f.head == 'gate' and f.word(0)) if has_flow(u) else {}
@@ -1207,7 +1667,7 @@ def check(root, path=None, ctx=None):
 				if c.head == 'if' and (len(c.args) != 1 or not PATH.match(c.word(0) or '')):
 					err.append((c.line, 'write if <path>: a path in the state of the run, not an expression'))
 				if c.head == 'out':
-					t = c.args[0] if c.args else None
+					t = out_type_str(c)
 					bad = type_problem(t) if t else 'write out <type>'
 					if bad:
 						err.append((c.line, bad))
@@ -1390,9 +1850,13 @@ def notes_of(n):
 def rule_info(r, token=None):
 	'''One rule as a catalogue entry. token: a preset value that replaces the value.'''
 	a = r.args[1] if len(r.args) > 1 else None
+	rtype = rule_type(r)
+	def_val = value(a) if a else None
 	d = {'id': r.word(0), 'group': r.word(0).split('.')[0], 'label': rule_label(r) or r.word(0),
-		'type': rule_type(r), 'value': value(token if token is not None else a) if (token or a) else None,
-		'default': value(a) if a else None}
+		'type': rtype, 'value': value(token if token is not None else a) if (token or a) else None,
+		'default': def_val}
+	if rtype == 'tuple' and isinstance(def_val, list):
+		d['length'] = len(def_val)
 	lo, hi = rule_range(r)
 	if lo is not None:
 		d['min'] = lo
@@ -1469,8 +1933,8 @@ def node_info(f, fl, u=None, ctx=None):
 	if sees:
 		d['sees'] = sees
 	if f.kids('out') and f.kids('out')[0].args:
-		t = f.kids('out')[0].args[0]
-		d['out'], d['schema'] = ser(t), type_schema(t)
+		t = out_type_str(f.kids('out')[0])
+		d['out'], d['schema'] = t, type_schema(t)
 	if f.kids('brief'):
 		d['brief'] = [a[1] for c in f.kids('brief') for a in c.args if a[0] == 'word']
 	if f.kids('options'):
@@ -1528,9 +1992,11 @@ def port_info(n):
 	'''An "in" or "out" node -> {"name", "type", "text", "schema"} ("name" for "in" only; "schema" when typed).'''
 	name, t, text = in_parts(n)
 	d = {'name': name} if n.head == 'in' else {}
-	d.update({'type': ser(t) if t else None, 'text': text})
+	d.update({'type': t if t else None, 'text': text})
 	if t is not None:
 		d['schema'] = type_schema(t)
+		if n.head == 'in' and is_optional(t):
+			d['optional'] = True
 	return d
 
 
@@ -1597,12 +2063,42 @@ def show(tok):
 	return value(tok) if tok[0] == 'str' else ser(tok)
 
 
+def _fmt_scalar(v):
+	if isinstance(v, bool):
+		return 'on' if v else 'off'
+	if isinstance(v, (list, dict)):
+		return json.dumps(v, ensure_ascii=False)
+	return str(v)
+
+
+def _known_placeholder(ph, byrule):
+	if ph in byrule:
+		return True
+	base, _, key = ph.rpartition('.')
+	if base in byrule and rule_type(byrule[base]) == 'dict':
+		dval = value(byrule[base].args[1]) if len(byrule[base].args) > 1 else {}
+		return isinstance(dval, dict) and key in dval
+	return False
+
+
 def fill_values(u, t, preset=None):
-	'''Write the value of each rule in place of {group.name} in t.'''
+	'''Write the value of each rule in place of {group.name} (or {group.name.key} on a dict rule) in t.'''
 	toks = preset_tokens(u, preset)
 	byrule = dict((r.word(0), r) for r in u.kids('rule'))
-	return PLACE.sub(lambda m: show(toks.get(m.group(1), byrule[m.group(1)].args[1] if len(byrule[m.group(1)].args) > 1 else None))
-		if m.group(1) in byrule else m.group(0), t)
+
+	def sub(m):
+		ph = m.group(1)
+		if ph in byrule:
+			return show(toks.get(ph, byrule[ph].args[1] if len(byrule[ph].args) > 1 else None))
+		base, _, key = ph.rpartition('.')
+		if base in byrule and rule_type(byrule[base]) == 'dict':
+			tok = toks.get(base, byrule[base].args[1] if len(byrule[base].args) > 1 else None)
+			dval = value(tok) if tok is not None else {}
+			if isinstance(dval, dict) and key in dval:
+				return _fmt_scalar(dval[key])
+		return m.group(0)
+
+	return PLACE.sub(sub, t)
 
 
 def guessed_gates(c):
@@ -1624,7 +2120,7 @@ def skill(u, rules_path=None, preset=None, driver=None):
 
 	def fill(t):
 		if rules_path:
-			return PLACE.sub(lambda m: '`{' + m.group(1) + '}`' if m.group(1) in byrule else m.group(0), t)
+			return PLACE.sub(lambda m: '`{' + m.group(1) + '}`' if _known_placeholder(m.group(1), byrule) else m.group(0), t)
 		return fill_values(u, t, preset)
 
 	def cell(t):

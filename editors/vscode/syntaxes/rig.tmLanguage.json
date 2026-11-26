@@ -11,7 +11,7 @@
 			"include": "#comment"
 		},
 		{
-			"match": "^(unit)\\s+([^\\s();\"][^\\s();]*)",
+			"match": "^(unit)\\s+([^\\s()\\[\\]{},:?\";][^\\s()\\[\\]{},:?;]*)",
 			"captures": {
 				"1": {
 					"name": "storage.type.unit.rig"
@@ -22,7 +22,7 @@
 			}
 		},
 		{
-			"match": "^\\s*(in)(?=[\\s;]|$)(?:\\s+([^\\s();\"][^\\s();]*))?(?:\\s+([^\\s();\"][^\\s();]*))?",
+			"match": "^\\s*(in)(?=[\\s;]|$)(?:\\s+([^\\s()\\[\\]{},:?\";][^\\s()\\[\\]{},:?;]*))?(?:\\s+([^\\s()\\[\\]{},:?\";][^\\s()\\[\\]{},:?;]*))?",
 			"captures": {
 				"1": {
 					"name": "keyword.other.matrix.rig"
@@ -36,7 +36,7 @@
 			}
 		},
 		{
-			"match": "^\\s*(out)(?=[\\s;]|$)(?:\\s+([^\\s();\"][^\\s();]*))?",
+			"match": "^\\s*(out)(?=[\\s;]|$)(?:\\s+([^\\s()\\[\\]{},:?\";][^\\s()\\[\\]{},:?;]*))?",
 			"captures": {
 				"1": {
 					"name": "keyword.other.matrix.rig"
@@ -63,7 +63,7 @@
 			}
 		},
 		{
-			"match": "^\\s*(rule)(?=[\\s;]|$)(?:\\s+([^\\s();\"][^\\s();]*))?",
+			"match": "^\\s*(rule)(?=[\\s;]|$)(?:\\s+([^\\s()\\[\\]{},:?\";][^\\s()\\[\\]{},:?;]*))?",
 			"captures": {
 				"1": {
 					"name": "storage.type.rule.rig"
@@ -74,7 +74,7 @@
 			}
 		},
 		{
-			"match": "^\\s*(preset)(?=[\\s;]|$)(?:\\s+([^\\s();\"][^\\s();]*))?",
+			"match": "^\\s*(preset)(?=[\\s;]|$)(?:\\s+([^\\s()\\[\\]{},:?\";][^\\s()\\[\\]{},:?;]*))?",
 			"captures": {
 				"1": {
 					"name": "storage.type.rule.rig"
@@ -85,7 +85,7 @@
 			}
 		},
 		{
-			"match": "^\\s*(set)(?=[\\s;]|$)(?:\\s+([^\\s();\"][^\\s();]*))?",
+			"match": "^\\s*(set)(?=[\\s;]|$)(?:\\s+([^\\s()\\[\\]{},:?\";][^\\s()\\[\\]{},:?;]*))?",
 			"captures": {
 				"1": {
 					"name": "keyword.other.context.rig"
@@ -104,7 +104,7 @@
 			}
 		},
 		{
-			"match": "^\\s*(step|reason|end)(?=[\\s;]|$)(?:\\s+([^\\s();\"][^\\s();]*))?",
+			"match": "^\\s*(step|reason|end)(?=[\\s;]|$)(?:\\s+([^\\s()\\[\\]{},:?\";][^\\s()\\[\\]{},:?;]*))?",
 			"captures": {
 				"1": {
 					"name": "storage.type.node.rig"
@@ -115,7 +115,7 @@
 			}
 		},
 		{
-			"match": "^\\s*(gate)(?=[\\s;]|$)(?:\\s+([^\\s();\"][^\\s();]*))?(?:\\s+(hard|soft|model|human)(?=[\\s;]|$))?",
+			"match": "^\\s*(gate)(?=[\\s;]|$)(?:\\s+([^\\s()\\[\\]{},:?\";][^\\s()\\[\\]{},:?;]*))?(?:\\s+(hard|soft|model|human)(?=[\\s;]|$))?",
 			"captures": {
 				"1": {
 					"name": "storage.type.node.rig"
@@ -129,7 +129,7 @@
 			}
 		},
 		{
-			"match": "^\\s*(for)(?=[\\s;]|$)(?:\\s+([^\\s();\"][^\\s();]*))?(?:\\s+(in)(?=[\\s;]|$))?(?:\\s+([^\\s();\"][^\\s();]*))?",
+			"match": "^\\s*(for)(?=[\\s;]|$)(?:\\s+([^\\s()\\[\\]{},:?\";][^\\s()\\[\\]{},:?;]*))?(?:\\s+(in)(?=[\\s;]|$))?(?:\\s+([^\\s()\\[\\]{},:?\";][^\\s()\\[\\]{},:?;]*))?",
 			"captures": {
 				"1": {
 					"name": "keyword.control.block.rig"
@@ -146,7 +146,7 @@
 			}
 		},
 		{
-			"match": "^\\s*(until|if)(?=[\\s;]|$)(?:\\s+([^\\s();\"][^\\s();]*))?",
+			"match": "^\\s*(until|if)(?=[\\s;]|$)(?:\\s+([^\\s()\\[\\]{},:?\";][^\\s()\\[\\]{},:?;]*))?",
 			"captures": {
 				"1": {
 					"name": "keyword.control.block.rig"
@@ -165,7 +165,7 @@
 			}
 		},
 		{
-			"match": "^\\s*(by)(?=[\\s;]|$)(?:\\s+([^\\s();\"][^\\s();]*))?",
+			"match": "^\\s*(by)(?=[\\s;]|$)(?:\\s+([^\\s()\\[\\]{},:?\";][^\\s()\\[\\]{},:?;]*))?",
 			"captures": {
 				"1": {
 					"name": "keyword.control.flow.rig"
@@ -207,7 +207,7 @@
 					"include": "#comment"
 				},
 				{
-					"match": "[^\\s();\"][^\\s();]*",
+					"match": "[^\\s()\\[\\]{},:?\";][^\\s()\\[\\]{},:?;]*",
 					"name": "variable.other.constant.rule.rig"
 				}
 			]
@@ -245,11 +245,11 @@
 			"name": "comment.line.semicolon.rig"
 		},
 		"regex": {
-			"match": "(?<![^\\s(])/(?:\\\\.|[^/\\\\])*/(?=[\\s)]|$)",
+			"match": "(?<![^\\s(\\[{,:])/(?:\\\\.|[^/\\\\])*/(?=[\\s)\\],}]|$)",
 			"name": "string.regexp.rig"
 		},
 		"arrow": {
-			"match": "(?<![^\\s(])(->)(?:\\s+([^\\s();\"][^\\s();]*))?",
+			"match": "(?<![^\\s(\\[{,:])(->)(?:\\s+([^\\s()\\[\\]{},:?\";][^\\s()\\[\\]{},:?;]*))?",
 			"captures": {
 				"1": {
 					"name": "keyword.operator.arrow.rig"
@@ -260,28 +260,44 @@
 			}
 		},
 		"inline": {
-			"match": "(?<![^\\s(])(?:by|fail)(?=[\\s();]|$)",
+			"match": "(?<![^\\s(\\[{,:])(?:by|fail)(?=[\\s()\\[\\]{},:?;]|$)",
 			"name": "keyword.control.flow.rig"
 		},
 		"percent": {
-			"match": "(?<![^\\s(])\\d+(?:\\.\\d+)?%(?=[\\s();]|$)",
+			"match": "(?<![^\\s(\\[{,:])\\d+(?:\\.\\d+)?%(?=[\\s()\\[\\]{},:?;]|$)",
 			"name": "constant.numeric.rig"
 		},
 		"time": {
-			"match": "(?<![^\\s(])\\d+[smhd](?=[\\s();]|$)",
+			"match": "(?<![^\\s(\\[{,:])\\d+[smhd](?=[\\s()\\[\\]{},:?;]|$)",
 			"name": "constant.numeric.rig"
 		},
 		"bar": {
-			"match": "(?<![^\\s(])\\|(?=[\\s();]|$)",
+			"match": "\\|",
 			"name": "punctuation.separator.rig"
 		},
 		"number": {
-			"match": "(?<![^\\s(])[-+]?\\d+(?:\\.\\d+)?(?=[\\s();]|$)",
+			"match": "(?<![^\\s(\\[{,:])[-+]?\\d+(?:\\.\\d+)?(?=[\\s()\\[\\]{},:?;]|$)",
 			"name": "constant.numeric.rig"
 		},
 		"constant": {
-			"match": "(?<![^\\s(])(?:on|off|true|false)(?=[\\s();]|$)",
+			"match": "(?<![^\\s(\\[{,:])(?:on|off|true|false|True|False|null|none|None)(?=[\\s()\\[\\]{},:?;]|$)",
 			"name": "constant.language.rig"
+		},
+		"builtin-type": {
+			"match": "(?<![^\\s(\\[{,:])(?:str|text|word|path|int|float|bool|list|dict|tuple|any|Literal)(?=[\\s()\\[\\]{},:?;]|$)",
+			"name": "support.type.rig"
+		},
+		"optional": {
+			"match": "\\?",
+			"name": "keyword.operator.optional.rig"
+		},
+		"colon": {
+			"match": ":",
+			"name": "punctuation.separator.key-value.rig"
+		},
+		"comma": {
+			"match": ",",
+			"name": "punctuation.separator.comma.rig"
 		},
 		"paren-open": {
 			"match": "\\(",
@@ -290,6 +306,22 @@
 		"paren-close": {
 			"match": "\\)",
 			"name": "punctuation.section.parens.end.rig"
+		},
+		"bracket-open": {
+			"match": "\\[",
+			"name": "punctuation.section.brackets.begin.rig"
+		},
+		"bracket-close": {
+			"match": "\\]",
+			"name": "punctuation.section.brackets.end.rig"
+		},
+		"brace-open": {
+			"match": "\\{",
+			"name": "punctuation.section.braces.begin.rig"
+		},
+		"brace-close": {
+			"match": "\\}",
+			"name": "punctuation.section.braces.end.rig"
 		},
 		"items": {
 			"patterns": [
@@ -324,10 +356,34 @@
 					"include": "#constant"
 				},
 				{
+					"include": "#builtin-type"
+				},
+				{
+					"include": "#optional"
+				},
+				{
+					"include": "#colon"
+				},
+				{
+					"include": "#comma"
+				},
+				{
 					"include": "#paren-open"
 				},
 				{
 					"include": "#paren-close"
+				},
+				{
+					"include": "#bracket-open"
+				},
+				{
+					"include": "#bracket-close"
+				},
+				{
+					"include": "#brace-open"
+				},
+				{
+					"include": "#brace-close"
 				}
 			]
 		}
