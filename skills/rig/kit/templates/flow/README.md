@@ -8,9 +8,9 @@ A Rig tool, level __LEVEL__ (__LEVEL_NAME__). TODO: say what it does.
 | `gates.py` | Every decision that code can make. Pure Python, with tests. |
 | `steps.py` | The work. The only code that touches the world. |
 | `tool.py` | The runner: one command line that every front calls. |
-| `tests/` | The tests of the gates and the steps; from level 3, the regression set. |
+| `tests/` | The tests of the gates and the steps; from level 2, the regression set. |
 | `gen/` | Compiled from the source: the catalogue. Do not edit. |
-| `skill/SKILL.md` | Compiled from the source: the instructions for Claude. Do not edit. |
+| `skill/SKILL.md` | Compiled from the source: Agent Skill for Claude Code, Codex, Cursor, Gemini CLI, Antigravity, or OpenCode. Do not edit. |
 | `rigkit.py` | The tool's own copy of the Rig runtime. `rig.py build` keeps it current. |
 | `rig.json` | The project file: the level, the source, the compiled files, the tests command. |
 | `runs/` | One folder for each run: the run, a pinned copy of the flow and the rules, the answers, and the state before each line. Not in version control. |

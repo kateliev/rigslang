@@ -1,7 +1,7 @@
 {
- "rig": 1,
+ "rig": 2,
  "name": "bookmarks",
- "level": 4,
+ "level": 3,
  "source": "bookmarks.rig",
  "unit": "bookmarks",
  "driver": "python3 tool.py",

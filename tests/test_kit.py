@@ -22,7 +22,7 @@ RELEASE = os.path.join(ROOT, 'examples', 'release-tool')
 BAND = os.path.join(ROOT, 'examples', 'band-facts')
 BOOKMARKS = os.path.join(ROOT, 'examples', 'bookmarks')
 
-FLOW = '''unit demo agent
+FLOW = '''unit demo
   in n int "a number"
   code code code.py
   rule limits.max 10 "Largest number"
@@ -45,7 +45,7 @@ FLOW = '''unit demo agent
   end huge "Huge"
 '''
 
-LOOPS = '''unit loops agent
+LOOPS = '''unit loops
   in n int "a number"
   code code code.py
   rule loop.rounds 1 "Retries"
@@ -136,9 +136,11 @@ class Rules(unittest.TestCase):
 			R('limits.nothing')
 		self.assertEqual(R.fill('at most {limits.max}, {not.a.rule} {word}'), 'at most 20, {not.a.rule} {word}')
 
-	def test_a_catalogue_of_version_0_is_refused(self):
+	def test_a_catalogue_of_older_version_is_refused(self):
 		with self.assertRaises(ValueError):
 			rigkit.Kit({'rig': 0, 'flow': []})
+		with self.assertRaises(ValueError):
+			rigkit.Kit({'rig': 1, 'flow': []})
 
 
 class Runs(unittest.TestCase):
@@ -166,17 +168,6 @@ class Runs(unittest.TestCase):
 			kit().run({'n': 'two'})
 		with self.assertRaises(rigkit.Refused):
 			kit().run({'n': True})
-
-	def test_call_validates_input_types(self):
-		c = catalogue('unit measure tool\n  intent "measure"\n  in text str "text"\n  in limit (maybe int) "limit"\n  code tools.py\n')
-		k = rigkit.Kit({'rig': 1, 'flow': []}).tool(c, lambda text, limit=None: (len(text), limit))
-		self.assertEqual(k.call('measure', {'text': 'hi'}), (2, None))
-		self.assertEqual(k.call('measure', {'text': 'hi', 'limit': None}), (2, None))
-		self.assertEqual(k.call('measure', {'text': 'hi', 'limit': 5}), (2, 5))
-		with self.assertRaises(rigkit.Refused):
-			k.call('measure', {'text': 123})
-		with self.assertRaises(rigkit.Refused):
-			k.call('measure', {'text': 'hi', 'limit': 'banana'})
 
 	def test_schema_problems_maybe_and_tuple(self):
 		maybe_int = rig.type_schema(rig.tokenize('(maybe int)', 1)[0])
@@ -225,14 +216,14 @@ class Runs(unittest.TestCase):
 		self.assertEqual(r['path'], ['make', 'summary'])  # finally ran after the error
 
 	def test_a_code_step_that_runs_too_long(self):
-		text = 'unit t agent\n  code code code.py\n  step slow by code.slow\n    timeout 1s\n  end done\n'
+		text = 'unit t\n  code code code.py\n  step slow by code.slow\n    timeout 1s\n  end done\n'
 		k = rigkit.Kit(catalogue(text)).bind('code', {'slow': lambda s, R: time.sleep(3)})
 		r = k.run({})
 		self.assertEqual(r['outcome']['end'], 'error')
 		self.assertIn('Timeout', r['error']['error'])
 
 	def test_the_result_is_the_value_of_the_step_before_the_end(self):
-		text = 'unit t agent\n  code code code.py\n  step make by code.make\n  end done\n'
+		text = 'unit t\n  code code code.py\n  step make by code.make\n  end done\n'
 		k = rigkit.Kit(catalogue(text)).bind('code', {'make': lambda s, R: 'made'})
 		self.assertEqual(k.run({})['result'], 'made')
 
@@ -246,7 +237,7 @@ class Runs(unittest.TestCase):
 		self.assertNotIn('result', r)                                              # a gate came last: no result
 
 	def test_gate_state_sets_pass_and_failed(self):
-		text = '''unit t agent
+		text = '''unit t
   code code code.py
   step draft by model
     if tone.failed
@@ -351,7 +342,7 @@ class Blocks(unittest.TestCase):
 		self.assertEqual(r['path'].count('tick'), 3)          # the body, then retry 2
 
 	def test_an_if_on_one_node(self):
-		text = 'unit t agent\n  code code code.py\n  step a by code.a\n  step b by code.b\n    if a.go\n  end done\n'
+		text = 'unit t\n  code code code.py\n  step a by code.a\n  step b by code.b\n    if a.go\n  end done\n'
 		k = rigkit.Kit(catalogue(text)).bind('code', {'a': lambda s, R: {'go': False}, 'b': lambda s, R: 'b'})
 		self.assertEqual(k.run({})['path'], ['a', 'done'])
 
@@ -789,12 +780,11 @@ class CommandLine(unittest.TestCase):
 
 	def test_mcp_in_process_flow_and_tools(self):
 		tmp = tempfile.mkdtemp()
-		saved_env = {key: os.environ.pop(key, None) for key in ('RIG_API_URL', 'RIG_MODEL', 'RIG_API_KEY')}
+		saved_env = {key: os.environ.pop(key, None) for key in ('RIG_API_URL', 'RIG_MODEL', 'RIG_API_KEY', 'RIG_REASON_API_URL', 'RIG_REASON_MODEL')}
 		try:
-			tool_cat = catalogue('unit word-count tool\n  intent "count words"\n  in text str "the text"\n  in limit (maybe int) "max"\n  out int "word count"\n  code tools.py\n')
-			k = kit(runs=tmp).tool(tool_cat, lambda text, limit=None: len(text.split()) if limit is None else min(len(text.split()), limit))
+			k = kit(runs=tmp)
 			reqs = '\n'.join([
-				json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {'protocolVersion': '2025-03-26'}}),
+				json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {'protocolVersion': '2025-03-26', 'capabilities': {'elicitation': {}}}}),
 				json.dumps({'jsonrpc': '2.0', 'method': 'notifications/initialized'}),
 				json.dumps({'jsonrpc': '2.0', 'id': 2, 'method': 'ping'}),
 				json.dumps({'jsonrpc': '2.0', 'id': 3, 'method': 'tools/list'}),
@@ -805,30 +795,26 @@ class CommandLine(unittest.TestCase):
 				json.dumps({'jsonrpc': '2.0', 'id': 8, 'method': 'tools/call', 'params': {'name': 'queues', 'arguments': {}}}),
 				json.dumps({'jsonrpc': '2.0', 'id': 9, 'method': 'tools/call', 'params': {'name': 'drop_run', 'arguments': {'run': 'r1', 'reason': 'done testing'}}}),
 				json.dumps({'jsonrpc': '2.0', 'id': 10, 'method': 'tools/call', 'params': {'name': 'queues', 'arguments': {}}}),
-				json.dumps({'jsonrpc': '2.0', 'id': 11, 'method': 'tools/call', 'params': {'name': 'word_count', 'arguments': {'text': 'one two three'}}}),
 				json.dumps({'jsonrpc': '2.0', 'id': 12, 'method': 'tools/call', 'params': {'name': 'start_batch', 'arguments': {'items': [{'n': 8}, {'n': 80}], 'workers': 2}}}),
 				json.dumps({'jsonrpc': '2.0', 'id': 13, 'method': 'no/such/method'}),
 				'not valid json',
 			]) + '\n'
 			out = io.StringIO()
-			self.assertEqual(k.mcp(stdin=io.StringIO(reqs), stdout=out), 0)
+			self.assertEqual(k.mcp(approve_url='http://127.0.0.1:8780', stdin=io.StringIO(reqs), stdout=out), 0)
 			msgs = [json.loads(line) for line in out.getvalue().strip().splitlines()]
-			# notifications/initialized produced no response: 14 replies for 15 lines
-			self.assertEqual(len(msgs), 14)
+			# notifications/initialized produced no response: 13 replies for 14 lines
+			self.assertEqual(len(msgs), 13)
 			self.assertEqual(msgs[0]['id'], 1)
 			self.assertEqual(msgs[0]['result'], {
 				'protocolVersion': '2025-03-26',
 				'capabilities': {'tools': {}},
-				'serverInfo': {'name': 'demo', 'version': '1'},
+				'serverInfo': {'name': 'demo', 'version': '2'},
 			})
 			self.assertEqual(msgs[1], {'jsonrpc': '2.0', 'id': 2, 'result': {}})
 			listed = msgs[2]['result']['tools']
 			names = [t['name'] for t in listed]
-			self.assertEqual(names, ['start_run', 'answer_gate', 'run_status', 'start_batch', 'queues', 'drop_run', 'word_count'])
+			self.assertEqual(names, ['start_run', 'answer_gate', 'run_status', 'start_batch', 'queues', 'drop_run', 'next_batch'])
 			self.assertFalse(any('approve' in n or 'human' in n for n in names))
-			wc = next(t for t in listed if t['name'] == 'word_count')
-			self.assertEqual(wc['inputSchema']['required'], ['text'])
-			self.assertIn('limit', wc['inputSchema']['properties'])
 
 			def payload(msg):
 				self.assertFalse(msg['result']['isError'])
@@ -844,7 +830,9 @@ class CommandLine(unittest.TestCase):
 			r_human = payload(msgs[5])
 			self.assertEqual(r_human['waiting']['kind'], 'human')
 			self.assertNotIn('answer', r_human['waiting'])
-			self.assertEqual(r_human['waiting']['next_action'], {'call': 'NONE', 'show_verbatim': r_human['waiting']['say']})
+			self.assertEqual(r_human['waiting']['approve_url'], 'http://127.0.0.1:8780/approve/r1')
+			self.assertEqual(r_human['waiting']['elicitation']['method'], 'elicitation/create')
+			self.assertEqual(r_human['waiting']['next_action'], {'call': 'NONE', 'show_verbatim': r_human['waiting']['say'], 'approve_url': 'http://127.0.0.1:8780/approve/r1'})
 			r_refused = payload(msgs[6])
 			self.assertIn('refused', r_refused)
 			self.assertIn('human gate', r_refused['refused'])
@@ -853,10 +841,9 @@ class CommandLine(unittest.TestCase):
 			r_drop = payload(msgs[8])
 			self.assertEqual(r_drop['outcome'], {'end': 'dropped', 'label': 'done testing'})
 			self.assertEqual(payload(msgs[9]), {'left_for_model': [], 'waits_for_person': []})
-			self.assertEqual(payload(msgs[10]), {'ok': True, 'tool': 'word-count', 'result': 3})
-			self.assertEqual(payload(msgs[11])['ends'], {'big': 1, 'huge': 1})
-			self.assertEqual(msgs[12], {'jsonrpc': '2.0', 'id': 13, 'error': {'code': -32601, 'message': 'Method not found'}})
-			self.assertEqual(msgs[13], {'jsonrpc': '2.0', 'id': None, 'error': {'code': -32700, 'message': 'Parse error'}})
+			self.assertEqual(payload(msgs[10])['ends'], {'big': 1, 'huge': 1})
+			self.assertEqual(msgs[11], {'jsonrpc': '2.0', 'id': 13, 'error': {'code': -32601, 'message': 'Method not found'}})
+			self.assertEqual(msgs[12], {'jsonrpc': '2.0', 'id': None, 'error': {'code': -32700, 'message': 'Parse error'}})
 		finally:
 			for key, val in saved_env.items():
 				if val is not None:
@@ -865,7 +852,7 @@ class CommandLine(unittest.TestCase):
 
 	def test_mcp_model_steps_answer_step_vs_work_run(self):
 		tmp = tempfile.mkdtemp()
-		saved_env = {key: os.environ.pop(key, None) for key in ('RIG_API_URL', 'RIG_MODEL', 'RIG_API_KEY')}
+		saved_env = {key: os.environ.pop(key, None) for key in ('RIG_API_URL', 'RIG_MODEL', 'RIG_API_KEY', 'RIG_REASON_API_URL', 'RIG_REASON_MODEL')}
 		try:
 			# Without worker config: LOOPS has no model gate and has a model step -> exposes answer_step, not answer_gate or work_run
 			k = loops(runs=tmp)
@@ -878,7 +865,7 @@ class CommandLine(unittest.TestCase):
 			self.assertEqual(k.mcp(stdin=io.StringIO(reqs), stdout=out), 0)
 			msgs = [json.loads(line) for line in out.getvalue().strip().splitlines()]
 			names = [t['name'] for t in msgs[0]['result']['tools']]
-			self.assertEqual(names, ['start_run', 'answer_step', 'run_status', 'start_batch', 'queues', 'drop_run'])
+			self.assertEqual(names, ['start_run', 'answer_step', 'run_status', 'start_batch', 'queues', 'drop_run', 'next_batch'])
 			r_start = json.loads(msgs[1]['result']['content'][0]['text'])
 			self.assertNotIn('answer', r_start['waiting'])
 			self.assertEqual(r_start['waiting']['next_action'], {'call': 'answer_step', 'args': {'run': 'r1', 'result': '<value matching schema>'}})
@@ -895,7 +882,7 @@ class CommandLine(unittest.TestCase):
 			self.assertEqual(k.mcp(api_url='http://example.invalid/v1', model='test-m', stdin=io.StringIO(reqs2), stdout=out2), 0)
 			msgs2 = [json.loads(line) for line in out2.getvalue().strip().splitlines()]
 			names2 = [t['name'] for t in msgs2[0]['result']['tools']]
-			self.assertEqual(names2, ['start_run', 'work_run', 'run_status', 'start_batch', 'queues', 'drop_run'])
+			self.assertEqual(names2, ['start_run', 'work_run', 'run_status', 'start_batch', 'queues', 'drop_run', 'next_batch'])
 			r_start2 = json.loads(msgs2[1]['result']['content'][0]['text'])
 			self.assertEqual(r_start2['waiting']['next_action'], {'call': 'work_run', 'args': {'run': 'r2'}})
 		finally:
@@ -910,7 +897,7 @@ class CommandLine(unittest.TestCase):
 			folder = os.path.join(tmp, 'demo')
 			buf = io.StringIO()
 			with contextlib.redirect_stdout(buf):
-				rig_project.new(folder, 'demo-tool', 4)
+				rig_project.new(folder, 'demo-tool', 3)
 			# Subprocess pipe test against real tool.py mcp
 			reqs = '\n'.join([
 				json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {}}),
@@ -932,9 +919,9 @@ class CommandLine(unittest.TestCase):
 			self.assertEqual(p.returncode, 0, p.stderr)
 			msgs = [json.loads(l) for l in p.stdout.strip().splitlines()]
 			self.assertEqual([m['id'] for m in msgs], [1, 2, 3, 4, 5, 6, 7, 8, 9])
-			self.assertEqual(msgs[0]['result']['protocolVersion'], '2024-11-05')
-			self.assertEqual(msgs[0]['result']['serverInfo'], {'name': 'demo-tool', 'version': '1'})
-			self.assertEqual([t['name'] for t in msgs[2]['result']['tools']], ['start_run', 'answer_gate', 'run_status', 'start_batch', 'queues', 'drop_run'])
+			self.assertEqual(msgs[0]['result']['protocolVersion'], '2025-03-26')
+			self.assertEqual(msgs[0]['result']['serverInfo'], {'name': 'demo-tool', 'version': '2'})
+			self.assertEqual([t['name'] for t in msgs[2]['result']['tools']], ['start_run', 'answer_gate', 'run_status', 'start_batch', 'queues', 'drop_run', 'next_batch'])
 			self.assertEqual(json.loads(msgs[3]['result']['content'][0]['text'])['waiting']['next_action']['call'], 'answer_gate')
 			self.assertEqual(json.loads(msgs[4]['result']['content'][0]['text'])['waiting']['next_action']['call'], 'NONE')
 			self.assertIn('refused', json.loads(msgs[5]['result']['content'][0]['text']))
@@ -1008,7 +995,7 @@ class Binding(unittest.TestCase):
 			with open(os.path.join(tmp, 'g.py'), 'w') as f:
 				f.write('def here(state, R):\n\treturn True\n')
 			path = os.path.join(tmp, 'x.rig')
-			text = 'unit x agent\n  code g g.py\n  gate a hard by g.here\n    fail -> e\n  gate b hard by g.gone\n    fail -> e\n  end e\n'
+			text = 'unit x\n  code g g.py\n  gate a hard by g.here\n    fail -> e\n  gate b hard by g.gone\n    fail -> e\n  end e\n'
 			err, warn = rig.check(rig.parse(text), path)
 			self.assertEqual([t for _, t in err], ['"g.py" has no function "gone"'])
 			self.assertTrue(any('no test names "here"' in t for _, t in warn))
@@ -1040,14 +1027,15 @@ class Projects(unittest.TestCase):
 	def test_new_project_passes_its_doctor_at_every_level(self):
 		tmp = tempfile.mkdtemp()
 		try:
-			for level in (1, 2, 3, 4):
-				folder = os.path.join(tmp, 'level{}'.format(level))
-				self.quiet(rig_project.new, folder, 'demo-tool', level)
-				code, out = self.quiet(rig_project.doctor, folder)
-				self.assertEqual(code, 0, out)
-				self.assertEqual(self.quiet(rig_project.build, folder, True)[0], 0)
-				with open(os.path.join(folder, 'rig.json'), encoding='utf-8') as f:
-					self.assertEqual(json.load(f)['rig'], 1)
+			for level in (1, 2, 3):
+				for tmpl in ('flow', 'host'):
+					folder = os.path.join(tmp, '{}-level{}'.format(tmpl, level))
+					self.quiet(rig_project.new, folder, 'demo-tool', level, tmpl)
+					code, out = self.quiet(rig_project.doctor, folder)
+					self.assertEqual(code, 0, (tmpl, level, out))
+					self.assertEqual(self.quiet(rig_project.build, folder, True)[0], 0)
+					with open(os.path.join(folder, 'rig.json'), encoding='utf-8') as f:
+						self.assertEqual(json.load(f)['rig'], 2)
 		finally:
 			shutil.rmtree(tmp)
 
@@ -1055,7 +1043,7 @@ class Projects(unittest.TestCase):
 		tmp = tempfile.mkdtemp()
 		try:
 			folder = os.path.join(tmp, 'p')
-			self.quiet(rig_project.new, folder, 'demo-tool', 3)
+			self.quiet(rig_project.new, folder, 'demo-tool', 2)
 			path = os.path.join(folder, 'demo-tool.rig')
 			with open(path, encoding='utf-8') as f:
 				text = f.read()
@@ -1071,7 +1059,7 @@ class Projects(unittest.TestCase):
 		tmp = tempfile.mkdtemp()
 		try:
 			folder = os.path.join(tmp, 'p')
-			self.quiet(rig_project.new, folder, 'demo-tool', 4)
+			self.quiet(rig_project.new, folder, 'demo-tool', 3)
 
 			def tool(*args):
 				r = subprocess.run([sys.executable, 'tool.py'] + list(args), cwd=folder, capture_output=True, text=True)
@@ -1091,7 +1079,7 @@ class Projects(unittest.TestCase):
 		tmp = tempfile.mkdtemp()
 		try:
 			folder = os.path.join(tmp, 'p')
-			self.quiet(rig_project.new, folder, 'demo-tool', 4)
+			self.quiet(rig_project.new, folder, 'demo-tool', 3)
 			self.quiet(rig_project.plugin, folder, 'tester')
 			path = os.path.join(folder, 'plugin', 'README.md')
 			with open(path, encoding='utf-8') as f:
@@ -1112,7 +1100,7 @@ class Projects(unittest.TestCase):
 		tmp = tempfile.mkdtemp()
 		try:
 			folder = os.path.join(tmp, 'p')
-			self.quiet(rig_project.new, folder, 'demo-tool', 4)
+			self.quiet(rig_project.new, folder, 'demo-tool', 3)
 			self.quiet(rig_project.plugin, folder, 'tester')
 			self.assertEqual(self.quiet(rig_project.build, folder, True)[0], 0)
 			with open(os.path.join(folder, 'plugin', 'src', 'gen', 'front.json'), encoding='utf-8') as f:
@@ -1142,7 +1130,7 @@ class Projects(unittest.TestCase):
 		tmp = tempfile.mkdtemp()
 		try:
 			folder = os.path.join(tmp, 'p')
-			self.quiet(rig_project.new, folder, 'demo-tool', 4)
+			self.quiet(rig_project.new, folder, 'demo-tool', 3)
 			self.quiet(rig_project.plugin, folder, 'tester')
 			# Test in one Node process: warm stdio across multiple calls, activeRun disambiguation
 			# when two runs wait for a person, and decorate() for kind === "step".
@@ -1223,7 +1211,7 @@ try {
 		tmp = tempfile.mkdtemp()
 		try:
 			folder = os.path.join(tmp, 'p')
-			self.quiet(rig_project.new, folder, 'demo-tool', 2)
+			self.quiet(rig_project.new, folder, 'demo-tool', 1)
 			rig_path = os.path.join(folder, 'demo-tool.rig')
 			with open(rig_path, encoding='utf-8') as f:
 				txt = f.read()
@@ -1232,7 +1220,7 @@ try {
 				f.write(no_out)
 			code, out = self.quiet(rig_project.doctor, folder, False)
 			self.assertEqual(code, 1, out)
-			self.assertIn('every step of the model has an "out" type', out)
+			self.assertIn('every model step or reason block has an "out" type', out)
 			# Plugin front emits work_run and never finish_step
 			m = rig_project.manifest(folder)
 			m['plugin'] = {'folder': 'plugin', 'owner': 'tester', 'timeout_s': 120}
@@ -1252,13 +1240,14 @@ try {
 		finally:
 			shutil.rmtree(tmp)
 
-	def test_manifest_refuses_rig_version_0(self):
+	def test_manifest_refuses_older_rig_versions(self):
 		tmp = tempfile.mkdtemp()
 		try:
-			with open(os.path.join(tmp, 'rig.json'), 'w', encoding='utf-8') as f:
-				json.dump({'rig': 0, 'source': 'x.rig'}, f)
-			with self.assertRaises(SystemExit):
-				rig_project.manifest(tmp)
+			for old_v in (0, 1):
+				with open(os.path.join(tmp, 'rig.json'), 'w', encoding='utf-8') as f:
+					json.dump({'rig': old_v, 'source': 'x.rig'}, f)
+				with self.assertRaises(SystemExit):
+					rig_project.manifest(tmp)
 		finally:
 			shutil.rmtree(tmp)
 
@@ -1271,7 +1260,7 @@ try {
 			port = sock.getsockname()[1]
 		try:
 			folder = os.path.join(tmp, 'p')
-			self.quiet(rig_project.new, folder, 'demo-tool', 3)
+			self.quiet(rig_project.new, folder, 'demo-tool', 2)
 			subprocess.run([sys.executable, 'tool.py', 'run', '{"item": "a longer item"}'], cwd=folder, capture_output=True)
 			srv = subprocess.Popen([sys.executable, os.path.join(ROOT, 'skills', 'rig', 'rig.py'), 'serve', 'demo-tool.rig', '--port', str(port)], cwd=folder, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 			try:
@@ -1297,38 +1286,11 @@ try {
 		r = subprocess.run([sys.executable, os.path.join(RELEASE, 'tool.py'), 'rules'], capture_output=True, text=True)
 		self.assertIn('"notes.min_words": 50', r.stdout)
 
-	def test_doctor_runs_tool_examples(self):
+	def test_level_3_permissions_check_requires_default_off_and_hard_gate(self):
 		tmp = tempfile.mkdtemp()
 		try:
 			folder = os.path.join(tmp, 'p')
-			self.quiet(rig_project.new, folder, 'sizes', 1)
-			with open(os.path.join(folder, 'tools.py'), 'w', encoding='utf-8') as f:
-				f.write('def sizes(text):\n\treturn (len(text.split()), len(text))\n')
-			with open(os.path.join(folder, 'tests', 'test_tools.py'), 'w', encoding='utf-8') as f:
-				f.write('import os, sys, unittest\nsys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))\nimport tools\nclass T(unittest.TestCase):\n\tdef test_sizes(self):\n\t\tself.assertEqual(tools.sizes("two words"), (2, 9))\n')
-			rig_path = os.path.join(folder, 'sizes.rig')
-			good_rig = 'unit sizes tool\n  intent "count words and chars"\n  in text str "the text"\n  out (tuple int int) "counts"\n  example "two words" => (2 9)\n  code tools.py\n    test tests/test_tools.py\n'
-			with open(rig_path, 'w', encoding='utf-8') as f:
-				f.write(good_rig)
-			self.quiet(rig_project.build, folder)
-			code, out = self.quiet(rig_project.doctor, folder)
-			self.assertEqual(code, 0, out)
-			self.assertIn('every example of a tool unit passes', out)
-			bad_rig = good_rig.replace('=> (2 9)', '=> (2 99)')
-			with open(rig_path, 'w', encoding='utf-8') as f:
-				f.write(bad_rig)
-			self.quiet(rig_project.build, folder)
-			code, out = self.quiet(rig_project.doctor, folder)
-			self.assertEqual(code, 1, out)
-			self.assertIn('got (2, 9), expected [2, 99]', out)
-		finally:
-			shutil.rmtree(tmp)
-
-	def test_level_4_permissions_check_requires_default_off_and_hard_gate(self):
-		tmp = tempfile.mkdtemp()
-		try:
-			folder = os.path.join(tmp, 'p')
-			self.quiet(rig_project.new, folder, 'demo-tool', 4)
+			self.quiet(rig_project.new, folder, 'demo-tool', 3)
 			rig_path = os.path.join(folder, 'demo-tool.rig')
 			with open(rig_path, encoding='utf-8') as f:
 				orig = f.read()
@@ -1356,13 +1318,13 @@ try {
 		r = subprocess.run([sys.executable, tool, 'doctor', RELEASE, '--no-tests', '--json'], capture_output=True, text=True)
 		self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 		data = json.loads(r.stdout)
-		self.assertEqual((data['name'], data['level'], data['level_name'], data['ok'], data['missing']), ('release', 4, 'production', True, 0))
+		self.assertEqual((data['name'], data['level'], data['level_name'], data['ok'], data['missing']), ('release', 3, 'production', True, 0))
 		self.assertTrue(isinstance(data['checks'], list) and all({'level', 'state', 'text'} <= set(c) for c in data['checks']))
 		self.assertIsInstance(data['notes'], list)
 		tmp = tempfile.mkdtemp()
 		try:
 			folder = os.path.join(tmp, 'bad')
-			self.quiet(rig_project.new, folder, 'demo-tool', 4)
+			self.quiet(rig_project.new, folder, 'demo-tool', 3)
 			rig_path = os.path.join(folder, 'demo-tool.rig')
 			with open(rig_path, encoding='utf-8') as f:
 				txt = f.read()
@@ -1373,6 +1335,259 @@ try {
 			d2 = json.loads(r2.stdout)
 			self.assertFalse(d2['ok'])
 			self.assertGreaterEqual(d2['missing'], 1)
+		finally:
+			shutil.rmtree(tmp)
+
+
+class RigV2Runtime(unittest.TestCase):
+	def test_reason_arena_two_tier_routing_and_until_soft_problem_clearing(self):
+		src = '''unit triad
+  intent "propose safe options"
+    audience "maintainers"
+    style "terse"
+    never "invent numbers" -> ok
+  in x int "value"
+  code s steps.py
+  code g gates.py
+  rule r.rounds 2 "Max repair rounds"
+  step fast by model
+    do "classify"
+    sees x
+    out str
+  reason think "Deliberate"
+    intent "explore 2 angles"
+      style "bullet points"
+      never "mutate state" -> ok
+    do "generate options"
+    mode creative
+    tools s.inspect
+    budget 2
+    candidates 2
+    sees x fast
+    out str
+  gate ok hard by g.ok
+    fail -> bad
+  until style.pass
+    retry r.rounds
+    gate style soft by g.style
+    step fix by s.fix
+      if style.failed
+  gate judge model
+    check "looks sound"
+    sees think
+    fail -> bad
+  end done
+  end bad
+'''
+		c = catalogue(src)
+		k = rigkit.Kit(c, runs=None)
+		style_calls = [0]
+
+		def inspect(state, R, args):
+			state['x'] = 999
+			return {'found': args.get('q', 'ok'), 'x': 10}
+
+		def style_g(state, R):
+			style_calls[0] += 1
+			return {'pass': style_calls[0] >= 2, 'problems': [] if style_calls[0] >= 2 else ['too verbose']}
+
+		k.bind('s', {'inspect': inspect, 'fix': lambda s, R: {'fixed': True}}).bind('g', {'ok': lambda s, R: len(s['think']) == 2, 'style': style_g})
+		r = k.run({'x': 10})
+		calls = []
+
+		def fake_req(url, headers, payload, timeout_s):
+			calls.append((url, payload['model']))
+			if payload['model'] == 'fast-worker':
+				return {'choices': [{'message': {'content': json.dumps({'result': 'classA'})}, 'finish_reason': 'stop'}]}
+			if len(calls) == 2:
+				return {'choices': [{'message': {'content': json.dumps({'tool': 's.inspect', 'args': {'q': 'check'}})}, 'finish_reason': 'stop'}]}
+			return {'choices': [{'message': {'content': json.dumps({'result': ['opt1', 'opt2']})}, 'finish_reason': 'stop'}]}
+
+		r2 = k.work(r['run'], api_url='http://worker', model='fast-worker', reason_api_url='http://reasoner', reason_model='deep-reasoner', request_fn=fake_req)
+		self.assertEqual(calls[0], ('http://worker/chat/completions', 'fast-worker'))
+		self.assertEqual(calls[1], ('http://reasoner/chat/completions', 'deep-reasoner'))
+		self.assertEqual(r2['problems'], [])
+		self.assertEqual(r2['waiting']['node'], 'judge')
+		self.assertEqual(r2['waiting']['intent']['audience'], 'maintainers')
+		self.assertEqual(k.load(r['run'])['state']['x'], 10)
+
+	def test_rollback_queue_next_batch_brief_artifact_eval_and_adapters(self):
+		src = '''unit ops
+  intent "test operational primitives"
+  in x str "input"
+  code s steps.py
+  code g gates.py
+  rule batch.size 2 "Chunk size"
+    range 1 20
+    ui
+  queue by s.pending
+  step load by s.load
+    reads batch.size
+    brief summary count
+  gate ok hard by g.ok
+    fail -> bad
+  gate ask model
+    if load.needs_model
+    check "approve?"
+    sees load
+    fail -> bad
+  end done
+  end bad
+  rollback
+    step undo by s.undo
+'''
+		tmp = tempfile.mkdtemp()
+		try:
+			k = rigkit.Kit(catalogue(src), runs=os.path.join(tmp, 'runs'))
+			rolled = []
+			k.bind('s', {
+				'pending': lambda st, R: [{'x': 'good'}, {'x': 'model'}, {'x': 'fail'}, {'x': 'extra'}],
+				'load': lambda st, R: {'summary': st['x'], 'count': len(st['x']), 'huge_blob': 'A' * 5000, 'needs_model': st['x'] == 'model'},
+				'undo': lambda st, R: (rolled.append(st['x']) or {'undone': st['x']}),
+			}).bind('g', {'ok': lambda st, R: st['x'] != 'fail'})
+
+			self.assertEqual(len(k.queues()['pending']), 4)
+			nb = k.next_batch()
+			self.assertEqual((nb['chunk'], nb['remaining'], nb['ends']), (2, 2, {'done': 1}))
+			self.assertEqual(len(nb['left_for_model']), 1)
+			self.assertIn('model', rolled)
+			self.assertIn('chunk 2/2 (2 remaining)', nb['summary'])
+
+			m_run = nb['left_for_model'][0]
+			seen_load = k.status(m_run)['waiting']['sees']['load']
+			self.assertNotIn('huge_blob', seen_load)
+			self.assertEqual(seen_load['_artifact'], 'artifacts/load.json')
+			art = k.artifact(m_run, 'load', path='huge_blob', offset=0, limit=10)
+			self.assertEqual((art['value'], art['truncated']), ('A' * 10, True))
+			with self.assertRaises(rigkit.Refused):
+				k.artifact(m_run, '../run')
+
+			rf = k.run({'x': 'fail'})
+			self.assertEqual((rf['outcome']['end'], rf.get('rolled_back')), ('bad', True))
+			self.assertTrue(k.restore(rf['run'])['restored'])
+
+			ds = [{'name': 'c1', 'inputs': {'x': 'good'}, 'expect_end': 'done'}, {'name': 'c2', 'inputs': {'x': 'fail'}, 'expect_end': 'bad'}]
+			ev1 = k.evaluate(ds)
+			self.assertEqual(ev1['pass_rate'], 1.0)
+			ev2 = k.evaluate(ds, baseline=ev1)
+			self.assertEqual(ev2['comparison']['regressions'], [])
+
+			self.assertEqual([r['result'] for r in rigkit.WorkerPool(max_workers=2).map(lambda z: z + 1, [1, 2])], [2, 3])
+			self.assertEqual(rigkit.rpc_call('http://host', 'ping', {'a': 1}, request_fn=lambda u, h, p, t: {'jsonrpc': '2.0', 'id': 1, 'result': p['params']['a']}), 1)
+		finally:
+			shutil.rmtree(tmp)
+
+	def test_providers_openapi_and_approval_ui_rendering(self):
+		src = '''unit front
+  intent "test providers and fronts"
+    never "skip approval" -> approve
+  in item str "item"
+  code s steps.py
+  rule mode.fast on "Fast mode"
+    ui
+  step work by model
+    do "process"
+    reads mode.fast
+    sees item
+    out str
+  gate approve human "Approve?"
+    check "review diff"
+    sees item work
+    fail -> no
+  end done
+  end no
+'''
+		k = rigkit.Kit(catalogue(src), runs=None)
+		for prov, resp, expect_suffix in (
+			('openai', {'choices': [{'message': {'content': json.dumps({'result': 'a'})}, 'finish_reason': 'stop'}], 'usage': {'completion_tokens': 5}}, '/chat/completions'),
+			('ollama', {'message': {'content': json.dumps({'result': 'b'})}, 'eval_count': 6, 'done_reason': 'stop'}, '/api/chat'),
+			('anthropic', {'content': [{'type': 'text', 'text': json.dumps({'result': 'c'})}], 'usage': {'output_tokens': 7}, 'stop_reason': 'end_turn'}, '/v1/messages'),
+		):
+			r = k.run({'item': prov})
+			urls = []
+			r2 = k.work(r['run'], api_url='http://api.local', model='m1', api_key='k1', provider=prov, request_fn=lambda u, h, p, t: (urls.append(u) or resp))
+			self.assertEqual(r2['waiting']['kind'], 'human')
+			self.assertTrue(urls[0].endswith(expect_suffix))
+		spec = k.openapi_spec('http://127.0.0.1:8780')
+		self.assertEqual(spec['openapi'], '3.1.0')
+		self.assertIn('/mcp', spec['paths'])
+		self.assertIn('data-rule="mode.fast"', k._render_ui_rules_html())
+		self.assertIn('diff-before', k._render_sees_html({'diff_obj': {'before': 'x', 'after': 'y'}}))
+		self.assertIn('/media?path=', k._render_sees_html({'img': 'out.png'}))
+
+		# Also verify mcp-config --http
+		rig_py = os.path.join(ROOT, 'skills', 'rig', 'rig.py')
+		c_http = subprocess.run([sys.executable, rig_py, 'mcp-config', RELEASE, '--http', 'http://127.0.0.1:8780'], capture_output=True, text=True)
+		self.assertEqual(c_http.returncode, 0, c_http.stderr)
+		cfg = json.loads(c_http.stdout)['mcpServers']['release']
+		self.assertEqual(cfg['url'], 'http://127.0.0.1:8780/mcp')
+		self.assertEqual(cfg['openapi'], 'http://127.0.0.1:8780/openapi.json')
+
+	def test_serve_http_mcp_openapi_and_approval_ui(self):
+		import threading
+		import urllib.parse
+		import urllib.request
+		src = '''unit webdemo
+  intent "serve universal fronts"
+    never "skip human sign-off" -> approve
+  in item str "item"
+  code s steps.py
+  rule mode.fast on "Fast mode"
+    ui
+  step check by s.check
+    reads mode.fast
+  gate approve human "Approve item?"
+    check "review the item"
+    sees item check
+    fail -> no
+  end done
+  end no
+'''
+		tmp = tempfile.mkdtemp()
+		try:
+			k = rigkit.Kit(catalogue(src), runs=os.path.join(tmp, 'runs')).bind('s', {'check': lambda st, R: {'len': len(st['item'])}})
+			srv = k.make_http_server(host='127.0.0.1', port=0, reports_dir=os.path.join(tmp, 'reports'))
+			port = srv.server_port
+			t = threading.Thread(target=srv.serve_forever, daemon=True)
+			t.start()
+			try:
+				base = 'http://127.0.0.1:{}'.format(port)
+				# 1. OpenAPI 3.1
+				with urllib.request.urlopen(base + '/openapi.json', timeout=3) as r:
+					spec = json.loads(r.read().decode('utf-8'))
+				self.assertEqual(spec['openapi'], '3.1.0')
+				self.assertIn('/mcp', spec['paths'])
+				# 2. Streamable HTTP MCP initialize + start_run -> human gate with approve_url & elicitation
+				req_init = urllib.request.Request(base + '/mcp', data=json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {'capabilities': {'elicitation': {}}}}).encode('utf-8'), headers={'Content-Type': 'application/json'}, method='POST')
+				with urllib.request.urlopen(req_init, timeout=3) as r:
+					sid = r.headers.get('Mcp-Session-Id')
+					init_res = json.loads(r.read().decode('utf-8'))
+				self.assertTrue(sid)
+				self.assertEqual(init_res['result']['serverInfo']['version'], '2')
+				req_start = urllib.request.Request(base + '/mcp', data=json.dumps({'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call', 'params': {'name': 'start_run', 'arguments': {'item': 'hello'}}}).encode('utf-8'), headers={'Content-Type': 'application/json', 'Mcp-Session-Id': sid}, method='POST')
+				with urllib.request.urlopen(req_start, timeout=3) as r:
+					start_data = json.loads(json.loads(r.read().decode('utf-8'))['result']['content'][0]['text'])
+				rid = start_data['run']
+				self.assertEqual(start_data['waiting']['approve_url'], '{}/approve/{}'.format(base, rid))
+				self.assertEqual(start_data['waiting']['elicitation']['method'], 'elicitation/create')
+				# 3. Dashboard renders UI rule control and pending human gate link
+				with urllib.request.urlopen(base + '/', timeout=3) as r:
+					dash = r.read().decode('utf-8')
+				self.assertIn('data-rule="mode.fast"', dash)
+				self.assertIn('/approve/' + rid, dash)
+				# 4. GET & POST /approve/<run> completes human sign-off
+				with urllib.request.urlopen('{}/approve/{}'.format(base, rid), timeout=3) as r:
+					app_html = r.read().decode('utf-8')
+				self.assertIn('Approve item?', app_html)
+				form = urllib.parse.urlencode({'decision': 'yes', 'note': 'looks great'}).encode('utf-8')
+				req_post = urllib.request.Request('{}/approve/{}'.format(base, rid), data=form, method='POST')
+				with urllib.request.urlopen(req_post, timeout=3) as r:
+					done_html = r.read().decode('utf-8')
+				self.assertIn('Decision recorded', done_html)
+				self.assertEqual(k.status(rid)['outcome']['end'], 'done')
+			finally:
+				srv.shutdown()
+				srv.server_close()
 		finally:
 			shutil.rmtree(tmp)
 

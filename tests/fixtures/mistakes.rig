@@ -1,6 +1,6 @@
 ; Every line marked "error" must be refused by rig.py (see test_rig.py).
 
-unit broken agent
+unit broken
   intent "uses {nope.missing} and {plain} text"     ; error: no rule nope.missing
   rule limits 3                                     ; error: an id is group.name
   rule size.max 12 "Size"                           ; error: above the range

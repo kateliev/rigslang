@@ -3,18 +3,20 @@
 A tool has one core and several fronts. The core is the code and the catalogue. A front is the thin part that one kind of user talks to. All fronts call the same command line, so they all read the same knowledge.
 
 ```text
-   Claude            a local model           any MCP host          a person
-     │                    │                       │                    │
-  skill/SKILL.md     plugin (LM Studio)     tool.py mcp           the command line,
-  (lean compiled)    (warm serve-stdio)     (JSON-RPC 2.0)        the graph page
-     │                    │                       │                    │
-     └────────────────────┴───────────────────────┼────────────────────┘
-                                                  ▼
-                                         python3 tool.py ...      one JSON line per call
-                                                  │
-                                      rigkit.py: walks the flow, keeps the run, refuses a wrong call
-                                                  │
-                                       gates.py  steps.py  gen/<name>.json
+   Coding agents     a local model      MCP & HTTP/OpenAPI     a person
+   (Claude, Codex,   (LM Studio         (tool.py mcp,          (CLI, /approve UI,
+    Cursor, Gemini,   plugin)            tool.py serve-http)    graph viewer)
+    Antigravity...)      │                       │                    │
+      │                  │                       │                    │
+   skill/SKILL.md    plugin/            JSON-RPC 2.0 / REST    /approve/<run>
+      │                  │                       │                    │
+      └──────────────────┴───────────────────────┼────────────────────┘
+                                                 ▼
+                                        python3 tool.py ...      one JSON line per call
+                                                 │
+                                     rigkit.py: walks the flow, keeps the run, refuses a wrong call
+                                                 │
+                                      gates.py  steps.py  gen/<name>.json
 ```
 
 `RIG` is the path of `skills/rig/rig.py`. `python3 RIG build DIR` compiles every front.
@@ -26,12 +28,17 @@ Every tool has `tool.py`. It is the only door to the tool. Runs get short sequen
 | Call | What it does |
 |---|---|
 | `tool.py run '<inputs as JSON>'` | Start a run. Code walks the flow as far as it can. Options: `--preset NAME`, `--set group.name=value` (for this run only). Inputs are validated against their port schemas. |
-| `tool.py batch '<JSON list>' [--report PATH] [--workers N]` | Start a run for each item of a list (or of a file). `--workers N` (default `1`) runs items in parallel threads while preserving `errors_stop`. A batch stops after two errors in a row. |
-| `tool.py queues` | The runs that did not end, by who must act: `left_for_model`, `waits_for_person`. Uses `runs/.waiting.json` so it reads only waiting runs. |
-| `tool.py answer RUN '<JSON>' [--node ID] [--meta '<JSON>']` | The model answers the node that the run waits at: `{"pass": true, "why": "..."}` for a gate, `{"result": ...}` for a step. `--node` refuses a stale call; `--meta` records optional metrics (`model`, `seconds`, `tokens`, `error`) in `answers.json`. |
+| `tool.py batch '<JSON list>' [--report PATH] [--workers N]` | Start a run for each item of a list (or of a file). `--workers N` (default `1`) runs items in parallel threads while preserving `errors_stop`. |
+| `tool.py next-batch [ITEMS] [--size N] [--report PATH]` | Run one chunk unattended (from `ITEMS` or the unit's `queue` step) under `runs/.batch.lock` and a consecutive-error/timeout circuit breaker. Rolls back and defers waiting items and prints one compact `summary` line. |
+| `tool.py queues` | Open runs split into `left_for_model` and `waits_for_person` (via `runs/.waiting.json`), plus external `pending` items when `queue` is declared. |
+| `tool.py answer RUN '<JSON>' [--node ID] [--meta '<JSON>']` | The model answers the node that the run waits at: `{"pass": true, "why": "..."}` for a gate, `{"result": ...}` for a step or reason block. `--node` refuses a stale call; `--meta` records metrics (`model`, `seconds`, `tokens`, `error`). |
+| `tool.py arena RUN TOOL [JSON]` | Call a read-only tool declared on a waiting `reason` block, running on a deep copy of `state` under its hard `budget`. |
 | `tool.py approve RUN [WORDS]` | A person answers a human gate: `yes` or `no`, or at a gate with `options`, the words of the answer (`yes` or nothing: the first option). |
-| `tool.py work RUN [--api-url URL] [--model NAME]` | Model-agnostic Python worker (standard library only): runs `by model` steps in fresh contexts against an OpenAI-compatible `/chat/completions` endpoint. Options: `--api-key`, `--think`, `--max-tokens N` (4000), `--max-calls N` (50); env fallbacks `RIG_API_URL`, `RIG_MODEL`, `RIG_API_KEY`. |
-| `tool.py mcp [--api-url URL] [--model NAME]` | Run a zero-dependency JSON-RPC 2.0 MCP server over stdin/stdout (Section 4). |
+| `tool.py restore RUN` | Run the unit's `rollback` block explicitly to restore state for `RUN`. |
+| `tool.py artifact RUN NAME [--path KEY] [--offset N] [--limit N]` | Read-only inspection of a full payload saved by a step or reason block that declares `brief`. |
+| `tool.py work RUN [--api-url URL] [--model NAME] [--provider openai\|ollama\|anthropic]` | Two-tier Python worker (stdlib only): routes `step ... by model` to the worker model and `reason` blocks to the reasoning tier (`--reason-api-url`, `--reason-model`, `--reason-api-key`, `--reason-provider`; env `RIG_*` / `RIG_REASON_*`). Supports `openai`, `ollama`, and `anthropic` APIs. |
+| `tool.py mcp [--api-url URL] [--model NAME] [--approve-url URL]` | Zero-dependency JSON-RPC 2.0 stdio MCP server (with MCP Elicitation when advertised by the client). |
+| `tool.py serve-http [--host 127.0.0.1] [--port 8780] [--reports DIR]` | Stdlib HTTP server exposing Streamable HTTP MCP (`POST /mcp`), OpenAPI 3.1 (`/openapi.json`), REST endpoints (`/api/*`), rule-bound UI controls (`/`), visual/diff human approval pages (`/approve/<run>`), and reports (`/reports`). |
 | `tool.py serve-stdio` | Warm JSON-lines loop over stdin/stdout keeping Python and loaded modules warm (used by the plugin bridge). |
 | `tool.py drop RUN [REASON]` | Mark a waiting run ended with outcome `dropped` so abandoned runs leave `queues`. |
 | `tool.py list [--limit N]` | List runs, newest first (default 50). |
@@ -41,8 +48,8 @@ Every tool has `tool.py`. It is the only door to the tool. Runs get short sequen
 | `tool.py rerun RUN --from ID [--set group.name=value]` | A new run with the state of the old run before the line ID (from `marks/<node>.json`), and changed rules. |
 | `tool.py replay RUN` | Run the flow again with the answers recorded in RUN and the current code; print the differences of the end and the path. No model. `rig.py test DIR --replay RUN` does the same. |
 | `tool.py rules` / `tool.py flow` | The values of the rules; the nodes of the flow. |
-| `tool.py call TOOL '<JSON>'` | Call a tool unit (level 1), validating inputs against its schemas. |
 | `tool.py regress FILE [--baseline]` | Play the regression set. |
+| `tool.py eval DATASET [--baseline PATH] [--save-baseline]` | Score a ground-truth dataset (quality metrics + wall time) and compare against a saved baseline. |
 
 Each call prints one JSON line (except `serve-stdio` and `mcp`, which loop over stdio). The keys to read:
 
@@ -63,13 +70,11 @@ Two settings of the runner can be rules of the source: `run.errors_stop` (a batc
 
 Each run has a folder, `runs/<run id>/`, with a pinned copy of the flow and the rules, every answer, and per-node checkpoints in `marks/<node>.json` ([spec.md](../spec.md), section 4).
 
-## 2. The front for Claude: a lean compiled skill
+## 2. The Agent Skill front (any skill-capable coding agent)
 
-`rig.json` names the skill file (`"build": {"skill": "skill/SKILL.md"}`). `rig.py build` compiles it with `--driver`, producing a lean ~50–65 line skill: the driver loop, a compact table of model and human nodes, a one-line summary of code stages, and the `Guessed:` rule. It does not dump every code-only node (`tool.py flow` shows the full map).
+`rig.json` names the skill file (`"build": {"skill": "skill/SKILL.md"}`). `rig.py build` compiles it with `--driver`, producing a lean ~50–65 line skill that works in Claude Code, Codex, Cursor, Gemini CLI, Antigravity, and OpenCode: the driver loop, a compact table of model, reason, and human nodes, a one-line summary of code stages, and the `Guessed:` rule.
 
-To use it, put the folder `skill/` where Claude Code looks for skills, under the name of the tool: a link or a copy at `.claude/skills/<name>/` of the project, or of the home folder. Tell Claude the path to the tool folder, or add it to the project's `CLAUDE.md`.
-
-Claude can also run `tool.py work RUN --api-url URL --model NAME` to process `by model` steps in fresh isolated contexts, the same way the LM Studio plugin does.
+Copy or link `skill/` into the agent's skills directory under the tool name. Any agent can also run `tool.py work RUN` with `--provider openai|ollama|anthropic` and optional `--reason-*` two-tier routing.
 
 A large tool needs more than the compiled file: how to set up the host, how to review a batch, how to change a rule. Write these as extra files next to the compiled skill, **one file for each task**, and name them in the README of the tool. Keep the compiled `SKILL.md` as the entry, and never edit it.
 
@@ -81,7 +86,7 @@ python3 RIG plugin DIR --owner NAME
 
 This adds the folder `plugin/`: an LM Studio plugin. Its code is the same for every tool. `rig.py build` keeps the code and the README current; do not edit them. Everything about the tool comes from `plugin/src/gen/front.json`, which the build compiles:
 
-- **The tools.** `start_run` (with the inputs of the unit), `answer_gate` (only when the flow has a gate for the model), `work_run` (when the flow has a `by model` step — every `by model` step has an `out` type and uses `work_run`), `run_status`, `start_batch`, `queues`, and one tool for each tool unit.
+- **The tools.** `start_run` (with the inputs of the unit), `answer_gate` (only when the flow has a gate for the model), `work_run` (when the flow has a `by model` step or `reason` block), `run_status`, `start_batch`, and `queues`. Rules marked with `ui` are exported in `ui_rules` for plugin settings.
 - **The rules text.** Short numbered lines injected before the first message of a chat.
 - **The warm stdio driver.** `src/bridge.ts` keeps one persistent `tool.py serve-stdio` child process per session (with queued requests, timeouts, auto-restart, and fallback to one-shot spawn), avoiding Python startup cost on every tool call.
 - **Self-directing `waiting.next_action`.** The bridge strips CLI-only `waiting.answer` and adds `waiting.next_action` so the model sees the exact next tool call (`work_run`, `answer_gate`, or `NONE` with `show_verbatim` at a human gate).
@@ -156,39 +161,42 @@ A small local model is not a small frontier model. It follows a short list well,
 
 Test with the model that will do the work. A text that a large model reads right can still fail with a small one.
 
-## 4. The MCP server front (any MCP host)
+## 4. Universal MCP (Stdio + Streamable HTTP) & OpenAPI 3.1
 
-Any MCP host (Claude Desktop, Claude Code, Cursor, LM Studio, Windsurf) can run any Rig tool natively with zero extra dependencies:
+Any MCP host (Claude Desktop, Claude Code, Cursor, LM Studio, Windsurf) or HTTP/OpenAPI client (Open WebUI, AnythingLLM, Jan, workflow engines) can run any Rig tool with zero extra dependencies:
 
 ```bash
-python3 RIG mcp-config DIR [--api-url URL] [--model NAME]
+python3 RIG mcp-config DIR [--api-url URL] [--model NAME] [--provider openai|ollama|anthropic]
 ```
 
-This prints a ready-to-paste `mcpServers` JSON block that launches `python3 tool.py mcp` over stdin/stdout (JSON-RPC 2.0: `initialize`, `ping`, `tools/list`, `tools/call`).
+```bash
+python3 RIG mcp-config DIR --http http://127.0.0.1:8780
+```
 
-- **Exposed tools:** `start_run`, `answer_gate` (when model gates exist), `work_run` (when `--api-url` and `--model` are configured, or `RIG_API_URL`/`RIG_MODEL` are set) or `answer_step` (when model steps exist without a worker), `run_status`, `start_batch` (with optional `workers`), `queues`, `drop_run`, and one tool per level-1 `tool` unit.
-- **Human gates:** never exposed as an MCP tool. Waiting responses carry `waiting.next_action` tailored to MCP tool names (`"call": "NONE"` at human gates, `"call": "answer_gate"`, or `"call": "work_run"`/`"answer_step"`), and CLI-only `waiting.answer` is removed. The person approves in a terminal with `python3 tool.py approve r1 yes`.
+```bash
+python3 tool.py serve-http --port 8780
+```
+
+- **Stdio MCP (`tool.py mcp`) and Streamable HTTP MCP (`POST /mcp`):** expose `start_run`, `answer_gate`, `work_run` / `answer_step`, `arena_call` (when `reason` tools exist), `run_status`, `start_batch`, `next_batch`, `queues`, `drop_run`, `restore_run` (when `rollback` exists), and `read_artifact` (when `brief` steps exist).
+- **OpenAPI 3.1 (`/openapi.json`) & REST (`/api/*`):** standard JSON endpoints wired to the unit's compiled input schema.
+- **Universal human gates & visual review UI:** human gates are never exposed as model tools. When a client advertises MCP Elicitation (`capabilities.elicitation`), waiting responses attach `waiting.elicitation` (`elicitation/create`). When served over HTTP (or `--approve-url` is set), waiting responses also attach `waiting.approve_url` pointing to `/approve/<run>`, which renders the question, `sees` values, image galleries and before/after diffs, and one-click Approve/Reject/option buttons. The root `/` dashboard exposes `rule ... ui` controls wired to per-run overrides, and `/reports` serves batch reports.
 
 ## 5. The front for a person
 
-- The command line, as above. A person answers human gates with `approve`.
-- The pages: `python3 RIG serve NAME.rig --json gen/NAME.json` shows the source as tables and as a graph. Values can be changed on the page, and Save builds the catalogue again. The wires are read-only: change the flow in the source file, and review it in version control.
-- **The path of a run.** The graph page has a list of the runs of the tool (the folder `runs/` next to the source; `--runs DIR` for another). Choose one: the graph lights up the path that the run took. A number on a node is the order of the visit, a red frame is a gate that failed, and a dashed frame is where the run waits. Click a node to read what happened there: pass or fail, the problems, the facts, and who decided.
-- The reports and the queues of a production tool ([patterns.md](patterns.md)).
+- The command line (`approve`, `restore`, `next-batch`, `eval`) or the built-in localhost web UI (`tool.py serve-http`).
+- The graph viewer: `python3 RIG serve NAME.rig --json gen/NAME.json` shows the source as tables and as a three-lane graph (`code`, `model`, `person`), with `reason` nodes, `rollback`/`finally` blocks, structured `intent`, and `ui` rule badges.
 
 ## 6. A tool inside a host application
 
-Some tools must run inside an application (a font editor, a design tool). Then the steps cannot be a plain command line: they run in the application, and the agent reaches them through a bridge of the host, for example an MCP server with a "run this code" call.
+Use the built-in host template to split **the Idea** from **the World**:
 
-Keep the same shape:
+```bash
+python3 RIG new DIR NAME --level 3 --template host
+```
 
-- The **gates** stay pure Python. They run anywhere, and their tests need no host.
-- The **steps** run in the host. Wrap each one with `rigkit.step`: it prints one JSON line with `ok`, `step` and `result`, and turns an error into a result.
-- The **runner** runs where the steps run, or the front walks the flow with one call for each step. In both cases a step returns the verdict of its gates, and the front only reads it.
-- The front passes data only. The function names are fixed in the front; the arguments travel as one JSON string.
-- Write the host bridge one time, and share it between the tools of that host.
-
-This is the shape of the production agent that the method comes from. It is not yet in the templates: `rig.py new` makes command-line tools. See [docs/status.md](../../../docs/status.md).
+- **`engine.py` & `gates.py`** stay pure Python with zero host imports; unit tests run anywhere.
+- **`adapter.py`** holds all host quirks (JSON-RPC via `rigkit.rpc_call`, HTTP via `rigkit.http_json`, `@rigkit.step`, or `rigkit.WorkerPool`).
+- **`rollback`** restores the host snapshot automatically on hard fail, error, or unattended deferral in `next-batch`, and explicitly via `tool.py restore RUN`.
 
 ## 7. What no front may do
 

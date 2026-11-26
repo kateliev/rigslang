@@ -28,10 +28,10 @@ More instruction text does not fix this. The fix is to move work out of the text
 
 | Part | What it is | Who owns it |
 |---|---|---|
-| **Rules** | Every number, switch and name of the tool. One place. | The person. A change is a change of one value, with a reason. |
-| **Steps** | The work. The only code that touches the world. | Code. |
-| **Gates** | The decisions. | Code where code can decide. Else the model, marked as a guess. Else a person. |
-| **Flow** | The order of the lines, the blocks (`for`, `until`, `if`, `finally`), and where a run can end. | The source file. Code walks it. |
+| **Rules** | Every number, switch and name of the tool. One place (with optional `ui` controls). | The person. A change is a change of one value, with a reason. |
+| **Steps & Reason** | Deterministic `step`s (`by steps.fn`), lightweight `step ... by model`, and deliberative `reason` blocks (`mode`, read-only `tools` + `budget`, `candidates`). | Code for deterministic work; two-tier models for fill-in vs. reasoning. |
+| **Gates** | The decisions (`hard`, `soft`, `model`, `human`) plus `never` invariants under `intent`. | Code where code can decide. Else the model, marked as a guess. Else a person. |
+| **Flow** | The order of the lines, the blocks (`for`, `until`, `if`, `else`, `rollback`, `finally`), `queue`, and where a run can end. | The source file. Code walks it. |
 
 A gate is `hard` or `soft` (code decides), `model` (the model decides; marked as a guess) or `human` (a person decides; the run waits). Full gate rules are in [spec.md](../spec.md).
 
@@ -62,7 +62,7 @@ So the code drives, and the model handles the exceptions. An item that needs no 
 
 These hold for the smallest tool and the largest.
 
-1. **One source.** The `.rig` file holds the names, the numbers and the flow. The catalogue, the skill and the tool definitions are compiled from it. Nobody edits a compiled file.
+1. **One source.** The `.rig` file holds the intent, rules, steps, reason blocks, gates, and flow. The catalogue, Agent Skill, and fronts are compiled from it. Nobody edits a compiled file.
 2. **A number lives in a rule.** Not in code, not in a prompt, not in a guide. Code reads it with `R('group.name')`.
 3. **A decision that code can make is made by code.** The model reads the verdict. It never reads the numbers and decides.
 4. **The model sends data, never code.** The names of the functions are fixed. The arguments are JSON.
@@ -70,7 +70,7 @@ These hold for the smallest tool and the largest.
 
 ## 5. Every front reads the same pool
 
-A tool has one core (`gates.py`, `steps.py`, `rigkit.py`, and the catalogue) and thin fronts: a lean compiled `skill/SKILL.md` for Claude, an LM Studio plugin for a local model, a zero-dependency stdio MCP server (`tool.py mcp`) for any MCP host, and a command line and graph page for a person. See [fronts.md](fronts.md) for every front and CLI command.
+A tool has one core (`gates.py`, `steps.py`, `rigkit.py`, and the catalogue) and thin universal fronts: a compiled `skill/SKILL.md` for any skill-capable coding agent (Claude Code, Codex, Cursor, Gemini CLI, Antigravity, OpenCode), a zero-dependency stdio MCP server (`tool.py mcp`), a Streamable HTTP MCP + OpenAPI 3.1 + localhost approval UI server (`tool.py serve-http`), an LM Studio plugin, and a command line and graph page for a person. See [fronts.md](fronts.md) for every front and CLI command.
 
 No front has a limit of its own, and no front decides a gate. A change of the source reaches all fronts at the next build.
 

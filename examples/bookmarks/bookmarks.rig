@@ -6,8 +6,10 @@
 ; for each item. 19 steps and gates, 4 ends.
 ; The tool never changes the export or a live file of the browser: it writes a new HTML file to import.
 
-unit bookmarks agent
+unit bookmarks
   intent "clean up a bookmarks HTML file that Edge exported: remove exact duplicates, fold similar URLs as the person chooses, sort loose bookmarks into folders, and write a new file to import"
+    never "overwrite an existing output file unless permissions.overwrite is on" -> target
+    never "write the new file without human approval" -> approve
   in file path "the bookmarks HTML file that Edge exported (Settings, Favorites, Export favorites)"
   out text "the path of the new bookmarks file and of its report"
   code gates gates.py

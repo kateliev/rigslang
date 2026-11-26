@@ -25,7 +25,7 @@ SAYS_GONE = re.compile(r'\b(gone|removed|version 0|refuses?|Then:)\b', re.I)
 
 def tracked(suffix):
 	out = subprocess.run(['git', 'ls-files'], cwd=ROOT, capture_output=True, text=True).stdout.split()
-	return [f for f in out if f.endswith(suffix) and 'node_modules/' not in f and not RECORDS.match(f)]
+	return [f for f in out if f.endswith(suffix) and 'node_modules/' not in f and not RECORDS.match(f) and os.path.exists(os.path.join(ROOT, f))]
 
 
 def docs():
@@ -122,15 +122,13 @@ class ToolDocstrings(unittest.TestCase):
 	def test_a_flow_tool_names_every_command_of_kit_cli(self):
 		want = cli_commands()
 		self.assertIn('run', want)
-		paths = [p for p in tracked('tool.py') if p.startswith('examples/') and p.count('/') == 2] + ['skills/rig/kit/templates/flow/tool.py']
+		paths = (
+			[p for p in tracked('tool.py') if p.startswith('examples/') and p.count('/') == 2]
+			+ ['skills/rig/kit/templates/flow/tool.py', 'skills/rig/kit/templates/host/tool.py']
+		)
 		self.assertTrue(paths)
 		for p in paths:
 			self.assertEqual(sorted(doc_commands(p)), sorted(want), p)
-
-	def test_a_level_1_tool_names_only_commands_of_kit_cli(self):
-		got = doc_commands('skills/rig/kit/templates/tools/tool.py')  # no flow: only "call" works
-		self.assertIn('call', got)
-		self.assertLessEqual(got, cli_commands())
 
 
 if __name__ == '__main__':

@@ -11,16 +11,13 @@
 			"include": "#comment"
 		},
 		{
-			"match": "^(unit)\\s+([^\\s();\"][^\\s();]*)(?:\\s+(tool|agent)(?=[\\s;]|$))?",
+			"match": "^(unit)\\s+([^\\s();\"][^\\s();]*)",
 			"captures": {
 				"1": {
 					"name": "storage.type.unit.rig"
 				},
 				"2": {
 					"name": "entity.name.type.unit.rig"
-				},
-				"3": {
-					"name": "storage.modifier.scale.rig"
 				}
 			}
 		},
@@ -50,7 +47,7 @@
 			}
 		},
 		{
-			"match": "^\\s*(intent|example|check)(?=[\\s;]|$)",
+			"match": "^\\s*(intent|audience|style|never|check)(?=[\\s;]|$)",
 			"captures": {
 				"1": {
 					"name": "keyword.other.matrix.rig"
@@ -58,18 +55,7 @@
 			}
 		},
 		{
-			"match": "^\\s*(uses)(?=[\\s;]|$)(?:\\s+([^\\s();\"][^\\s();]*))?",
-			"captures": {
-				"1": {
-					"name": "keyword.other.context.rig"
-				},
-				"2": {
-					"name": "entity.other.inherited-class.rig"
-				}
-			}
-		},
-		{
-			"match": "^\\s*(code|test)(?=[\\s;]|$)",
+			"match": "^\\s*(code|test|queue)(?=[\\s;]|$)",
 			"captures": {
 				"1": {
 					"name": "keyword.other.context.rig"
@@ -110,7 +96,7 @@
 			}
 		},
 		{
-			"match": "^\\s*(note|options|range)(?=[\\s;]|$)",
+			"match": "^\\s*(note|options|range|ui)(?=[\\s;]|$)",
 			"captures": {
 				"1": {
 					"name": "keyword.other.context.rig"
@@ -118,7 +104,7 @@
 			}
 		},
 		{
-			"match": "^\\s*(step|end)(?=[\\s;]|$)(?:\\s+([^\\s();\"][^\\s();]*))?",
+			"match": "^\\s*(step|reason|end)(?=[\\s;]|$)(?:\\s+([^\\s();\"][^\\s();]*))?",
 			"captures": {
 				"1": {
 					"name": "storage.type.node.rig"
@@ -171,7 +157,7 @@
 			}
 		},
 		{
-			"match": "^\\s*(else|section|finally)(?=[\\s;]|$)",
+			"match": "^\\s*(else|section|rollback|finally)(?=[\\s;]|$)",
 			"captures": {
 				"1": {
 					"name": "keyword.control.block.rig"
@@ -190,7 +176,18 @@
 			}
 		},
 		{
-			"match": "^\\s*(do|fail|retry|timeout|tolerate)(?=[\\s;]|$)",
+			"match": "^\\s*(mode)(?=[\\s;]|$)(?:\\s+(careful|creative)(?=[\\s;]|$))?",
+			"captures": {
+				"1": {
+					"name": "keyword.control.flow.rig"
+				},
+				"2": {
+					"name": "storage.modifier.mode.rig"
+				}
+			}
+		},
+		{
+			"match": "^\\s*(do|fail|retry|timeout|tolerate|tools|budget|candidates|brief)(?=[\\s;]|$)",
 			"captures": {
 				"1": {
 					"name": "keyword.control.flow.rig"
@@ -262,10 +259,6 @@
 				}
 			}
 		},
-		"example": {
-			"match": "(?<![^\\s(])=>(?=[\\s();]|$)",
-			"name": "keyword.operator.arrow.rig"
-		},
 		"inline": {
 			"match": "(?<![^\\s(])(?:by|fail)(?=[\\s();]|$)",
 			"name": "keyword.control.flow.rig"
@@ -311,9 +304,6 @@
 				},
 				{
 					"include": "#arrow"
-				},
-				{
-					"include": "#example"
 				},
 				{
 					"include": "#inline"

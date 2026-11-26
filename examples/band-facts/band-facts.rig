@@ -4,8 +4,9 @@
 ; decides two gates; a gate in code holds the word limit. Each gate that checks the paragraph sends it
 ; back to the model at most answer.rounds times (retry).
 
-unit band-facts agent
+unit band-facts
   intent "for a band name, write one paragraph about the band and list its albums, with the facts of its English Wikipedia article only"
+    never "state facts outside the Wikipedia summary" -> grounded
   in band str "the name of the band"
   out text "one paragraph, the albums as title (year), and the URL of the article"
   code gates gates.py

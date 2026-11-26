@@ -1,13 +1,13 @@
 ---
 name: rig
-description: Build and maintain instrumental agents with Rig - tools and agents where code does the steps and decides the gates, and a model or a person answers only what code cannot. Use it to build a new tool or agent from a wish ("build me a tool that...", "make an agent for..."), to add a Claude skill or an LM Studio plugin to a tool, to change the rules, gates or flow of a Rig tool, to check a tool (doctor, regression, replay), or to read or write .rig files. Trigger on ".rig", "Rig", "riglang", "rig.json", "rigkit", "gate", "build a tool like", "instrumental agent", "make a skill and a plugin for", "doctor", "gate coverage", "compile the skill".
+description: Build and maintain instrumental agents with Rig v2 — domain-agnostic orchestrated flows where code does deterministic steps and hard/soft gates, reason blocks handle deliberative or creative cognition, and a person decides human gates. Works across Claude Code, Codex, Cursor, Gemini CLI, Antigravity, OpenCode, MCP (stdio & HTTP), OpenAPI 3.1, and local models.
 ---
 
 # Rig
 
-Rig is a kit and a method for building **instrumental agents**: a model that operates tools to do a defined job. Its name is the three parts of the work: **R**eason (the model: judgment, and only where it is needed), **I**ntent (what the tool must do, in plain words), **G**ate (who decides whether it did: code, the model, or a person).
+Rig is a kit and a method for building **instrumental agents**: a model that operates tools to do a defined job. Its name is the three parts of the work: **R**eason (`reason` blocks and `step ... by model`), **I**ntent (structured `intent` with `audience`, `style`, and `never` invariants), **G**ate (`hard`, `soft`, `model`, `human`).
 
-One `.rig` file is the source of a tool: its rules, steps, gates and ends. The order of its lines is the order of the flow; a few blocks (`for`, `until`, `if`, `else`, `section`, `finally`) hold loops and choices. The code lives in normal files. A runner walks the flow: code does the steps and decides the gates, and the run stops only where it needs the model or a person. The Claude skill, the local-model plugin and the stdio MCP server of a tool are all driven from the same compiled source.
+One `.rig` file is the source of a tool: its rules, queue, steps, reason blocks, gates, ends, rollback, and finally. It enforces a three-layer split: **the Idea** (`.rig`, pure-Python engine & gates, `rigkit.py`), **the World** (thin target adapters), and **the Caller** (Agent Skill, stdio & Streamable HTTP MCP, OpenAPI 3.1, localhost approval UI, local plugin).
 
 `RIG` below means `python3 <this folder>/rig.py` (Python 3, standard library only).
 
@@ -17,31 +17,31 @@ One `.rig` file is the source of a tool: its rules, steps, gates and ends. The o
 |---|---|
 | Quick reference: grammar, Python signatures, `rig.json`, CLI | [cheatsheet.md](cheatsheet.md) (one page) |
 | Build a new tool or agent | [guide/README.md](guide/README.md) (the method, one page), then [guide/build-order.md](guide/build-order.md) |
-| Choose how much a tool needs | [guide/levels.md](guide/levels.md) |
+| Choose how much a tool needs (levels 1–3) | [guide/levels.md](guide/levels.md) |
 | Change a tool: a value, a gate, the flow, the code | [change.md](change.md) |
 | Design a step or a gate that a local model does | [guide/weak-model.md](guide/weak-model.md) |
-| Connect a tool to Claude, a local model, or an MCP host | [guide/fronts.md](guide/fronts.md) |
-| A tool that changes real files, works on many items, or needs the eye of a person | [guide/patterns.md](guide/patterns.md) |
+| Connect a tool to coding agents, MCP, HTTP/OpenAPI, or a local model | [guide/fronts.md](guide/fronts.md) |
+| Production patterns: rollback, queues, `next-batch`, `brief`, `eval` | [guide/patterns.md](guide/patterns.md) |
 | A question about a word of the language | [spec.md](spec.md) |
 
 Always read [guide/rules.md](guide/rules.md): one page, the rules that have no exception.
 
-The pattern to copy is the example tool `examples/release-tool` of the Rig repository. When a text and the example disagree, the example is right: its tests run.
+The pattern to copy is `examples/release-tool`. When a text and the example disagree, the example is right: its tests run.
 
 ## The commands
 
 | Command | Use |
 |---|---|
-| `RIG new DIR NAME --level N` | Make a project: a working tool of level 1 to 4, to change into the real one. |
-| `RIG build DIR` | Compile the source to the catalogue, the lean skill, the tool definitions and the plugin front. `--check`: fail if a compiled file is not current. |
-| `RIG doctor DIR [--json]` | Check the project against the list of its level. Each line is `ok` or `MISS` (`--json` prints structured output). |
-| `RIG test DIR [--replay RUN]` | Run the tests of the project, or play the recorded answers of one run again with the current code. |
-| `RIG plugin DIR --owner NAME` | Add the LM Studio plugin: the front for a local model. |
-| `RIG mcp-config DIR [--api-url URL] [--model NAME]` | Print a ready-to-paste MCP server JSON config block for the project. |
-| `RIG check FILE` | Validate a `.rig` file. Show the status and the coverage of each unit. |
-| `RIG serve FILE --json OUT` | Show the file as tables and as a graph on 127.0.0.1. Values can be changed there. |
-| `python3 tool.py run '<JSON>'` | In a project: start a run. Also `batch`, `queues`, `answer`, `approve`, `work`, `mcp`, `serve-stdio`, `drop`, `list`, `prune`, `resume`, `status`, `rerun`, `replay`, `rules`, `flow`, `call`, `regress`: see [guide/fronts.md](guide/fronts.md). |
-| `RIG compile json\|skill\|tool FILE` | One unit to one form. `build` uses the same compilers. |
+| `RIG new DIR NAME [--level 1\|2\|3] [--template flow\|host]` | Make a working project at level 1 (`checked`), 2 (`flow`), or 3 (`production`). `--template host` creates a host-adapter + pure-Python engine split. |
+| `RIG build DIR [--check]` | Compile the source to the catalogue, universal Agent Skill, `rigkit.py`, and plugin front. |
+| `RIG doctor DIR [--json]` | Check the project against its level, including AST gate verification and `never` boundary mapping. |
+| `RIG test DIR [--replay RUN]` | Run the tests, or replay recorded answers of one run against current code. |
+| `RIG plugin DIR --owner NAME` | Add the LM Studio plugin front. |
+| `RIG mcp-config DIR [--http URL] [--api-url URL] [--model NAME] [--provider P]` | Print a ready-to-paste stdio or Streamable HTTP MCP config block. |
+| `RIG check FILE` | Validate a `.rig` file and show coverage. |
+| `RIG serve FILE --json OUT` | Open the local viewer and graph on 127.0.0.1. |
+| `python3 tool.py <cmd>` | Run the tool: `run`, `batch`, `next-batch`, `queues`, `answer`, `arena`, `work`, `approve`, `restore`, `artifact`, `resume`, `status`, `drop`, `list`, `prune`, `rerun`, `replay`, `rules`, `flow`, `regress`, `eval`, `serve-stdio`, `serve-http`, `mcp`. |
+| `RIG compile json\|skill FILE` | Compile one unit to JSON catalogue or Agent Skill. |
 
 ## How to work
 
@@ -49,5 +49,5 @@ The pattern to copy is the example tool `examples/release-tool` of the Rig repos
 2. **Start from a project that works.** `RIG new`, then change one piece at a time, with `RIG doctor` passing after each piece.
 3. **The doctor says when a stage is done**, not your feeling. Read every `MISS` line and every `note` line.
 4. **Change the source, then build.** Never edit a compiled file.
-5. **Show the person the graph** (`RIG serve`) before you call a flow finished. The wires are theirs to approve.
-6. **Report at the end:** the level, the doctor result, the coverage (how many gates code decides, how many the model, how many a person), each `model` gate that could become code, and what you did not check.
+5. **Show the person the graph** (`RIG serve`) before you call a flow finished.
+6. **Report at the end:** the level, the doctor result, the coverage (tested code, model, human), `never` boundary mappings, each `model` gate that could become code, and what you did not check.

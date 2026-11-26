@@ -1,7 +1,7 @@
 {
- "rig": 1,
+ "rig": 2,
  "name": "release",
- "level": 4,
+ "level": 3,
  "source": "release.rig",
  "unit": "release",
  "driver": "python3 tool.py",

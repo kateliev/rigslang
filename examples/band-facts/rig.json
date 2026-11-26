@@ -1,7 +1,7 @@
 {
- "rig": 1,
+ "rig": 2,
  "name": "band-facts",
- "level": 3,
+ "level": 2,
  "source": "band-facts.rig",
  "unit": "band-facts",
  "driver": "python3 tool.py",

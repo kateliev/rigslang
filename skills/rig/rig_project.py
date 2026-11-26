@@ -3,11 +3,11 @@
 A project is a folder with one rig.json file:
 
     {
-      "rig": 1,
+      "rig": 2,
       "name": "release",
-      "level": 4,                      1 tools, 2 checked, 3 flow, 4 production (guide/levels.md)
+      "level": 3,                      1 checked, 2 flow, 3 production (guide/levels.md)
       "source": "release.rig",         one .rig file, or a list of them
-      "unit": "release",               the unit with the flow (not needed at level 1)
+      "unit": "release",               the unit with the flow
       "driver": "python3 tool.py",     the command line of the runner
       "build": {"gen": "gen", "skill": "skill/SKILL.md"},
       "kit": "rigkit.py",              the tool's own copy of kit/rigkit.py
@@ -32,7 +32,7 @@ import rig
 HERE = os.path.dirname(os.path.abspath(__file__))
 KIT = os.path.join(HERE, 'kit', 'rigkit.py')
 TEMPLATES = os.path.join(HERE, 'kit', 'templates')
-LEVELS = {1: 'tools', 2: 'checked', 3: 'flow', 4: 'production'}
+LEVELS = {1: 'checked', 2: 'flow', 3: 'production'}
 
 
 def read(path):
@@ -46,8 +46,8 @@ def manifest(folder):
 		raise SystemExit('{}: no rig.json here. Make a project with: rig.py new DIR NAME'.format(folder))
 	with open(path, encoding='utf-8') as f:
 		m = json.load(f)
-	if m.get('rig', 1) < 1:
-		raise SystemExit('{}: rig.json has "rig": {} (version 0). Set "rig": 1 and update the source.'.format(folder, m.get('rig')))
+	if m.get('rig', 2) < 2:
+		raise SystemExit('{}: rig.json has "rig": {} (version {}). Set "rig": 2 and update the source.'.format(folder, m.get('rig'), m.get('rig')))
 	m.setdefault('level', 1)
 	m.setdefault('build', {})
 	m['sources'] = m['source'] if isinstance(m.get('source'), list) else [m.get('source')]
@@ -88,10 +88,7 @@ def outputs(folder, m):
 	for _, root, ctx in files:
 		for u in rig.units(root):
 			name = u.word(0)
-			if rig.has_flow(u) or u.kids('rule') or u.word(1, 'tool') in ('tool', 'agent'):
-				out[os.path.join(gen, name + '.json')] = rig.compile_to('json', u, ctx=ctx)
-			if u.kids('in') and u.word(1, 'tool') == 'tool':
-				out[os.path.join(gen, name + '.tool.json')] = rig.compile_to('tool', u)
+			out[os.path.join(gen, name + '.json')] = rig.compile_to('json', u, ctx=ctx)
 	if main is not None and m['build'].get('skill'):
 		skill_path = m['build']['skill']
 		ref = os.path.relpath(os.path.join(folder, gen, main.word(0) + '.json'), os.path.dirname(os.path.join(folder, skill_path))).replace(os.sep, '/')
@@ -144,8 +141,8 @@ def front(m, files, main):
 				'description': 'Answer the gate that a run waits at, when "waiting" has kind "model". Decide what its "check" says.',
 				'parameters': {'type': 'object', 'properties': {'run': run, 'pass': {'type': 'boolean', 'description': 'true: the gate passes. false: it fails.'},
 					'why': {'type': 'string', 'description': 'The reason, in one sentence.'}}, 'required': ['run', 'pass']}})
-		model_steps = [f for f in c['flow'] if f['kind'] == 'step' and f['lane'] == 'model']
-		if model_steps:  # every step of the model is a job for the worker: code gives them to the model one by one, out of the chat
+		model_steps = [f for f in c['flow'] if (f['kind'] == 'step' and f['lane'] == 'model') or f['kind'] == 'reason']
+		if model_steps:  # every model step or reason block is a job for the worker: code gives them to the model one by one, out of the chat
 			tools.append({'name': 'work_run', 'kind': 'work',
 				'description': 'Do the jobs of a run that waits at {}: code gives each one to the model in a new context, with the answer in the form of "out", and goes on until the run needs you or the operator. It can take some minutes.'.format(' or '.join('"{}"'.format(f['id']) for f in model_steps)),
 				'parameters': {'type': 'object', 'properties': {'run': run}, 'required': ['run']}})
@@ -162,7 +159,7 @@ def front(m, files, main):
 		if model_gates:
 			rules.append('"waiting" with kind "model": decide what "check" says. Call answer_gate with the run id, pass true or false, and why in one sentence.')
 		if model_steps:
-			rules.append('"waiting" with kind "step": do not do the job yourself. Call work_run with the run id, one time. Then read its result as the rules say; "work" tells how many jobs it did.')
+			rules.append('"waiting" with kind "step" or "reason": do not do the job yourself. Call work_run with the run id, one time. Then read its result as the rules say; "work" tells how many jobs it did.')
 		rules.append('"waiting" has "problems": your last answer at that node failed for these reasons. Fix them in the new answer.')
 		humans = [f for f in c['flow'] if f['kind'] == 'human']
 		if humans:
@@ -172,18 +169,15 @@ def front(m, files, main):
 		rules += ['"refused": the call was wrong. It is final. Do not repeat it. Call run_status to see where the run is.',
 			'Do not invent names or numbers. Use only values from a result.',
 			'When a run ends and its "guessed" list is not empty, write one last line: Guessed: and the names in that list.']
-	for _, root, _ in files:
-		for u in rig.units(root):
-			if u.word(1, 'tool') == 'tool' and u.kids('in'):
-				d = rig.tool_def(u)
-				text = d.get('returns', {}).get('description')
-				tools.append({'name': u.word(0).replace('-', '_'), 'kind': 'call', 'unit': u.word(0), 'parameters': d['parameters'],
-					'description': d['description'] + ('. It gives back: ' + text if text else '')})
 	prompt = ''
 	if rules:
 		intent = ' '.join(rig.text_of(x) for x in main.kids('intent'))
 		prompt = 'Rules for the tool {}{}:\n'.format(m.get('name', main.word(0)), ' (' + rig.fill_values(main, intent) + ')' if intent else '') + '\n'.join('{}. {}'.format(i + 1, r) for i, r in enumerate(rules))
 	out = {'name': m.get('name'), 'prompt': prompt, 'driver': shlex.split(driver), 'timeout_s': m['plugin'].get('timeout_s', 120), 'tools': tools}
+	if flow:
+		ui_rules = [r for r in c.get('rules', []) if r.get('ui')]
+		if ui_rules:
+			out['ui_rules'] = ui_rules
 	if any(t['kind'] == 'work' for t in tools):
 		out['work'] = dict({'max_calls': 50, 'max_tokens': 4000, 'think': False}, **m['plugin'].get('work', {}))  # the limits of the worker (rig.json "plugin": {"work": ...})
 	return out
@@ -268,79 +262,6 @@ def test(folder, replay=None):
 
 
 # - doctor ---------------------------------------------
-EXAMPLE_RUNNER = '''import importlib.util, json, os, sys
-cases = json.loads(sys.argv[1])
-def same(a, b):
-	if isinstance(a, bool) or isinstance(b, bool):
-		return type(a) is type(b) and a == b
-	if isinstance(a, (list, tuple)) and isinstance(b, (list, tuple)):
-		return len(a) == len(b) and all(same(x, y) for x, y in zip(a, b))
-	if isinstance(a, dict) and isinstance(b, dict):
-		return a.keys() == b.keys() and all(same(a[k], b[k]) for k in a)
-	return a == b
-mods, fails = {}, []
-for c in cases:
-	p = os.path.abspath(c['file'])
-	if p not in mods:
-		try:
-			d = os.path.dirname(p)
-			if d not in sys.path:
-				sys.path.insert(0, d)
-			spec = importlib.util.spec_from_file_location('_rig_ex_' + str(len(mods)), p)
-			mod = importlib.util.module_from_spec(spec)
-			spec.loader.exec_module(mod)
-			mods[p] = mod
-		except Exception as e:
-			mods[p] = e
-	if isinstance(mods[p], Exception):
-		fails.append('{} line {}: {}: {}'.format(c['unit'], c['line'], type(mods[p]).__name__, mods[p]))
-		continue
-	try:
-		got = getattr(mods[p], c['fn'])(*c['args'])
-	except Exception as e:
-		fails.append('{} line {}: {}: {}'.format(c['unit'], c['line'], type(e).__name__, e))
-		continue
-	if not same(got, c['expect']):
-		fails.append('{} line {}: got {!r}, expected {!r}'.format(c['unit'], c['line'], got, c['expect']))
-print(json.dumps(fails, ensure_ascii=False))
-'''
-
-
-def run_tool_examples(folder, units):
-	'''Run "example" lines of tool units against their bound Python functions in a subprocess.
-	-> None if no tool unit has runnable examples, else a list of failure descriptions.'''
-	cases = []
-	for u, ctx in units:
-		if u.word(1, 'tool') != 'tool' or not u.kids('example'):
-			continue
-		cf = rig.code_for(u.word(0), u)
-		base = ctx.base.get(u.word(0)) if ctx else None
-		if not cf or not base or not cf[0]['file'] or not cf[0]['file'].endswith('.py'):
-			continue
-		code_path = os.path.join(base, cf[0]['file'])
-		if not os.path.exists(code_path):
-			continue
-		for e in u.kids('example'):
-			arrow = next((i for i, a in enumerate(e.args) if rig.ser(a) == '=>'), None)
-			if arrow is None or arrow + 1 >= len(e.args):
-				continue
-			args = [rig.value(a) for a in e.args[:arrow]]
-			right = e.args[arrow + 1:]
-			expect = rig.value(right[0]) if len(right) == 1 else [rig.value(a) for a in right]
-			cases.append({'unit': u.word(0), 'line': e.line, 'file': code_path, 'fn': cf[1], 'args': args, 'expect': expect})
-	if not cases:
-		return None
-	try:
-		r = subprocess.run([sys.executable, '-c', EXAMPLE_RUNNER, json.dumps(cases)], cwd=folder, capture_output=True, text=True, timeout=60)
-	except (OSError, subprocess.TimeoutExpired) as e:
-		return [str(e)]
-	if r.returncode != 0:
-		lines = (r.stderr or r.stdout or 'example runner failed').strip().splitlines()
-		return [lines[-1] if lines else 'example runner failed']
-	lines = r.stdout.strip().splitlines()
-	return json.loads(lines[-1]) if lines else []
-
-
 def doctor(folder, run_tests=True, as_json=False):
 	'''Check the project against the list of its level. -> 0 when nothing is missing.'''
 	m = manifest(folder)
@@ -368,10 +289,10 @@ def doctor(folder, run_tests=True, as_json=False):
 		units += [(u, ctx) for u in rig.units(root)]
 	main = main_unit(m, files)
 
-	# Level 1: tools
+	# Level 1: checked (rules, steps, gates in code, and the runner)
 	add(1, not errs, 'the source has no errors', '; '.join(errs[:3]))
-	holes = [u.word(0) for u, ctx in units if 'hole' in rig.unit_status(u, ctx)]
-	add(1, not holes, 'every unit has code (a "code" line) or a flow', ', '.join(holes))
+	holes = [u.word(0) for u, ctx in units if not rig.has_flow(u)]
+	add(1, not holes, 'every unit has a flow', ', '.join(holes))
 	bare = [u.word(0) for u, _ in units if not u.kids('intent')]
 	add(1, not bare, 'every unit has an intent', ', '.join(bare))
 	untyped = ['{}.{}'.format(u.word(0), x.word(0)) for u, _ in units for x in u.kids('in') if rig.in_parts(x)[1] is None or not rig.in_parts(x)[2]]
@@ -383,69 +304,79 @@ def doctor(folder, run_tests=True, as_json=False):
 		add(1, False, 'the compiled files are current (rig.py build)', str(e))
 	numbers = [w for w in warns if 'a number in the text' in w]
 	add(1, not numbers, 'no number in the text of a node: every number is a rule', '; '.join(numbers[:3]))
+	add(1, bool(m.get('driver')), 'rig.json names the driver: the runner command')
 	add(1, bool(m.get('tests')), 'rig.json names the tests command')
 	if m.get('tests') and run_tests:
 		code, out = run_cmd(folder, m['tests'])
 		add(1, code == 0, 'the tests pass', (out.splitlines() or ['no output'])[-1])
-	if run_tests:
-		ex_fails = run_tool_examples(folder, units)
-		if ex_fails is not None:
-			add(1, not ex_fails, 'every example of a tool unit passes', '; '.join(ex_fails[:3]))
-
-	# Level 2: checked
 	gates = [(u, g, rig.gate_level(g, u, ctx, (u.word(0),))) for u, ctx in units for g in rig.flow_nodes(u) if g.head == 'gate']
-	add(2, bool(gates), 'the tool has at least one gate')
+	add(1, bool(gates), 'the tool has at least one gate')
 	for kind_name, bad in (('none', 'every hard or soft gate names code that exists'), ('code', 'a test names the code of every gate')):
 		got = ['{}.{}'.format(u.word(0), g.word(0)) for u, g, lv in gates if lv == kind_name]
-		add(2, not got, bad, ', '.join(got))
-	unread = [w for w in warns if 'is not read by any step or gate' in w]
-	add(2, not unread, 'every rule is read by a step or a gate', '; '.join(unread[:3]))
+		add(1, not got, bad, ', '.join(got))
+	unread = [w for w in warns if 'is not read by any' in w]
+	add(1, not unread, 'every rule is read by a step, reason or gate', '; '.join(unread[:3]))
 	nobrief = [w for w in warns if 'has no check' in w or 'has no question' in w]
-	add(2, not nobrief, 'every model gate has a check, and every human gate a question', '; '.join(nobrief))
+	add(1, not nobrief, 'every model gate has a check, and every human gate a question', '; '.join(nobrief))
 	nowho = [w for w in warns if 'say who does it' in w]
-	add(2, not nowho, 'every step says who does it: code, or the model', '; '.join(nowho))
+	add(1, not nowho, 'every step says who does it: code, or the model', '; '.join(nowho))
 	noout = [w for w in warns if 'add "out <type>"' in w]
-	add(2, not noout, 'every step of the model has an "out" type', '; '.join(noout))
+	add(1, not noout, 'every model step or reason block has an "out" type', '; '.join(noout))
 	rules = [r for u, _ in units for r in u.kids('rule')]
 	bare_rules = [r.word(0) for r in rules if rig.rule_type(r) == 'number' and not r.kids('note')]
-	add(2, not bare_rules, 'every number rule has a note that says where the value comes from', ', '.join(bare_rules), soft=True)
+	add(1, not bare_rules, 'every number rule has a note that says where the value comes from', ', '.join(bare_rules), soft=True)
 	if gates:
 		cv = rig.coverage(main, [c for u, c in units if u is main][0]) if main is not None else None
 		if cv:
-			rows.append((2, 'note', 'coverage: {} of {} gates by tested code, {} by the model, {} by a person'.format(cv['tested'], cv['gates'], cv['model'], cv['human'])))
+			rows.append((1, 'note', 'coverage: {} of {} gates by tested code, {} by the model, {} by a person'.format(cv['tested'], cv['gates'], cv['model'], cv['human'])))
+	# Track "never" clauses across unit and reason intents so boundaries map to hard, model or human gates
+	all_nevers = []
+	for u, _ in units:
+		hosts = [u] + [f for f in rig.flow_nodes(u) if f.head == 'reason']
+		for host in hosts:
+			sp = rig.intent_info(host) or {}
+			for nv in sp.get('never', []):
+				all_nevers.append((u, nv))
+	if all_nevers:
+		guarding = [g for _, g, _ in gates if g.word(1) in ('hard', 'model', 'human')]
+		unmapped = [nv['text'] for _, nv in all_nevers if not nv.get('gate')]
+		add(1, bool(guarding), 'every "never" boundary has a hard, model or human gate in the flow')
+		if unmapped:
+			add(1, False, 'every "never" clause is mapped to an explicit gate (add "-> <gate>")', '; '.join(unmapped[:3]), soft=True)
+		else:
+			add(1, True, 'every "never" clause maps to an explicit hard, model or human gate')
 
-	# Level 3: flow
-	add(3, main is not None, 'a unit has a flow')
+	# Level 2: flow (named ends, regression set, Agent Skill, and MCP front)
+	add(2, main is not None, 'a unit has a flow')
 	if main is not None:
 		ends = [e.word(0) for e in rig.flow_nodes(main) if e.head == 'end']
-		add(3, bool(ends), 'the flow has an end node')
+		add(2, bool(ends), 'the flow has an end node')
 		lost = [w for w in warns if 'cannot be reached' in w]
-		add(3, not lost, 'every node can be reached', '; '.join(lost))
+		add(2, not lost, 'every node can be reached', '; '.join(lost))
 		ends_off = [w for w in warns if 'run past its last line' in w]
-		add(3, not ends_off, 'the flow ends at an end line, not past its last line', '; '.join(ends_off))
-		add(3, bool(m.get('driver')), 'rig.json names the driver: the runner command')
-		add(3, bool(m['build'].get('skill')), 'the skill is compiled (build.skill in rig.json)')
+		add(2, not ends_off, 'the flow ends at an end line, not past its last line', '; '.join(ends_off))
+		add(2, bool(m['build'].get('skill')), 'the skill is compiled (build.skill in rig.json)')
 		reg = m.get('regression')
 		cases = None
 		if reg and os.path.exists(os.path.join(folder, reg)):
 			with open(os.path.join(folder, reg), encoding='utf-8') as f:
 				cases = json.load(f)
-		add(3, cases is not None, 'a regression set exists (rig.json "regression")')
+		add(2, cases is not None, 'a regression set exists (rig.json "regression")')
 		if cases is not None:
-			add(3, all(c.get('expect') for c in cases), 'every regression case has an expected result (driver regress FILE --baseline)')
+			add(2, all(c.get('expect') for c in cases), 'every regression case has an expected result (driver regress FILE --baseline)')
 			seen = set(n for c in cases for n in (c.get('expect') or {}).get('path', []))
 			noend = [e for e in ends if e not in seen]
-			add(3, not noend, 'every end node is the end of a regression case', ', '.join(noend))
+			add(2, not noend, 'every end node is the end of a regression case', ', '.join(noend))
 			nogate = [g.word(0) for g in rig.flow_nodes(main) if g.head == 'gate' and g.word(0) not in seen]
-			add(3, not nogate, 'every gate is on the path of a regression case', ', '.join(nogate), soft=True)
+			add(2, not nogate, 'every gate is on the path of a regression case', ', '.join(nogate), soft=True)
 			if m.get('driver') and run_tests:
 				code, out = run_cmd(folder, m['driver'] + ' regress ' + reg)
-				add(3, code == 0, 'the regression set passes', (out.splitlines() or ['no output'])[-1][:300])
+				add(2, code == 0, 'the regression set passes', (out.splitlines() or ['no output'])[-1][:300])
 
-	# Level 4: production
+	# Level 3: production (permissions, rollback/restore, human gates, queues, project memory)
 	for rel, why in (('README.md', 'how to set up and run the tool'), ('notes/project-facts.md', 'what is true about the project, for an agent on any computer'),
 			('notes/failures-log.md', 'what failed and why'), ('bugs-and-fixes.md', 'every code bug: symptom, cause, fix'), ('reports', 'the reports of the runs')):
-		add(4, os.path.exists(os.path.join(folder, rel)), '{} exists ({})'.format(rel, why))
+		add(3, os.path.exists(os.path.join(folder, rel)), '{} exists ({})'.format(rel, why))
 	perm_rules = [(u, r) for u, _ in units for r in u.kids('rule') if (r.word(0) or '').startswith('permissions.')]
 	perm_problems = []
 	if not perm_rules:
@@ -465,9 +396,12 @@ def doctor(folder, run_tests=True, as_json=False):
 				perm_problems.append('{} must default to off'.format(rid))
 			if rid not in hard_reads[id(u)]:
 				perm_problems.append('{} is not read by a hard gate'.format(rid))
-	add(4, not perm_problems, 'a rule of the group "permissions" (default off, read by a hard gate) guards every change that cannot be undone', '; '.join(perm_problems))
+	add(3, not perm_problems, 'a rule of the group "permissions" (default off, read by a hard gate) guards every change that cannot be undone', '; '.join(perm_problems))
 	humans = [g.word(0) for u, g, lv in gates if lv == 'human']
-	add(4, bool(humans) or bool(m.get('human')), 'a human gate holds the judgment of the person (or rig.json "human" says why none is needed)')
+	add(3, bool(humans) or bool(m.get('human')), 'a human gate holds the judgment of the person (or rig.json "human" says why none is needed)')
+	if main is not None:
+		has_rb = any(b.head == 'rollback' for b in rig.items(main))
+		add(3, has_rb, 'a "rollback" block restores state on hard fail, error or unattended deferral (optional when writes are pure copies)', soft=True)
 
 	missing = sum(1 for _, state, _ in rows if state == 'MISS')
 	other = [w for w in warns if not any(k in w for k in ('a number in the text', 'is not read by', 'has no check', 'has no question', 'say who does it', 'add "out <type>"', 'cannot be reached', 'run past its last line', 'no test names'))]
@@ -492,17 +426,66 @@ def doctor(folder, run_tests=True, as_json=False):
 
 
 # - new ------------------------------------------------
-def rig_source(name, level):
+def rig_source(name, level, template='flow'):
 	L = ['; {}: made by rig.py new, level {} ({}). Replace each TODO, then: rig.py build . && rig.py doctor .'.format(name, level, LEVELS[level]), '']
-	if level == 1:
-		L += ['unit {} tool'.format(name),
-			'  intent "TODO: say what the tool does, in one sentence; the model reads this as the description"',
-			'  in text str "the text to measure"',
-			'  out (record words int characters int) "the counts"',
-			'  code tools.py',
-			'    test tests/test_tools.py']
+	if template == 'host':
+		L += ['unit {}'.format(name),
+			'  intent "TODO: operate the host application safely through a thin adapter and pure-Python engine"',
+			'  in item str "the target item id in the host application"',
+			'  out text "the end of the run, with the problems"',
+			'  code gates gates.py',
+			'    test tests/test_gates.py',
+			'  code steps steps.py',
+			'    test tests/test_steps.py',
+			'',
+			'  rule limits.min_length 3 "Shortest item id, in characters"',
+			'    range 1 1000',
+			'    ui',
+			'    note "TODO: say where this value comes from"',
+			'  rule batch.size 10 "Items per unattended chunk"',
+			'    range 1 100',
+			'    ui',
+			'    note "default chunk size for next-batch"']
+		if level >= 3:
+			L += ['  rule permissions.write off "The tool may write to the host application"',
+				'    ui',
+				'    note "off: a dry run. The run ends at ready and changes nothing."']
+		L += ['',
+			'  queue by steps.pending',
+			'  step snapshot "Snapshot" by steps.snapshot',
+			'    do "read the current item state from the host adapter"',
+			'    reads batch.size',
+			'  gate long-enough hard "Long enough"',
+			'    check "the item has at least {limits.min_length} characters"',
+			'    by gates.long_enough',
+			'    fail -> stop "too short"',
+			'  step compute "Compute" by steps.compute',
+			'    do "compute the proposed change in pure Python (engine.py)"',
+			'  gate sensible model "Makes sense"',
+			'    check "TODO: say what the model must decide; pass if the proposed change makes sense"',
+			'    sees item snapshot compute',
+			'    fail -> stop "the model said no"']
+		if level >= 3:
+			L += ['  gate approve human "Apply this change in the host application?"',
+				'    check "TODO: show the person the diff from compute"',
+				'    sees item compute',
+				'    fail -> stop "the person said no"',
+				'  gate allowed hard "The tool may write"',
+				'    reads permissions.write',
+				'    check "the rule permissions.write is on"',
+				'    by gates.may_write',
+				'    fail -> ready "dry run"']
+		L += ['  step apply "Apply" by steps.apply',
+			'    do "apply the computed change through the host adapter"',
+			'  end done "Done"']
+		if level >= 3:
+			L += ['  end ready "Ready, nothing written"']
+		L += ['  end stop "Stopped"',
+			'  rollback',
+			'    step undo "Restore" by steps.restore',
+			'      do "restore the snapshot in the host application"']
 		return '\n'.join(L) + '\n'
-	L += ['unit {} agent'.format(name),
+	L += ['unit {}'.format(name),
 		'  intent "TODO: say what the tool must do, in one sentence"',
 		'  in item str "the item to work on"',
 		'  out text "the end of the run, with the problems"',
@@ -514,7 +497,7 @@ def rig_source(name, level):
 		'  rule limits.min_length 3 "Shortest item, in characters"',
 		'    range 1 1000',
 		'    note "TODO: say where this value comes from"']
-	if level >= 4:
+	if level >= 3:
 		L += ['  rule permissions.write off "The tool may write"',
 			'    note "off: a dry run. The run ends at ready and changes nothing."']
 	L += ['',
@@ -529,7 +512,7 @@ def rig_source(name, level):
 		'    check "TODO: say what the model must decide; pass if the item makes sense"',
 		'    sees item look',
 		'    fail -> stop "the model said no"']
-	if level >= 4:
+	if level >= 3:
 		L += ['  gate approve human "May the tool write?"',
 			'    check "TODO: say what the person must see before the answer"',
 			'    sees item look',
@@ -540,16 +523,17 @@ def rig_source(name, level):
 			'    by gates.may_write',
 			'    fail -> ready "dry run"']
 	L += ['  end done "Done"']
-	if level >= 4:
+	if level >= 3:
 		L += ['  end ready "Ready, nothing written"']
 	L += ['  end stop "Stopped"']
 	return '\n'.join(L) + '\n'
 
 
-def template_files(level):
-	'''-> [(template path, target path)] for the level.'''
+def template_files(level, template='flow'):
+	'''-> [(template path, target path)] for the level and template.'''
+	base_family = 'host' if template == 'host' else 'flow'
 	out = []
-	for family in (['tools'] if level == 1 else ['flow'] + (['flow3'] if level >= 3 else []) + (['flow4'] if level >= 4 else [])):
+	for family in ([base_family] + (['flow2'] if level >= 2 else []) + (['flow3'] if level >= 3 else [])):
 		base = os.path.join(TEMPLATES, family)
 		for dirpath, _, names in os.walk(base):
 			for n in sorted(names):
@@ -571,27 +555,26 @@ def level_blocks(text, level):
 	return '\n'.join(out)
 
 
-def new(folder, name, level=2):
+def new(folder, name, level=1, template='flow'):
 	if not re.match(r'^[a-z][a-z0-9-]*$', name):
 		raise SystemExit('the name: small letters, digits and "-", for example "kern-check"')
 	if level not in LEVELS:
-		raise SystemExit('--level 1, 2, 3 or 4')
+		raise SystemExit('--level 1, 2 or 3')
+	if template not in ('flow', 'host'):
+		raise SystemExit('--template flow or host')
 	if os.path.exists(folder) and os.listdir(folder):
 		raise SystemExit('{} exists and is not empty'.format(folder))
 	os.makedirs(folder, exist_ok=True)
-	m = {'rig': 1, 'name': name, 'level': level, 'source': name + '.rig'}
-	if level > 1:
-		m['unit'] = name
-	m['driver'] = 'python3 tool.py'
-	m['build'] = {'gen': 'gen'} if level == 1 else {'gen': 'gen', 'skill': 'skill/SKILL.md'}
+	m = {'rig': 2, 'name': name, 'level': level, 'source': name + '.rig', 'unit': name, 'driver': 'python3 tool.py'}
+	m['build'] = {'gen': 'gen', 'skill': 'skill/SKILL.md'} if level >= 2 else {'gen': 'gen'}
 	m['kit'] = 'rigkit.py'
 	m['tests'] = 'python3 -m unittest discover -s tests'
-	if level >= 3:
+	if level >= 2:
 		m['regression'] = 'tests/regression-set.json'
 	rig.write(os.path.join(folder, 'rig.json'), json.dumps(m, ensure_ascii=False, indent=1) + '\n')
-	rig.write(os.path.join(folder, name + '.rig'), rig_source(name, level))
+	rig.write(os.path.join(folder, name + '.rig'), rig_source(name, level, template))
 	words = {'__NAME__': name, '__FN__': name.replace('-', '_'), '__LEVEL__': str(level), '__LEVEL_NAME__': LEVELS[level]}
-	for src, rel in template_files(level):
+	for src, rel in template_files(level, template):
 		text = read(src)
 		for k, v in words.items():
 			text = text.replace(k, v)
@@ -603,7 +586,7 @@ def new(folder, name, level=2):
 		os.makedirs(os.path.dirname(path), exist_ok=True)
 		rig.write(path, text)
 	build(folder)
-	if level >= 3:
+	if level >= 2:
 		code, out = run_cmd(folder, 'python3 tool.py regress tests/regression-set.json --baseline')
 		print(out)
 	print('\nMade {} (level {}, {}). Next:'.format(folder, level, LEVELS[level]))
@@ -612,11 +595,23 @@ def new(folder, name, level=2):
 	return 0
 
 
-def mcp_config(folder, api_url=None, model=None):
-	'''Print a ready-to-paste MCP server JSON config block for the project.'''
+def mcp_config(folder, api_url=None, model=None, provider=None, http_url=None):
+	'''Print a ready-to-paste MCP server JSON config block for the project (stdio or Streamable HTTP).'''
 	m = manifest(folder)
 	abs_dir = os.path.abspath(folder)
 	name = m.get('name') or os.path.basename(abs_dir)
+	if http_url:
+		base = http_url.rstrip('/')
+		cfg = {
+			'mcpServers': {
+				name: {
+					'url': base if base.endswith('/mcp') else base + '/mcp',
+					'openapi': (base[:-4] if base.endswith('/mcp') else base) + '/openapi.json',
+				}
+			}
+		}
+		print(json.dumps(cfg, ensure_ascii=False, indent=2))
+		return 0
 	parts = shlex.split(m.get('driver', 'python3 tool.py'))
 	if not parts:
 		raise SystemExit('{}: rig.json has an empty "driver"'.format(folder))
@@ -630,6 +625,8 @@ def mcp_config(folder, api_url=None, model=None):
 		args += ['--api-url', api_url]
 	if model:
 		args += ['--model', model]
+	if provider:
+		args += ['--provider', provider]
 	cfg = {
 		'mcpServers': {
 			name: {
@@ -645,18 +642,21 @@ def mcp_config(folder, api_url=None, model=None):
 
 def main(cmd, rest):
 	if cmd == 'new':
-		level = int(rig.option(rest, '--level') or 2)
+		level = int(rig.option(rest, '--level') or 1)
+		template = rig.option(rest, '--template') or 'flow'
 		if len(rest) < 2:
-			raise SystemExit('new DIR NAME [--level 1|2|3|4]')
-		return new(rest[0], rest[1], level)
+			raise SystemExit('new DIR NAME [--level 1|2|3] [--template flow|host]')
+		return new(rest[0], rest[1], level, template)
 	if cmd == 'plugin':
 		owner = rig.option(rest, '--owner') or 'local'
 		return plugin(rest[0] if rest else '.', owner)
 	if cmd == 'mcp-config':
 		api_url = rig.option(rest, '--api-url')
 		model = rig.option(rest, '--model')
+		provider = rig.option(rest, '--provider')
+		http_url = rig.option(rest, '--http')
 		folder = next((a for a in rest if not a.startswith('--')), '.')
-		return mcp_config(folder, api_url=api_url, model=model)
+		return mcp_config(folder, api_url=api_url, model=model, provider=provider, http_url=http_url)
 	replay = rig.option(rest, '--replay') if cmd == 'test' else None
 	folder = next((a for a in rest if not a.startswith('--')), '.')
 	if cmd == 'test':

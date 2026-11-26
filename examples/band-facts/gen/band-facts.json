@@ -1,11 +1,9 @@
 {
- "rig": 1,
+ "rig": 2,
  "unit": "band-facts",
- "scope": "agent",
  "preset": null,
  "intent": "for a band name, write one paragraph about the band and list its albums, with the facts of its English Wikipedia article only",
  "notes": [],
- "uses": [],
  "code": [
   {
    "prefix": "gates",
@@ -35,8 +33,8 @@
    "type": "string"
   }
  },
- "examples": [],
  "start": "find",
+ "rollback": null,
  "finally": null,
  "body": [
   "find",
@@ -355,5 +353,14 @@
    "name": "No good paragraph"
   }
  ],
- "blocks": []
+ "blocks": [],
+ "intent_spec": {
+  "text": "for a band name, write one paragraph about the band and list its albums, with the facts of its English Wikipedia article only",
+  "never": [
+   {
+    "text": "state facts outside the Wikipedia summary",
+    "gate": "grounded"
+   }
+  ]
+ }
 }

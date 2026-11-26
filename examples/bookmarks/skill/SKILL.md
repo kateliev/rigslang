@@ -7,6 +7,9 @@ description: clean up a bookmarks HTML file that Edge exported: remove exact dup
 
 clean up a bookmarks HTML file that Edge exported: remove exact duplicates, fold similar URLs as the person chooses, sort loose bookmarks into folders, and write a new file to import
 
+Never: overwrite an existing output file unless permissions.overwrite is on (gate `target`)
+Never: write the new file without human approval (gate `approve`)
+
 ## Rules
 
 Read the value of each rule from `../gen/bookmarks.json`: the `rules` list, by `id`. Do not copy the values into your work. In the text below, `{group.name}` means the value of that rule.
@@ -43,13 +46,14 @@ Code walks this flow. Start a run and answer only what waits. Run every command 
 1. Start: `python3 tool.py run '<inputs as JSON>'` (inputs: file=<path>).
 2. Read the JSON result:
    - `outcome`: the run ended. Report it, with `problems` first (and `result` if present). `error` means code failed.
-   - `waiting` (`kind: model`): decide `check` from `sees`. Run `python3 tool.py answer <run> '{"pass": true, "why": "..."}'` (or `false`).
+   - `waiting` (`kind: model`): decide `check` from `sees` (respecting `intent`). Run `python3 tool.py answer <run> '{"pass": true, "why": "..."}'` (or `false`).
    - `waiting` (`kind: step`): do `do` from `sees`. Run `python3 tool.py answer <run> '{"result": ...}'` matching `schema` if present.
+   - `waiting` (`kind: reason`): deliberate (`mode`: `careful` or `creative`) respecting `intent`, `never` boundaries, and any `candidates` count; use `python3 tool.py arena <run> <tool>` for read-only tools up to `budget`. Run `python3 tool.py answer <run> '{"result": ...}'`.
    - `waiting` (`kind: human`): show the person `name`, `check`, `sees`, and `say` word for word; wait, then run `python3 tool.py approve <run> yes` (or `no` / their words). Never answer for a person.
    - `waiting.problems`: fix those problems in the new answer. `refused`: final — run `python3 tool.py status <run>`.
 3. Repeat step 2 until `outcome`. Never decide a hard or soft gate yourself.
 
-More commands: `python3 tool.py batch '<JSON list>' --report reports/<name>.md` (many items), `python3 tool.py queues`, `python3 tool.py status <run>`, `python3 tool.py rules`, `python3 tool.py flow`.
+More commands: `python3 tool.py batch '<JSON list>' --report reports/<name>.md`, `python3 tool.py next-batch`, `python3 tool.py queues`, `python3 tool.py status <run>`, `python3 tool.py rules`, `python3 tool.py flow`.
 
 ## Flow (summary)
 

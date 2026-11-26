@@ -7,21 +7,21 @@ For the agent that builds a tool, and for the person who asks for it. Do the sta
 | Stage | What | Level |
 |---|---|---|
 | 0 | Ask | all |
-| 1 | Do the job by hand | 2 and up |
+| 1 | Do the job by hand | all |
 | 2 | Make the project | all |
 | 3 | Write the steps | all |
-| 4 | Move every number into a rule | 2 and up |
-| 5 | Move every decision into a gate | 2 and up |
+| 4 | Move every number into a rule | all |
+| 5 | Move every decision into a gate | all |
 | 6 | Wire the flow and name the ends | 2 and up |
 | 7 | Build the fronts | all |
-| 8 | Run, look, and learn | 3 and up |
-| 9 | Harden | 3 and up |
+| 8 | Run, look, and learn | 2 and up |
+| 9 | Harden | 2 and up |
 
-A level 1 tool uses stages 0, 2, 3 and 7. It is done in one session.
+A level 1 (`checked`) tool stops after stage 5. Level 2 (`flow`) adds named ends, regression set, and compiled fronts. Level 3 (`production`) adds permissions, rollback/restore, human gates, and project memory.
 
 ## Stage 0. Ask
 
-Ask the person before you write anything. Use these questions, and write the answers into `notes/project-facts.md` (level 4) or the README.
+Ask the person before you write anything. Use these questions, and write the answers into `notes/project-facts.md` (level 3) or the README.
 
 1. **The job.** What goes in, and what must come out? Give one real example.
 2. **The item.** What is one unit of work (a file, a record, a glyph, a page)? How many are there?

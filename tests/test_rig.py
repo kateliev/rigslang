@@ -45,7 +45,7 @@ def block(c, bid):
 	return next(b for b in c['blocks'] if b['id'] == bid)
 
 
-def unit(body, head='unit x agent'):
+def unit(body, head='unit x'):
 	'''A unit with code lines, so that "by" names something.'''
 	return head + '\n  code code code.py\n' + body
 
@@ -62,12 +62,12 @@ class Examples(unittest.TestCase):
 		self.assertGreaterEqual(len(blocks), 3)
 		for text in blocks:
 			if not text.startswith('unit '):
-				text = 'unit example agent\n' + ''.join('  ' + l + '\n' for l in text.split('\n') if l.strip())
+				text = 'unit example\n' + ''.join('  ' + l + '\n' for l in text.split('\n') if l.strip())
 			self.assertEqual(errors(text), [], text)
 
 
 class Removed(unittest.TestCase):
-	'''Every word of version 0 that version 1 removed is refused, and the error names the replacement.'''
+	'''Every removed word from version 0 and version 1 is refused, and the error names the replacement.'''
 	CASES = {
 		'next': ('  step a by code.a\n    next -> b\n  end b\n', 'the next line'),
 		'pass': ('  gate a hard by code.a\n    pass -> b\n    fail -> b\n  end b\n', 'next line'),
@@ -80,9 +80,11 @@ class Removed(unittest.TestCase):
 		'label': ('  rule a.b 3\n    label "x"\n', 'the string after the value'),
 		'unit': ('  rule a.b 3\n    unit "words"\n', 'in the label'),
 		'external': ('  external a.b "x"\n', 'code'),
-		'cast': ('  cast py\n    def x(): pass\n', 'code <path>'),
+		'cast': ('  cast py\n    def x(): pass\n', 'code <prefix> <path>'),
 		'probe': ('  probe 1\n', 'test file'),
 		'evidence': ('  note "x"\n    evidence README.md\n', 'text of the note'),
+		'example': ('  example 1 => 2\n', 'version 2'),
+		'uses': ('  uses helper other.rig\n', 'version 2'),
 	}
 
 	def test_each_removed_word_is_refused_with_its_replacement(self):
@@ -91,9 +93,15 @@ class Removed(unittest.TestCase):
 			self.assertTrue(err, word)
 			self.assertTrue(any(hint in t for _, t in err), (word, err))
 
-	def test_the_scope_snippet(self):
-		err = errors('unit x snippet\n  intent "x"\n')
-		self.assertTrue(any('tool or agent' in t for _, t in err))
+	def test_removed_scopes_and_prefixless_code(self):
+		for scope in ('snippet', 'tool', 'agent'):
+			err = errors('unit x {}\n  intent "x"\n'.format(scope))
+			self.assertTrue(any('unit x' in t for _, t in err), (scope, err))
+		err = errors('unit x\n  code tools.py\n  step a by code.a\n  end e\n')
+		self.assertTrue(any('code <prefix> <path>' in t for _, t in err), err)
+		r = subprocess.run([sys.executable, TOOL, 'compile', 'tool', RELEASE], capture_output=True, text=True)
+		self.assertNotEqual(r.returncode, 0)
+		self.assertIn('version 2', r.stderr + r.stdout)
 
 	def test_the_commands_of_the_snippet_scale(self):
 		for cmd in ('prove', 'probe', 'stamp', 'emit', 'hash'):
@@ -258,15 +266,15 @@ class Blocks(unittest.TestCase):
 	def test_check(self):
 		self.assertEqual(node(self.c, 'ok')['check'], 'the number is even and at most {limits.max}')
 		self.assertNotIn('checks', self.c)
-		w = warnings('unit x tool\n  check "every result is even"\n  code x.py\n')
+		w = warnings('unit x\n  check "every result is even"\n  code c x.py\n')
 		self.assertTrue(any('not a known word inside "unit"' in t for _, t in w))
 
 	def test_range_and_the_label(self):
 		r = next(r for r in self.c['rules'] if r['id'] == 'limits.max')
 		self.assertEqual((r['min'], r['max'], r['label']), (1, 100, 'Largest number'))
-		err = errors('unit x agent\n  rule a.b 300 "x"\n    range 1 100\n')
+		err = errors('unit x\n  rule a.b 300 "x"\n    range 1 100\n')
 		self.assertTrue(any('above the range' in t for _, t in err))
-		err = errors('unit x agent\n  rule a.b 3 x\n')
+		err = errors('unit x\n  rule a.b 3 x\n')
 		self.assertTrue(any('only the label' in t for _, t in err))
 
 	def test_a_fail_goes_to_an_end(self):
@@ -306,7 +314,7 @@ class RulesAndPresets(unittest.TestCase):
 		self.assertTrue(any(line == 18 and 'number' in t for line, t in warn))
 
 	def test_plain_braces_are_text(self):
-		self.assertEqual(errors('unit x tool\n  intent "keep {name} as written"\n'), [])
+		self.assertEqual(errors('unit x\n  intent "keep {name} as written"\n'), [])
 
 	def test_placeholder_counts_as_read(self):
 		w = warnings(unit('  rule a.b 1\n  gate g hard by code.g\n    check "at most {a.b}"\n    fail -> e\n  end e\n'))
@@ -359,7 +367,7 @@ class Compile(unittest.TestCase):
 	def test_command_line(self):
 		out = subprocess.check_output([sys.executable, TOOL, 'compile', 'json', RELEASE, '--preset', 'hotfix']).decode('utf-8')
 		c = json.loads(out)
-		self.assertEqual((c['unit'], c['preset'], c['rig']), ('release', 'hotfix', 1))
+		self.assertEqual((c['unit'], c['preset'], c['rig']), ('release', 'hotfix', 2))
 		out = subprocess.check_output([sys.executable, TOOL, 'compile', 'skill', RELEASE]).decode('utf-8')
 		self.assertTrue(out.replace('\r\n', '\n').startswith('---\nname: release\n'))
 		r = subprocess.run([sys.executable, TOOL, 'check', MISTAKES], capture_output=True, text=True)
@@ -377,33 +385,14 @@ def temp_rig(test, text):
 
 class Levels(unittest.TestCase):
 	def test_by_must_name_something(self):
-		root = rig.parse('unit x agent\n  gate g hard by nowhere.fn\n    fail -> e\n  end e\n')
+		root = rig.parse('unit x\n  gate g hard by nowhere.fn\n    fail -> e\n  end e\n')
 		_, warn = rig.check(root)
-		self.assertTrue(any('names no unit' in t for _, t in warn))
+		self.assertTrue(any('names no "code" line' in t for _, t in warn))
 		self.assertEqual(rig.coverage(rig.units(root)[0])['none'], 1)
 
 	def test_levels_of_the_example(self):
 		cv = rig.coverage(rig.units(load(RELEASE))[0], rig.Ctx(load(RELEASE), RELEASE))
 		self.assertEqual((cv['gates'], cv['tested'], cv['model'], cv['human']), (8, 6, 1, 1))
-
-	def test_a_unit_in_another_file(self):
-		folder = tempfile.mkdtemp(prefix='rig-test-')
-		self.addCleanup(shutil.rmtree, folder, True)
-		with open(os.path.join(folder, 'other.rig'), 'w', encoding='utf-8') as f:
-			f.write('unit helper tool\n  intent "x"\n  code helper.py\n')
-		with open(os.path.join(folder, 'helper.py'), 'w', encoding='utf-8') as f:
-			f.write('def helper(state, R):\n\treturn True\n')
-		path = os.path.join(folder, 'x.rig')
-		with open(path, 'w', encoding='utf-8') as f:
-			f.write('unit x agent\n  uses helper other.rig\n  gate g hard by helper\n    fail -> e\n  end e\n')
-		root = rig.load(path)[1]
-		self.assertEqual(rig.coverage(rig.units(root)[0], rig.Ctx(root, path))['code'], 1)
-		self.assertEqual(rig.check(root, path)[0], [])
-
-	def test_missing_uses_file_warns(self):
-		path = temp_rig(self, 'unit x agent\n  uses y nothere.rig\n')
-		_, warn = rig.check(rig.load(path)[1], path)
-		self.assertTrue(any('does not exist' in t for _, t in warn))
 
 	def test_ast_bound_level_ignores_comments_and_strings(self):
 		folder = tempfile.mkdtemp(prefix='rig-test-')
@@ -414,7 +403,7 @@ class Levels(unittest.TestCase):
 			f.write('"""real_fn is only in a docstring"""\n# and real_fn in a comment\nx = "real_fn"\n')
 		path = os.path.join(folder, 'x.rig')
 		with open(path, 'w', encoding='utf-8') as f:
-			f.write('unit x agent\n  code g gates.py\n    test test_gates.py\n  gate a hard by g.real_fn\n    fail -> e\n  gate b hard by g.fake_fn\n    fail -> e\n  end e\n')
+			f.write('unit x\n  code g gates.py\n    test test_gates.py\n  gate a hard by g.real_fn\n    fail -> e\n  gate b hard by g.fake_fn\n    fail -> e\n  end e\n')
 		root = rig.load(path)[1]
 		ctx = rig.Ctx(root, path)
 		u = rig.units(root)[0]
@@ -433,7 +422,7 @@ class Levels(unittest.TestCase):
 			f.write('def helper(R):\n\treturn R.get("limits.extra")\ndef ok(state, R):\n\treturn state["x"] <= R("limits.max") and helper(R)\n')
 		path = os.path.join(folder, 'x.rig')
 		with open(path, 'w', encoding='utf-8') as f:
-			f.write('unit x agent\n  code g gates.py\n  rule limits.max 10 "Max"\n  rule limits.extra on "Extra"\n  gate a hard by g.ok\n    fail -> e\n  end e\n')
+			f.write('unit x\n  code g gates.py\n  rule limits.max 10 "Max"\n  rule limits.extra on "Extra"\n  gate a hard by g.ok\n    fail -> e\n  end e\n')
 		root = rig.load(path)[1]
 		ctx = rig.Ctx(root, path)
 		err, warn = rig.check(root, path, ctx)
@@ -450,7 +439,7 @@ class Levels(unittest.TestCase):
 				'def clean(state, R, default_n=10):\n\tx = state["items"][2]\n\ty = state["word"][:-3]\n\tfor i in range(5):\n\t\tpass\n\treturn len(y) > 0 and round(x, 2) >= -1 and x <= 1\n')
 		path = os.path.join(folder, 'x.rig')
 		with open(path, 'w', encoding='utf-8') as f:
-			f.write('unit x agent\n  code g gates.py\n  gate a hard by g.bad\n    fail -> e\n  gate b hard by g.clean\n    fail -> e\n  end e\n')
+			f.write('unit x\n  code g gates.py\n  gate a hard by g.bad\n    fail -> e\n  gate b hard by g.clean\n    fail -> e\n  end e\n')
 		root = rig.load(path)[1]
 		err, warn = rig.check(root, path)
 		self.assertEqual(err, [])
@@ -458,6 +447,83 @@ class Levels(unittest.TestCase):
 		self.assertEqual(len(hard_warns), 1, hard_warns)
 		self.assertEqual(hard_warns[0][0], 3)
 		self.assertIn('42', hard_warns[0][1])
+
+
+class RigV2Language(unittest.TestCase):
+	def test_structured_intent_and_never_gate_validation(self):
+		ok_src = unit('''  intent "ship safe output"
+    audience "users"
+    style "concise"
+    never "skip hard check" -> g
+  step s by code.s
+  gate g hard by code.g
+    fail -> bad
+  end done
+  end bad
+''')
+		self.assertEqual(errors(ok_src), [])
+		c = catalogue(ok_src)
+		self.assertEqual(c['intent_spec']['audience'], 'users')
+		self.assertEqual(c['intent_spec']['never'], [{'text': 'skip hard check', 'gate': 'g'}])
+		bad_soft = unit('''  intent "ship"
+    never "bad" -> s_gate
+  gate s_gate soft by code.g
+  end done
+''')
+		self.assertTrue(any('not soft' in t for _, t in errors(bad_soft)))
+
+	def test_reason_block_validation_and_retry(self):
+		src = unit('''  rule r.budget 2 "Tool budget"
+  reason plan "Plan"
+    intent "think carefully"
+      style "json"
+    do "propose options"
+    mode creative
+    tools code.inspect
+    budget r.budget
+    candidates 2
+    out str
+  gate ok hard by code.ok
+    retry 1
+    fail -> bad
+  end done
+  end bad
+''')
+		self.assertEqual(errors(src), [])
+		c = catalogue(src)
+		p = node(c, 'plan')
+		self.assertEqual((p['kind'], p['lane'], p['mode'], p['tools'], p['budget'], p['candidates']),
+			('reason', 'model', 'creative', ['code.inspect'], 'r.budget', 2))
+		self.assertEqual(node(c, 'ok')['back'], 'plan')
+		self.assertTrue(any('takes no "by"' in t for _, t in errors(unit('  reason p\n    by code.a\n    do "x"\n    out str\n  end e\n'))))
+		self.assertTrue(any('careful or creative' in t for _, t in errors(unit('  reason p\n    mode wild\n    do "x"\n    out str\n  end e\n'))))
+
+	def test_rollback_queue_ui_and_brief(self):
+		src = unit('''  rule batch.size 5 "Chunk"
+    range 1 20
+    ui
+  rule flag.on off "Flag"
+    ui toggle
+  queue by code.pending
+    reads batch.size
+  step load by code.load
+    reads flag.on
+    brief count summary
+  end done
+  rollback
+    step undo by code.undo
+  finally
+    step done_log by code.log
+''')
+		self.assertEqual(errors(src), [])
+		self.assertEqual(warnings(src), [])
+		c = catalogue(src)
+		self.assertEqual(c['queue'], {'by': ['code.pending'], 'reads': ['batch.size']})
+		self.assertEqual(c['rollback'], 'undo')
+		self.assertEqual(c['finally'], 'done_log')
+		self.assertEqual(node(c, 'load')['brief'], ['count', 'summary'])
+		self.assertEqual(c['rules'][0]['ui'], 'slider')
+		self.assertEqual(c['rules'][1]['ui'], 'toggle')
 
 
 class Types(unittest.TestCase):
@@ -482,8 +548,8 @@ class Types(unittest.TestCase):
 		self.assertTrue(rig.type_ok([['a', 1]], self.t('(list (tuple str int))')))
 
 	def test_tool_definition(self):
-		u = rig.units(rig.parse('unit search tool\n  intent "search; give the first {search.n} results"\n  in query str "the words to search for"\n  in page (maybe int)\n'
-			'  out (record end (one-of done error) results (list str) reason (maybe str))\n  rule search.n 5 "Results"\n  code search.py\n'))[0]
+		u = rig.units(rig.parse('unit search\n  intent "search; give the first {search.n} results"\n  in query str "the words to search for"\n  in page (maybe int)\n'
+			'  out (record end (one-of done error) results (list str) reason (maybe str))\n  rule search.n 5 "Results"\n  code s search.py\n  step run by s.run\n  end done\n'))[0]
 		d = rig.tool_def(u)
 		self.assertEqual(d['name'], 'search')
 		self.assertIn('the first 5 results', d['description'])

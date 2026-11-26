@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""rig.py: the tool of Rig, language version 1. Standard library only.
+"""rig.py: the tool of Rig, language version 2. Standard library only.
 
     python rig.py check FILE...               validate; show the status of every unit
     python rig.py json FILE                   the parsed tree as JSON
@@ -8,8 +8,6 @@
     python rig.py compile skill FILE [UNIT]   the unit as a SKILL.md for an agent that follows
                                               instructions; --rules PATH: refer to the values
                                               in that JSON file instead of writing them in
-    python rig.py compile tool FILE [UNIT]    the unit as a tool definition: name, description
-                                              and the JSON Schema of its inputs
         compile options: --preset NAME (use the values of a preset), -o OUT (write a file),
                                               --driver CMD (skill: a runner walks the flow)
     python rig.py serve FILE [UNIT]           the viewer for FILE on 127.0.0.1; Save writes FILE
@@ -17,17 +15,18 @@
                                               and compiles it again to OUT; --rules-ref makes
                                               the skill read its values from the JSON
 
-    python rig.py new DIR NAME [--level N]    make a project: a tool with its source, code, tests
-                                              and runner (levels 1 to 4: guide/levels.md)
+    python rig.py new DIR NAME [--level N] [--template host]
+                                              make a project: a tool with its source, code, tests
+                                              and runner (levels 1 to 3: guide/levels.md)
     python rig.py build [DIR] [--check]       compile the source of a project to its fronts: the
-                                              catalogue, the skill, the tool definitions
+                                              catalogue, the skill, the plugin front
     python rig.py doctor [DIR] [--no-tests] [--json]
                                               check a project against the list of its level
     python rig.py test [DIR] [--replay RUN]   run the tests of a project; --replay: run the flow
                                               again with the answers recorded in a run
     python rig.py plugin DIR [--owner NAME]   add the front for a local model: an LM Studio plugin
                                               that reads its tools and its rules from the build
-    python rig.py mcp-config DIR [--api-url URL] [--model NAME]
+    python rig.py mcp-config DIR [--api-url URL] [--model NAME] [--http URL]
                                               print an MCP server JSON config for the project
 
 The language is defined in spec.md (same folder).
@@ -38,47 +37,52 @@ import os
 import re
 import sys
 
-VERSION = 1
-FLOW = ('step', 'gate', 'end')                                    # the nodes of a flow
-BLOCKS = ('for', 'until', 'if', 'else', 'section', 'finally')     # the blocks: their body is the lines under them
+VERSION = 2
+FLOW = ('step', 'reason', 'gate', 'end')                          # the nodes of a flow
+BLOCKS = ('for', 'until', 'if', 'else', 'section', 'rollback', 'finally')  # the blocks: their body is the lines under them
 ITEMS = FLOW + BLOCKS
 GATE_KINDS = ('hard', 'soft', 'model', 'human')
-SCOPES = ('tool', 'agent')
+REASON_MODES = ('careful', 'creative')
+UI_CONTROLS = ('toggle', 'select', 'slider', 'number', 'input')
 LEVELS = ('none', 'code', 'tested')  # low to high; "model" and "human" are apart
-MATRIX = ('in', 'out', 'intent', 'example')
+MATRIX = ('in', 'out', 'intent')
 BASE_TYPES = ('str', 'text', 'word', 'path', 'int', 'float', 'bool', 'list', 'dict', 'any')
 TYPE_LISTS = ('list', 'tuple', 'record', 'maybe', 'one-of')
 NODE_KIDS = {
-	'step': {'do', 'by', 'reads', 'sees', 'out', 'timeout', 'if', 'note'},
+	'step': {'do', 'by', 'reads', 'sees', 'out', 'brief', 'timeout', 'if', 'note'},
+	'reason': {'intent', 'do', 'mode', 'reads', 'sees', 'tools', 'budget', 'candidates', 'out', 'brief', 'timeout', 'if', 'note'},
 	'gate': {'check', 'by', 'reads', 'sees', 'options', 'retry', 'timeout', 'if', 'fail', 'note'},
 	'end': {'note'},
 }
 BLOCK_OPTIONS = {'for': {'tolerate', 'fail'}, 'until': {'retry', 'fail'}}
 CHILDREN = {
-	'unit': {'in', 'out', 'intent', 'example', 'note', 'uses', 'code', 'rule', 'preset'} | set(ITEMS),
+	'unit': {'in', 'out', 'intent', 'note', 'code', 'rule', 'preset', 'queue'} | set(ITEMS),
+	'intent': {'audience', 'style', 'never', 'note'},
+	'queue': {'by', 'reads', 'note'},
 	'code': {'test', 'note'},
 	'preset': {'set'},
-	'rule': {'range', 'options', 'note'},
+	'rule': {'range', 'options', 'ui', 'note'},
 }
 CHILDREN.update(NODE_KIDS)
 for _b in BLOCKS:
 	CHILDREN[_b] = set(ITEMS) | BLOCK_OPTIONS.get(_b, set()) | {'note'}
-INLINE = {'step': ('by',), 'gate': ('by', 'fail')}  # children that can stand on the line of their node
+INLINE = {'step': ('by',), 'gate': ('by', 'fail'), 'queue': ('by',)}  # children that can stand on the line of their node
 RESERVED = ('continue', 'error')  # "fail -> continue" and the built-in outcome "error": not ids
-# The words of version 0 that version 1 refuses, with what to write instead (docs/history/handout-language-v1.md, Section 3).
+# Words removed in version 1 and version 2, with what to write instead.
 REMOVED = {
 	'next': 'remove it: the next line is the next node',
 	'pass': 'remove it: a gate that passes goes on to the next line',
 	'when': 'write "if <path>" as a child of the node',
-	'brief': 'write check "text"',
 	'ensure': 'write check "text"',
 	'min': 'write range <min> <max>',
 	'max': 'write range <min> <max>',
 	'label': 'write the label as the string after the value: rule <id> <value> "label"',
-	'external': '"by" names a function of a "code" file, or a unit',
-	'cast': 'the code lives in a file: write code <path>',
+	'external': '"by" names a function of a "code" file',
+	'cast': 'the code lives in a file: write code <prefix> <path>',
 	'probe': 'test the code in its test file',
 	'evidence': 'write the evidence in the text of the note',
+	'example': 'removed in version 2: write unit tests in your test file',
+	'uses': 'removed in version 2: import helper modules in Python code',
 }
 NUMBER = re.compile(r'^-?\d+(\.\d+)?$')
 RULE_ID = re.compile(r'^[A-Za-z_][\w-]*(\.[\w-]+)+$')
@@ -201,8 +205,9 @@ def parse(text):
 		node = Node(toks[0][1], toks[1:], line, indent)
 		node.spans = [(indent + a, indent + b) for a, b in sp[1:]]  # the columns of each argument, for the viewer
 		node.parent = stack[-1]
-		if node.head in INLINE:  # "step <id> by model", "gate <id> <kind> fail -> <end>": a child on the line of its node
-			cuts = [k for k, a in enumerate(node.args) if k >= (2 if node.head == 'gate' else 1) and a[0] == 'word' and a[1] in INLINE[node.head]]
+		if node.head in INLINE:  # "step <id> by model", "gate <id> <kind> fail -> <end>", "queue by steps.pending"
+			min_k = 2 if node.head == 'gate' else (0 if node.head == 'queue' else 1)
+			cuts = [k for k, a in enumerate(node.args) if k >= min_k and a[0] == 'word' and a[1] in INLINE[node.head]]
 			for k, at in enumerate(cuts):
 				stop = cuts[k + 1] if k + 1 < len(cuts) else len(node.args)
 				f = Node(node.args[at][1], node.args[at + 1:stop], line, indent + 1)
@@ -380,8 +385,8 @@ def units(root):
 
 
 def items(n):
-	'''The flow items of a unit or a block: its steps, gates, ends and blocks, in order.'''
-	return [c for c in n.children if c.head in ITEMS and not (c.head == 'if' and n.head in ('step', 'gate'))]
+	'''The flow items of a unit or a block: its steps, reasons, gates, ends and blocks, in order.'''
+	return [c for c in n.children if c.head in ITEMS and not (c.head == 'if' and n.head in ('step', 'reason', 'gate'))]
 
 
 def walk_items(n):
@@ -411,8 +416,8 @@ def block_ids(u):
 			base = 'for:' + (b.word(0) or '?')
 		elif b.head == 'section':
 			base = 'section:' + ((value(b.args[0]) if b.args and b.args[0][0] == 'str' else b.word(0)) or '?')
-		elif b.head == 'finally':
-			base = 'finally'
+		elif b.head in ('finally', 'rollback'):
+			base = b.head
 		elif b.head == 'else':  # named after its "if": the line before it
 			sib = items(b.parent)
 			k = next(i for i, x in enumerate(sib) if x is b)
@@ -465,19 +470,6 @@ class Ctx(object):
 			if u.word(0) not in self.units:
 				self.units[u.word(0)] = u
 				self.base[u.word(0)] = base
-		if not path:
-			return
-		for u in units(root):
-			for x in u.kids('uses'):
-				f = x.word(1)
-				p = os.path.normpath(os.path.join(base, f)) if f else None
-				if p and p not in self.files and os.path.exists(p):
-					self.files.add(p)
-					try:
-						with open(p, encoding='utf-8', newline='') as fh:
-							self.add(parse(fh.read()), p)
-					except (RigError, OSError):
-						pass
 
 
 def ctx_of(u, ctx=None):
@@ -664,28 +656,12 @@ def bound_level(b, u, ctx):
 
 
 def by_target(b, u):
-	'''What a "by" name reaches: "bound" (a "code" line), "model", "unit" or None.'''
+	'''What a "by" name reaches: "bound" (a "code <prefix> <path>" line), "model", or None.'''
 	if b == 'model':
 		return 'model'
 	if b and code_for(b, u):
 		return 'bound'
-	if b in [x.word(0) for x in u.kids('uses')] or b in [v.word(0) for v in units(getattr(u, 'root', Node('file', [], 0, -1)))]:
-		return 'unit'
 	return None
-
-
-def unit_level(name, ctx, seen=()):
-	'''How much is known about the code of a unit: tested, code or none.'''
-	u = ctx.units.get(name)
-	if u is None or name in seen:
-		return 'code'
-	if code_for(name, u):
-		return bound_level(name, u, ctx)
-	gates = [g for g in flow_nodes(u) if g.head == 'gate']
-	if not gates:
-		return 'code'
-	got = [gate_level(g, u, ctx, tuple(seen) + (name,)) for g in gates]
-	return lowest(['code' if x in ('model', 'human', 'none') else x for x in got])
 
 
 def gate_level(g, u, ctx, seen=()):
@@ -697,8 +673,6 @@ def gate_level(g, u, ctx, seen=()):
 		b, kind = x.word(0), by_target(x.word(0), u)
 		if kind == 'bound':
 			got.append(bound_level(b, u, ctx))
-		elif kind == 'unit':
-			got.append(unit_level(b, ctx, seen))
 		else:
 			got.append('none')
 	return lowest(got)
@@ -719,16 +693,13 @@ def unit_status(unit, ctx=None):
 	'''A short list of status strings for one unit.'''
 	out = []
 	cv = coverage(unit, ctx)
-	steps = [n for n in flow_nodes(unit) if n.head == 'step']
+	steps = [n for n in flow_nodes(unit) if n.head in ('step', 'reason')]
 	if cv['gates']:
 		parts = ['{} {}'.format(cv[k], k) for k in ('tested', 'code', 'model', 'human', 'none') if cv[k] or k in ('tested', 'model')]
 		out.append('flow: {} gates, coverage {:.0%} ({})'.format(cv['gates'], float(cv['tested']) / cv['gates'], ', '.join(parts)))
 	elif steps:
 		out.append('flow: {} steps, no gates'.format(len(steps)))
-	own = code_for(unit.word(0) or '', unit)
-	if own:
-		out.append('code {} ({})'.format(own[0]['file'], bound_level(unit.word(0), unit, ctx_of(unit, ctx))))
-	if not own and any(c.head in MATRIX for c in unit.children) and not has_flow(unit):
+	if any(c.head in MATRIX for c in unit.children) and not has_flow(unit):
 		out.append('hole')
 	return out or ['empty']
 
@@ -766,8 +737,8 @@ def placeholders(n):
 
 
 def node_reads(f, u=None, ctx=None):
-	'''The rules that a step or gate reads: its "reads" lines, placeholders in its strings, retry rules,
-	and R("group.name") calls inferred from bound Python code.'''
+	'''The rules that a step, reason or gate reads: its "reads" lines, placeholders in its strings,
+	retry/budget/candidates rules, and R("group.name") calls inferred from bound Python code.'''
 	out = []
 	for c in f.kids('reads'):
 		for a in c.args:
@@ -776,14 +747,16 @@ def node_reads(f, u=None, ctx=None):
 	for rid in placeholders(f):
 		if rid not in out:
 			out.append(rid)
-	for c in f.kids('retry'):
-		if c.args and c.args[0][0] == 'word' and c.word(0) not in out:
-			out.append(c.word(0))
+	for kind in ('retry', 'budget', 'candidates'):
+		for c in f.kids(kind):
+			if c.args and c.args[0][0] == 'word' and c.word(0) not in out:
+				out.append(c.word(0))
 	if u is not None and ctx is not None:
 		base = ctx.base.get(u.word(0))
 		if base:
-			for b in f.kids('by'):
-				cf = code_for(b.word(0), u) if b.word(0) else None
+			refs = [b.word(0) for b in f.kids('by') if b.word(0)] + [a[1] for t in f.kids('tools') for a in t.args if a[0] == 'word']
+			for ref in refs:
+				cf = code_for(ref, u)
 				if cf and cf[0]['file'] and cf[0]['file'].endswith('.py'):
 					tree = ctx.parse_py(os.path.join(base, cf[0]['file']))
 					if isinstance(tree, ast.Module):
@@ -856,8 +829,14 @@ class Flow(object):
 		self.nodes, self.blocks, self.problems = {}, {}, []  # problems: (line, text), found while lowering
 		seq = items(u)
 		fin = [x for x in seq if x.head == 'finally']
+		rb = [x for x in seq if x.head == 'rollback']
 		self.body = [item_id(x, self.bids) for x in seq]
-		self.start = self.seq([x for x in seq if x.head != 'finally'], None, None, None)
+		self.start = self.seq([x for x in seq if x.head not in ('finally', 'rollback')], None, None, None)
+		self.rollback = None
+		for r in rb:
+			bid = self.bids[id(r)]
+			self.rollback = self.seq(items(r), None, bid, None)
+			self.blocks[bid] = {'kind': 'rollback', 'block': None, 'first': self.rollback, 'next': None, 'body': self.ids(r), 'node': r}
 		self.final = None
 		for f in fin:
 			bid = self.bids[id(f)]
@@ -881,12 +860,12 @@ class Flow(object):
 				groups.append((it, None))
 				i += 1
 		entry = after
-		prev = {}  # the nearest step before each item in this body, past gates only: "retry" goes back to it
+		prev = {}  # the nearest step or reason before each item in this body, past gates only: "retry" goes back to it
 		for k, (it, _) in enumerate(groups):
 			back = None
 			for j in range(k - 1, -1, -1):
 				h = groups[j][0].head
-				if h == 'step':
+				if h in ('step', 'reason'):
 					back = groups[j][0]
 					break
 				if h != 'gate':
@@ -945,7 +924,7 @@ class Flow(object):
 			d['first'] = self.seq(items(it), after, bid, loop)
 			self.blocks[bid] = d
 			return d['first']  # a section has no effect on a run: the flow goes straight into its body
-		elif h in ('else', 'finally'):
+		elif h in ('else', 'finally', 'rollback'):
 			d['first'] = self.seq(items(it), after, bid, loop)
 			self.blocks[bid] = d
 			return d['first']
@@ -966,26 +945,71 @@ class Flow(object):
 
 
 # - Check --------------------------------------------
-def retry_problem(c, byrule):
-	'''"retry <n>" or "retry <rule id>" (a number rule, so that a preset can change it). -> None or the error.'''
-	if len(c.args) == 1 and c.args[0][0] == 'num' and isinstance(value(c.args[0]), int) and value(c.args[0]) >= 1:
+def count_problem(c, byrule, name, minimum=1):
+	'''"<name> <n>" or "<name> <rule id>" (a number rule). -> None or the error.'''
+	if len(c.args) == 1 and c.args[0][0] == 'num' and isinstance(value(c.args[0]), int) and value(c.args[0]) >= minimum:
 		return None
 	if len(c.args) == 1 and c.args[0][0] == 'word' and c.word(0) in byrule:
-		return None if rule_type(byrule[c.word(0)]) == 'number' else 'retry {}: the rule must be a number'.format(c.word(0))
-	return 'write retry <n> (a whole number, 1 or more) or retry <rule id> (a number rule)'
+		return None if rule_type(byrule[c.word(0)]) == 'number' else '{} {}: the rule must be a number'.format(name, c.word(0))
+	return 'write {} <n> (a whole number, {} or more) or {} <rule id> (a number rule)'.format(name, minimum, name)
+
+
+def retry_problem(c, byrule):
+	'''"retry <n>" or "retry <rule id>" (a number rule, so that a preset can change it). -> None or the error.'''
+	return count_problem(c, byrule, 'retry', minimum=1)
+
+
+def never_parts(n):
+	'''A "never" node -> (text, gate_id or None). Supports: never "text" [-> <gate-id>].'''
+	arrow = next((i for i, a in enumerate(n.args) if a[0] == 'word' and a[1] == '->'), None)
+	left = n.args[:arrow] if arrow is not None else n.args
+	gate = n.word(arrow + 1) if arrow is not None else None
+	text = ' '.join(value(a) if a[0] == 'str' else ser(a) for a in left).strip()
+	return text, gate
+
+
+def intent_info(n):
+	'''Structured intent of a unit or reason node -> {"text", "audience", "style", "never"} (only non-empty fields).'''
+	intents = n.kids('intent')
+	if not intents:
+		return None
+	text = ' '.join(text_of(x) for x in intents).strip()
+	aud = ' '.join(text_of(a) for x in intents for a in x.kids('audience')).strip()
+	sty = ' '.join(text_of(s) for x in intents for s in x.kids('style')).strip()
+	nevers = []
+	for x in intents:
+		for nv in x.kids('never'):
+			nt, ng = never_parts(nv)
+			if nt:
+				d = {'text': nt}
+				if ng:
+					d['gate'] = ng
+				nevers.append(d)
+	out = {}
+	if text:
+		out['text'] = text
+	if aud:
+		out['audience'] = aud
+	if sty:
+		out['style'] = sty
+	if nevers:
+		out['never'] = nevers
+	return out or None
 
 
 def removed(c, parent):
-	'''-> the error text for a word of version 0 that version 1 refuses, or None.'''
+	'''-> the error text for a removed word, or None.'''
 	if c.head == 'unit' and parent.head == 'rule':
 		return '"unit" under a rule is a word of version 0: put the unit in the label. "unit" is only the container'
+	if c.head == 'brief' and parent.head == 'gate':
+		return '"brief" under a gate is a word of version 0: write check "text"'
 	if c.head in REMOVED and not (c.head == 'check' and parent.head == 'probe'):
-		return '"{}" is a word of version 0: {}'.format(c.head, REMOVED[c.head])
+		return '"{}" is not in version 2: {}'.format(c.head, REMOVED[c.head])
 	return None
 
 
 def check(root, path=None, ctx=None):
-	'''-> (errors, warnings): lists of (line, text). path: the file, to check the files of "code" and "uses" lines.'''
+	'''-> (errors, warnings): lists of (line, text). path: the file, to check the files of "code" lines.'''
 	err, warn = [], []
 	names = set()
 	base = os.path.dirname(os.path.abspath(path)) if path else None
@@ -1001,9 +1025,11 @@ def check(root, path=None, ctx=None):
 			err.append((u.line, 'unit "{}" is defined twice'.format(name)))
 		names.add(name)
 		if u.word(1) == 'snippet':
-			err.append((u.line, 'the scope "snippet" is a word of version 0: use tool or agent, and put the code in a file (code <path>)'))
-		elif u.word(1) and u.word(1) not in SCOPES:
-			err.append((u.line, 'scope "{}": use tool or agent'.format(u.word(1))))
+			err.append((u.line, 'the scope "snippet" is a word of version 0: write "unit {}" (every unit is a flow)'.format(name or '<name>')))
+		elif u.word(1) in ('tool', 'agent'):
+			err.append((u.line, 'scope "{}" was removed in version 2: write "unit {}" (every unit is a flow)'.format(u.word(1), name or '<name>')))
+		elif u.word(1):
+			err.append((u.line, 'unexpected "{}" after unit name: write "unit {}"'.format(u.word(1), name or '<name>')))
 
 		def walk(n):
 			allowed = CHILDREN.get(n.head)
@@ -1018,9 +1044,6 @@ def check(root, path=None, ctx=None):
 						warn.append((c.line, '"{}" is not a known word inside "{}"'.format(c.head, n.head)))
 				walk(c)
 		walk(u)
-		for e in u.kids('example'):
-			if '=>' not in [ser(a) for a in e.args]:
-				err.append((e.line, 'an example needs "=>"'))
 		for n in u.kids('in') + u.kids('out'):
 			t = in_parts(n)[1]
 			bad = type_problem(t) if t else None
@@ -1028,33 +1051,14 @@ def check(root, path=None, ctx=None):
 				warn.append((n.line, bad))
 		prefixes = [c['prefix'] for c in code_lines(u)]
 		for c in code_lines(u):
-			if not c['file']:
-				err.append((c['line'], 'write "code <path>" or "code <prefix> <path>"'))
+			if not c['prefix'] or not c['file']:
+				err.append((c['line'], 'write "code <prefix> <path>" (micro-level "code <path>" was removed in version 2)'))
 			elif prefixes.count(c['prefix']) > 1:
-				err.append((c['line'], 'two "code" lines for {}'.format('"' + c['prefix'] + '"' if c['prefix'] else 'the unit')))
+				err.append((c['line'], 'two "code" lines for "{}"'.format(c['prefix'])))
 			elif base:
 				for k in ('file', 'test'):
 					if c[k] and not os.path.exists(os.path.join(base, c[k])):
 						err.append((c['line'], 'the {} file "{}" does not exist'.format('code' if k == 'file' else 'test', c[k])))
-				if c['prefix'] is None and os.path.exists(os.path.join(base, c['file'])) and bound_level(name, u, cctx) == 'none':
-					err.append((c['line'], '"{}" has no function "{}"'.format(c['file'], name.replace('-', '_'))))
-		if path:
-			for x in u.kids('uses'):
-				f = x.word(1)
-				if not f:
-					continue
-				p = os.path.join(base, f)
-				if not os.path.exists(p):
-					warn.append((x.line, 'the file "{}" does not exist'.format(f)))
-					continue
-				try:
-					with open(p, encoding='utf-8', newline='') as fh:
-						there = [v.word(0) for v in units(parse(fh.read()))]
-				except (RigError, OSError) as e:
-					warn.append((x.line, 'the file "{}" cannot be read: {}'.format(f, e)))
-					continue
-				if x.word(0) not in there:
-					warn.append((x.line, 'the file "{}" has no unit "{}"'.format(f, x.word(0))))
 
 		# Rules and presets
 		rules = set(r.word(0) for r in u.kids('rule'))
@@ -1073,6 +1077,9 @@ def check(root, path=None, ctx=None):
 					err.append((g.line, 'rule "{}": write range <min> <max>, two numbers'.format(rid)))
 				elif value(g.args[0]) > value(g.args[1]):
 					err.append((g.line, 'rule "{}": the range starts above its end'.format(rid)))
+			for ui in r.kids('ui'):
+				if ui.args and ui.word(0) not in UI_CONTROLS:
+					err.append((ui.line, 'rule "{}": ui control must be one of {}'.format(rid, ', '.join(UI_CONTROLS))))
 			bad = rule_problem(r, r.args[1] if len(r.args) > 1 else None)
 			if bad:
 				err.append((r.line, 'rule "{}": {}'.format(rid, bad)))
@@ -1080,6 +1087,24 @@ def check(root, path=None, ctx=None):
 			for m in PLACE.finditer(t):
 				if m.group(1) not in rules:
 					err.append((n.line, '{{{}}} names a rule that is not defined in this unit'.format(m.group(1))))
+		# Validate structured intent children (unit-level and reason-level)
+		intent_hosts = [u] + [f for f in flow_nodes(u) if f.head == 'reason'] if has_flow(u) else [u]
+		flow_gates = dict((f.word(0), f) for f in flow_nodes(u) if f.head == 'gate' and f.word(0)) if has_flow(u) else {}
+		for host in intent_hosts:
+			for it in host.kids('intent'):
+				for c in it.kids('audience') + it.kids('style'):
+					if not text_of(c).strip():
+						err.append((c.line, '"{}" needs text'.format(c.head)))
+				for nv in it.kids('never'):
+					nt, ng = never_parts(nv)
+					if not nt:
+						err.append((nv.line, '"never" needs text describing the boundary'))
+					if ng is not None:
+						g = flow_gates.get(ng)
+						if g is None:
+							err.append((nv.line, 'never -> "{}": no gate with this id'.format(ng)))
+						elif g.word(1) == 'soft':
+							err.append((nv.line, 'never -> "{}": a never boundary needs a hard, model or human gate, not soft'.format(ng)))
 		pnames = set()
 		for p in u.kids('preset'):
 			pn = p.word(0)
@@ -1097,16 +1122,49 @@ def check(root, path=None, ctx=None):
 					if bad:
 						err.append((s.line, 'preset "{}", rule "{}": {}'.format(pn, rid, bad)))
 
+		# Pluggable queue declaration
+		queues = u.kids('queue')
+		if len(queues) > 1:
+			err.append((queues[1].line, 'at most one "queue" declaration per unit'))
+		queue_reads = set()
+		for q in queues:
+			bys = q.kids('by')
+			if not bys:
+				err.append((q.line, 'queue needs "by <prefix.function>"'))
+			for b in bys:
+				t = by_target(b.word(0), u)
+				if t != 'bound':
+					warn.append((b.line, 'queue "by {}" names no "code" line: add "code <prefix> <path>"'.format(b.word(0))))
+				elif base:
+					c_line, fn = code_for(b.word(0), u)
+					if bound_level(b.word(0), u, cctx) == 'none' and c_line['file'] and os.path.exists(os.path.join(base, c_line['file'])):
+						err.append((b.line, '"{}" has no function "{}"'.format(c_line['file'], fn)))
+			for rd in q.kids('reads'):
+				for a in rd.args:
+					if a[1] not in rules:
+						err.append((rd.line, 'rule "{}" is not defined in this unit'.format(a[1])))
+			queue_reads.update(node_reads(q, u, cctx))
+
 		# The flow
 		if not has_flow(u):
 			continue
 		top = items(u)
+		tail_start = len(top)
+		for k in range(len(top) - 1, -1, -1):
+			if top[k].head in ('finally', 'rollback'):
+				tail_start = k
+			else:
+				break
 		for k, it in enumerate(top):
-			if it.head == 'finally' and k != len(top) - 1:
-				err.append((it.line, '"finally" is the last block of a flow'))
+			if it.head in ('finally', 'rollback') and k < tail_start:
+				err.append((it.line, '"{}" must be at the end of the flow (the last block)'.format(it.head)))
+		for hk in ('finally', 'rollback'):
+			seen_hk = [x for x in top if x.head == hk]
+			if len(seen_hk) > 1:
+				err.append((seen_hk[1].line, 'at most one "{}" block per unit'.format(hk)))
 		for it in walk_items(u):
-			if it.head == 'finally' and it.parent is not u:
-				err.append((it.line, '"finally" is a block of the unit, not of another block'))
+			if it.head in ('finally', 'rollback') and it.parent is not u:
+				err.append((it.line, '"{}" is a block of the unit, not of another block'.format(it.head)))
 		nodes = flow_nodes(u)
 		ids = {}
 		for f in nodes:
@@ -1121,7 +1179,7 @@ def check(root, path=None, ctx=None):
 		ends = set(f.word(0) for f in nodes if f.head == 'end')
 		fl = Flow(u)
 		err += fl.problems
-		read = set()
+		read = set(queue_reads)
 		for f in nodes:
 			fid, kind = f.word(0), f.word(1) if f.head == 'gate' else f.head
 			read.update(node_reads(f, u, cctx))
@@ -1153,6 +1211,9 @@ def check(root, path=None, ctx=None):
 					bad = type_problem(t) if t else 'write out <type>'
 					if bad:
 						err.append((c.line, bad))
+				if c.head == 'brief':
+					if not c.args or any(a[0] != 'word' for a in c.args):
+						err.append((c.line, 'write brief <key>... (one or more output keys)'))
 			if f.head == 'step':
 				bys = [b.word(0) for b in f.kids('by')]
 				if not bys:
@@ -1165,6 +1226,39 @@ def check(root, path=None, ctx=None):
 					warn.append((f.line, 'step "{}" is done by the model, but has no "do" that says what to do'.format(fid)))
 				if ('model' in bys or not bys) and not f.kids('out'):
 					warn.append((f.line, 'step "{}": add "out <type>" (for example "out text") so the answer has a checked form'.format(fid)))
+			if f.head == 'reason':
+				if f.kids('by'):
+					err.append((f.kids('by')[0].line, 'reason "{}": a reason block is cognitive and takes no "by" (use "tools" for read-only helpers, or "step" for code)'.format(fid)))
+				for m in f.kids('mode'):
+					if m.word(0) not in REASON_MODES:
+						err.append((m.line, 'reason "{}": mode must be careful or creative'.format(fid)))
+				if not f.kids('do'):
+					warn.append((f.line, 'reason "{}" has no "do" that says what to reason about'.format(fid)))
+				if not f.kids('out'):
+					warn.append((f.line, 'reason "{}": add "out <type>" (for example "out text") so the answer has a checked form'.format(fid)))
+				for b in f.kids('budget'):
+					bad = count_problem(b, byrule, 'budget', minimum=1)
+					if bad:
+						err.append((b.line, bad))
+				for c in f.kids('candidates'):
+					bad = count_problem(c, byrule, 'candidates', minimum=2)
+					if bad:
+						err.append((c.line, bad))
+				t_nodes = f.kids('tools')
+				if t_nodes and not f.kids('budget'):
+					warn.append((t_nodes[0].line, 'reason "{}": "tools" should have a hard "budget <n>" limit'.format(fid)))
+				for tn in t_nodes:
+					if not tn.args:
+						err.append((tn.line, 'write tools <prefix.fn>...'))
+					for a in tn.args:
+						ref = a[1] if a[0] == 'word' else ''
+						t = by_target(ref, u)
+						if t != 'bound':
+							warn.append((tn.line, 'tools "{}": names no "code" line: add "code <prefix> <path>"'.format(ref)))
+						elif base:
+							c_line, fn = code_for(ref, u)
+							if bound_level(ref, u, cctx) == 'none' and c_line['file'] and os.path.exists(os.path.join(base, c_line['file'])):
+								err.append((tn.line, '"{}" has no function "{}"'.format(c_line['file'], fn)))
 			if f.head == 'gate':
 				if kind == 'judge':
 					err.append((f.line, 'gate "{}": "judge" is a word of version 0: write model'.format(fid)))
@@ -1205,7 +1299,7 @@ def check(root, path=None, ctx=None):
 			for b in f.kids('by'):
 				t = by_target(b.word(0), u)
 				if t is None and b.word(0):
-					warn.append((b.line, '"by {}" names no unit or "code" line: add "code <prefix> <path>" for code in a file'.format(b.word(0))))
+					warn.append((b.line, '"by {}" names no "code" line: add "code <prefix> <path>" for code in a file'.format(b.word(0))))
 				elif base and t == 'bound':
 					c, fn = code_for(b.word(0), u)
 					level = bound_level(b.word(0), u, cctx)
@@ -1249,11 +1343,11 @@ def check(root, path=None, ctx=None):
 			for c in it.kids('fail'):
 				if c.word(0) != '->' or c.word(1) not in ends:
 					err.append((c.line, 'the fail of "{}" goes to an end: write fail -> <end>'.format(it.head)))
-			if it.head in ('else', 'section', 'finally', 'if') and (it.kids('fail') or it.kids('retry') or it.kids('tolerate')):
+			if it.head in ('else', 'section', 'finally', 'rollback', 'if') and (it.kids('fail') or it.kids('retry') or it.kids('tolerate')):
 				err.append((it.line, '"{}" has no options: only a body'.format(it.head)))
-		# Reach: every node from the start (or from "finally")
+		# Reach: every node from the start (or from "rollback" / "finally")
 		seen = set()
-		todo = [x for x in (fl.start, fl.final) if x]
+		todo = [x for x in (fl.start, fl.rollback, fl.final) if x]
 		while todo:
 			x = todo.pop()
 			if x in seen:
@@ -1264,13 +1358,13 @@ def check(root, path=None, ctx=None):
 			if f.word(0) and f.word(0) not in seen:
 				warn.append((f.line, '"{}" cannot be reached from the start'.format(f.word(0))))
 		last = [fl.start] if fl.start else []
-		runs_off = any(d['next'] is None and fid in seen and ids.get(fid) is not None and ids[fid].head != 'end' and not (fl.final and d['block'] and fl.blocks.get(d['block'], {}).get('kind') == 'finally')
+		runs_off = any(d['next'] is None and fid in seen and ids.get(fid) is not None and ids[fid].head != 'end' and not (d['block'] and fl.blocks.get(d['block'], {}).get('kind') in ('finally', 'rollback'))
 			for fid, d in fl.nodes.items())
 		if runs_off and last:
 			warn.append((u.line, 'the flow can run past its last line: end it with an "end" line'))
 		for r in u.kids('rule'):
 			if r.word(0) not in read:
-				warn.append((r.line, 'rule "{}" is not read by any step or gate'.format(r.word(0))))
+				warn.append((r.line, 'rule "{}" is not read by any step, reason or gate'.format(r.word(0))))
 	return err, warn
 
 
@@ -1306,6 +1400,10 @@ def rule_info(r, token=None):
 		d['max'] = hi
 	if r.kids('options'):
 		d['options'] = options_of(r.kids('options')[0])
+	if r.kids('ui'):
+		u_node = r.kids('ui')[0]
+		default_ctrl = {'switch': 'toggle', 'choice': 'select', 'number': 'slider' if ('min' in d and 'max' in d) else 'number'}.get(d['type'], 'input')
+		d['ui'] = u_node.word(0) or default_ctrl
 	ns = notes_of(r)
 	if ns:
 		d['note'] = ' '.join(x['text'] for x in ns)
@@ -1329,6 +1427,8 @@ def lane_of(f):
 	'''Who decides a node: code, model or person (the bands of the viewer).'''
 	if f.head == 'end':
 		return 'end'
+	if f.head == 'reason':
+		return 'model'
 	if f.head == 'gate':
 		return {'model': 'model', 'human': 'person'}.get(f.word(1), 'code')
 	bys = [b.word(0) for b in f.kids('by')]
@@ -1340,6 +1440,21 @@ def node_info(f, fl, u=None, ctx=None):
 	nm = name_of(f)
 	if nm:
 		d['name'] = nm
+	if f.head == 'reason':
+		d['mode'] = f.kids('mode')[0].word(0) if f.kids('mode') else 'careful'
+		ispec = intent_info(f)
+		if ispec:
+			if ispec.get('text'):
+				d['intent'] = ispec['text']
+			if any(k in ispec for k in ('audience', 'style', 'never')):
+				d['intent_spec'] = ispec
+		tools = [a[1] for t in f.kids('tools') for a in t.args if a[0] == 'word']
+		if tools:
+			d['tools'] = tools
+		if f.kids('budget') and f.kids('budget')[0].args:
+			d['budget'] = value(f.kids('budget')[0].args[0])
+		if f.kids('candidates') and f.kids('candidates')[0].args:
+			d['candidates'] = value(f.kids('candidates')[0].args[0])
 	for k in PROSE:
 		xs = f.kids(k)
 		if xs:
@@ -1356,6 +1471,8 @@ def node_info(f, fl, u=None, ctx=None):
 	if f.kids('out') and f.kids('out')[0].args:
 		t = f.kids('out')[0].args[0]
 		d['out'], d['schema'] = ser(t), type_schema(t)
+	if f.kids('brief'):
+		d['brief'] = [a[1] for c in f.kids('brief') for a in c.args if a[0] == 'word']
 	if f.kids('options'):
 		d['options'] = options_of(f.kids('options')[0])
 	if f.kids('retry'):
@@ -1421,28 +1538,34 @@ def catalog(u, preset=None, ctx=None):
 	'''A unit as a catalogue: the JSON that the runner reads. Every edge is written out (Flow).'''
 	toks = preset_tokens(u, preset)
 	fl = Flow(u)
-	uses = []
-	for x in u.kids('uses'):
-		d = {'unit': x.word(0)}
-		if x.word(1):
-			d['file'] = x.word(1)
-		uses.append(d)
 	order = [item_id(x, fl.bids) for x in walk_items(u) if x.head in BLOCKS]
-	return {
-		'rig': VERSION, 'unit': u.word(0), 'scope': u.word(1, 'tool'), 'preset': preset,
+	out = {
+		'rig': VERSION, 'unit': u.word(0), 'preset': preset,
 		'intent': ' '.join(text_of(x) for x in u.kids('intent')),
-		'notes': notes_of(u), 'uses': uses,
+		'notes': notes_of(u),
 		'code': [dict((k, c[k]) for k in ('prefix', 'file', 'test')) for c in code_lines(u)],
 		'in': [port_info(x) for x in u.kids('in')],
 		'out': port_info(u.kids('out')[0]) if u.kids('out') else None,
-		'examples': [' '.join(ser(a) for a in x.args) for x in u.kids('example')],
-		'start': fl.start, 'finally': fl.final, 'body': [item_id(x, fl.bids) for x in items(u)],
+		'start': fl.start, 'rollback': fl.rollback, 'finally': fl.final, 'body': [item_id(x, fl.bids) for x in items(u)],
 		'coverage': coverage(u, ctx),
 		'presets': presets_of(u),
 		'rules': [rule_info(r, toks.get(r.word(0))) for r in u.kids('rule')],
 		'flow': [node_info(f, fl, u, ctx) for f in flow_nodes(u)],
 		'blocks': [block_info(b, fl.blocks[b]) for b in order if b in fl.blocks],
 	}
+	if u.kids('queue'):
+		q = u.kids('queue')[0]
+		qd = {'by': [b.word(0) for b in q.kids('by') if b.word(0)]}
+		qrd = node_reads(q, u, ctx)
+		if qrd:
+			qd['reads'] = qrd
+		if q.args and q.args[0][0] == 'str':
+			qd['name'] = value(q.args[0])
+		out['queue'] = qd
+	ispec = intent_info(u)
+	if ispec and any(k in ispec for k in ('audience', 'style', 'never')):
+		out['intent_spec'] = ispec
+	return out
 
 
 def tool_def(u, preset=None):
@@ -1511,6 +1634,15 @@ def skill(u, rules_path=None, preset=None, driver=None):
 	out = ['---', 'name: ' + u.word(0), 'description: ' + intent, '---', '', '# ' + u.word(0), '']
 	if intent:
 		out += [intent, '']
+	ispec = c.get('intent_spec') or {}
+	if ispec.get('audience'):
+		out.append('Audience: ' + fill(ispec['audience']))
+	if ispec.get('style'):
+		out.append('Style: ' + fill(ispec['style']))
+	for nv in ispec.get('never', []):
+		out.append('Never: ' + fill(nv['text']) + (' (gate `{}`)'.format(nv['gate']) if nv.get('gate') else ''))
+	if any(ispec.get(k) for k in ('audience', 'style', 'never')):
+		out.append('')
 	for n in c['notes']:
 		out.append('Note: ' + fill(n['text']))
 	if c['notes']:
@@ -1546,15 +1678,19 @@ def skill(u, rules_path=None, preset=None, driver=None):
 			'1. Start: `{} run \'<inputs as JSON>\'`{}.'.format(driver, ' (inputs: ' + args + ')' if args else ''),
 			'2. Read the JSON result:',
 			'   - `outcome`: the run ended. Report it, with `problems` first (and `result` if present). `error` means code failed.',
-			'   - `waiting` (`kind: model`): decide `check` from `sees`. Run `{} answer <run> \'{{"pass": true, "why": "..."}}\'` (or `false`).'.format(driver),
+			'   - `waiting` (`kind: model`): decide `check` from `sees` (respecting `intent`). Run `{} answer <run> \'{{"pass": true, "why": "..."}}\'` (or `false`).'.format(driver),
 			'   - `waiting` (`kind: step`): do `do` from `sees`. Run `{} answer <run> \'{{"result": ...}}\'` matching `schema` if present.'.format(driver),
+			'   - `waiting` (`kind: reason`): deliberate (`mode`: `careful` or `creative`) respecting `intent`, `never` boundaries, and any `candidates` count; use `{} arena <run> <tool>` for read-only tools up to `budget`. Run `{} answer <run> \'{{"result": ...}}\'`.'.format(driver, driver),
 			'   - `waiting` (`kind: human`): show the person `name`, `check`, `sees`, and `say` word for word; wait, then run `{} approve <run> yes` (or `no` / their words). Never answer for a person.'.format(driver),
 			'   - `waiting.problems`: fix those problems in the new answer. `refused`: final — run `{} status <run>`.'.format(driver),
 			'3. Repeat step 2 until `outcome`. Never decide a hard or soft gate yourself.', '',
-			'More commands: `{} batch \'<JSON list>\' --report reports/<name>.md` (many items), `{} queues`, `{} status <run>`, `{} rules`, `{} flow`.'.format(driver, driver, driver, driver, driver), '']
+			'More commands: `{} batch \'<JSON list>\' --report reports/<name>.md`, `{} next-batch`, `{} queues`, `{} status <run>`, `{} rules`, `{} flow`{}{}.'.format(
+				driver, driver, driver, driver, driver, driver,
+				', `{} restore <run>`'.format(driver) if c.get('rollback') else '',
+				', `{} artifact <run> <step>`'.format(driver) if any(f.get('brief') for f in c['flow']) else ''), '']
 		code_steps = sum(1 for f in c['flow'] if f['kind'] == 'step' and f['lane'] == 'code')
 		code_gates = sum(1 for f in c['flow'] if f['kind'] in ('hard', 'soft') and f.get('by'))
-		interactive = [f for f in c['flow'] if f['kind'] in ('model', 'human') or (f['kind'] == 'step' and f['lane'] == 'model') or (f['kind'] in ('hard', 'soft') and not f.get('by'))]
+		interactive = [f for f in c['flow'] if f['kind'] in ('model', 'human', 'reason') or (f['kind'] == 'step' and f['lane'] == 'model') or (f['kind'] in ('hard', 'soft') and not f.get('by'))]
 		ends = [f for f in c['flow'] if f['kind'] == 'end']
 		out += ['## Flow (summary)', '',
 			'The runner walks {} code {} and {} code {} automatically (`{} flow` shows the full map).'.format(
@@ -1564,7 +1700,7 @@ def skill(u, rules_path=None, preset=None, driver=None):
 			out += ['| Node | Kind | Action / check | Sees | Out / options |', '|---|---|---|---|---|']
 			for f in interactive:
 				k = f['kind']
-				kind_label = {'step': 'model step', 'model': 'model gate', 'human': 'human gate'}.get(k, k + ' gate (no code)')
+				kind_label = {'step': 'model step', 'reason': 'reason ({})'.format(f.get('mode', 'careful')), 'model': 'model gate', 'human': 'human gate'}.get(k, k + ' gate (no code)')
 				if k == 'human':
 					action = ' — '.join(fill(f[x]) for x in ('name', 'check') if f.get(x))
 				else:
@@ -1572,6 +1708,8 @@ def skill(u, rules_path=None, preset=None, driver=None):
 				sees = ', '.join('`{}`'.format(x) for x in f.get('sees', []))
 				if 'out' in f:
 					form = '`{}`'.format(f['out'])
+					if 'candidates' in f:
+						form += ' × {}'.format(f['candidates'])
 				elif 'options' in f:
 					form = ' / '.join('`{}`'.format(o) for o in f['options'])
 				else:
@@ -1596,11 +1734,21 @@ def skill(u, rules_path=None, preset=None, driver=None):
 
 		def node(f, depth):
 			k = f['kind']
-			label = {'step': 'step', 'end': 'end'}.get(k, k + ' gate')
+			label = {'step': 'step', 'reason': 'reason ({})'.format(f.get('mode', 'careful')), 'end': 'end'}.get(k, k + ' gate')
 			h = '#' * min(6, 3 + depth)
 			out.extend(['{} `{}`{} ({})'.format(h, f['id'], ' ' + fill(f['name']) if f.get('name') else '', label), ''])
 			if 'if' in f:
 				out.append('- Only when `{}` is not empty and not false. Else go on to the next line.'.format(f['if']))
+			if k == 'reason' and f.get('intent'):
+				out.append('- Intent: ' + fill(f['intent']))
+			if k == 'reason' and f.get('intent_spec'):
+				sp = f['intent_spec']
+				if sp.get('audience'):
+					out.append('- Audience: ' + fill(sp['audience']))
+				if sp.get('style'):
+					out.append('- Style: ' + fill(sp['style']))
+				for nv in sp.get('never', []):
+					out.append('- Never: ' + fill(nv['text']) + (' (gate `{}`)'.format(nv['gate']) if nv.get('gate') else ''))
 			for key, title in (('do', 'Do'), ('check', 'Check')):
 				if key in f:
 					out.append('- {}: {}'.format(title, fill(f[key])))
@@ -1608,11 +1756,17 @@ def skill(u, rules_path=None, preset=None, driver=None):
 				out.append('- Rules: ' + ', '.join('`{}`'.format(r) if rules_path or r not in byrule else '`{}` = {}'.format(r, val(r)) for r in f['reads']))
 			if 'sees' in f:
 				out.append('- Sees: ' + ', '.join('`{}`'.format(x) for x in f['sees']))
+			if 'tools' in f:
+				out.append('- Read-only tools: ' + ', '.join('`{}`'.format(t) for t in f['tools']) + (' (budget: {})'.format(f['budget']) if 'budget' in f else ''))
+			if 'candidates' in f:
+				out.append('- Produce {} distinct candidates.'.format(f['candidates']))
 			if 'out' in f:
 				out.append('- The answer has the type `{}`.'.format(f['out']))
 			by = ', '.join('`{}`'.format(b) for b in f.get('by', []))
 			guess = '- No code decides this gate yet: decide it yourself and label the result as a guess.'
-			if k == 'step' and f['lane'] == 'model':
+			if k == 'reason':
+				out.append('- Deliberate carefully in {} mode; never mutate the world directly.'.format(f.get('mode', 'careful')))
+			elif k == 'step' and f['lane'] == 'model':
 				out.append('- You do this step.')
 			elif k == 'step' and by:
 				out.append('- Code: run {}.'.format(by))
@@ -1650,7 +1804,9 @@ def skill(u, rules_path=None, preset=None, driver=None):
 				body(b['body'], depth + 1)
 				return
 			head = {'for': 'For each `{}` in `{}`'.format(b.get('item'), b.get('path')), 'until': 'Until `{}` is true'.format(b.get('path')),
-				'if': 'If `{}`'.format(b.get('path')), 'else': 'Else (when the `if` before did not run)', 'finally': 'Finally: always, after the run ends (also after an error)'}[k]
+				'if': 'If `{}`'.format(b.get('path')), 'else': 'Else (when the `if` before did not run)',
+				'rollback': 'Rollback: on hard fail, error, unattended deferral, or explicit restore',
+				'finally': 'Finally: always, after the run ends (also after an error)'}[k]
 			out.append('**{}** (block `{}`):'.format(head, b['id']))
 			if k == 'for':
 				out.append('- Do the lines of this block once for each item. The item is `{}`.'.format(b.get('item')))
@@ -1746,8 +1902,8 @@ def compile_to(kind, u, preset=None, rules_path=None, ctx=None, driver=None):
 	if kind == 'skill':
 		return skill(u, rules_path, preset, driver)
 	if kind == 'tool':
-		return json.dumps(tool_def(u, preset), ensure_ascii=False, indent=1) + '\n'
-	raise SystemExit('compile json, compile skill or compile tool')
+		raise SystemExit('"compile tool" was removed in version 2: use "compile json" or "compile skill"')
+	raise SystemExit('compile json or compile skill')
 
 
 def outputs(path, unit=None, json_out=None, skill_out=None, rules_ref=False, preset=None):
@@ -1825,7 +1981,7 @@ def bundle(text, path=None):
 	out['errors'], out['warnings'] = [list(x) for x in sorted(err)], [list(x) for x in sorted(warn)]
 	for u in units(root):
 		name = u.word(0) or '?'
-		d = {'name': name, 'scope': u.word(1, 'tool'), 'status': unit_status(u, ctx), 'flow': has_flow(u)}
+		d = {'name': name, 'status': unit_status(u, ctx), 'flow': has_flow(u)}
 		try:
 			d['catalogue'] = catalog(u, None, ctx)
 			d['skill'] = skill(u)
@@ -1970,7 +2126,7 @@ def main(argv):
 			ctx = Ctx(root, path)
 			print(path)
 			for u in units(root):
-				print('  {:<28} {}'.format('{} ({})'.format(u.word(0), u.word(1, 'tool')), '; '.join(unit_status(u, ctx))))
+				print('  {:<28} {}'.format(u.word(0), '; '.join(unit_status(u, ctx))))
 			err, warn = check(root, path, ctx)
 			for line, t in sorted(err):
 				print('  error   line {}: {}'.format(line, t))

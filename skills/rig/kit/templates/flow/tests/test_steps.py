@@ -27,13 +27,13 @@ class Steps(unittest.TestCase):
 		self.assertEqual(r['waiting']['node'], 'sensible')
 		with self.assertRaises(rigkit.Refused):
 			self.kit.answer(r['run'], {'result': 'this is a gate, not a step'})
-# >>> level 3
+# >>> level 2
 
 	def test_regression_set(self):
 		cases = rigkit.read_json(os.path.join(HERE, 'tests', 'regression-set.json'))
 		_, diffs = self.kit.regress(cases)
 		self.assertEqual(diffs, [])
-# <<< level 3
+# <<< level 2
 
 
 if __name__ == '__main__':

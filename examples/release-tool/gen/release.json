@@ -1,11 +1,9 @@
 {
- "rig": 1,
+ "rig": 2,
  "unit": "release",
- "scope": "agent",
  "preset": null,
  "intent": "publish a release folder only when its notes, its version and its tests are ready, and a person agrees",
  "notes": [],
- "uses": [],
  "code": [
   {
    "prefix": "gates",
@@ -35,8 +33,8 @@
    "type": "string"
   }
  },
- "examples": [],
  "start": "collect",
+ "rollback": null,
  "finally": null,
  "body": [
   "collect",
@@ -105,7 +103,8 @@
    "label": "Tests must pass",
    "type": "switch",
    "value": true,
-   "default": true
+   "default": true,
+   "ui": "toggle"
   },
   {
    "id": "permissions.publish",
@@ -114,6 +113,7 @@
    "type": "switch",
    "value": false,
    "default": false,
+   "ui": "toggle",
    "note": "off: a dry run. The run ends at ready and changes nothing."
   }
  ],
@@ -334,5 +334,20 @@
    "name": "Stopped"
   }
  ],
- "blocks": []
+ "blocks": [],
+ "intent_spec": {
+  "text": "publish a release folder only when its notes, its version and its tests are ready, and a person agrees",
+  "audience": "end users upgrading the product",
+  "style": "plain language with clear upgrade steps",
+  "never": [
+   {
+    "text": "publish without human approval",
+    "gate": "approve"
+   },
+   {
+    "text": "publish when permissions.publish is off",
+    "gate": "allowed"
+   }
+  ]
+ }
 }

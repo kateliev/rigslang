@@ -3,8 +3,12 @@
 ; The model decides one gate (tone) and does one step (rewrite), at most notes.rounds times. A person decides one gate (approve).
 ; Build: python3 ../../skills/rig/rig.py build .     Run: python3 tool.py run '{"folder": "tests/cases/good"}'
 
-unit release agent
+unit release
   intent "publish a release folder only when its notes, its version and its tests are ready, and a person agrees"
+    audience "end users upgrading the product"
+    style "plain language with clear upgrade steps"
+    never "publish without human approval" -> approve
+    never "publish when permissions.publish is off" -> allowed
   in folder path "the release folder: it holds NOTES.md, VERSION and tests.json"
   out text "the end of the run: published, ready (dry run) or stopped, with the problems"
   code gates gates.py
@@ -20,7 +24,9 @@ unit release agent
     note "a third rewrite did not pass where two had failed; the person then writes the notes"
   rule version.pattern /^\d+\.\d+\.\d+$/ "Version format"
   rule tests.required on "Tests must pass"
+    ui
   rule permissions.publish off "The tool may publish"
+    ui
     note "off: a dry run. The run ends at ready and changes nothing."
   preset hotfix
     set notes.min_words 10

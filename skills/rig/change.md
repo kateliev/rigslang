@@ -4,7 +4,7 @@ Part of the skill `rig`. Read [SKILL.md](SKILL.md) first, and [guide/rules.md](g
 
 `RIG` means `python3 <this folder>/rig.py`. `DIR` is the folder of the tool (it holds `rig.json`).
 
-Before any change of a level 4 tool, read its `notes/project-facts.md` (the decisions of the person) and its `notes/failures-log.md` (what was tried already).
+Before any change of a level 3 (production) tool, read its `notes/project-facts.md` (the decisions of the person) and its `notes/failures-log.md` (what was tried already).
 
 ## A value
 
@@ -67,4 +67,4 @@ Then write down what you learned: [guide/rules.md](guide/rules.md), rule 18.
 
 ## Raise the level
 
-Change `"level"` in `rig.json`, run `RIG doctor DIR`, and add what it lists as `MISS`. For level 4, also go through the check list at the end of [guide/patterns.md](guide/patterns.md).
+Change `"level"` in `rig.json`, run `RIG doctor DIR`, and add what it lists as `MISS`. For level 3, also go through the check list at the end of [guide/patterns.md](guide/patterns.md).

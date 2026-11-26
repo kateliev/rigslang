@@ -101,7 +101,7 @@ details summary{cursor:pointer}
 /* Badges, chips, links */
 .gid{display:inline-block;font:600 11px/1.6 var(--mono);padding:0 6px;border-radius:4px;color:var(--step);background:var(--step-bg)}
 .gid.hard{color:var(--hard);background:var(--hard-bg)}.gid.soft{color:var(--soft);background:var(--soft-bg)}
-.gid.model{color:var(--model);background:var(--model-bg)}.gid.human{color:var(--human);background:var(--human-bg)}.gid.end{color:var(--term);background:var(--term-bg)}
+.gid.model,.gid.reason{color:var(--model);background:var(--model-bg)}.gid.human{color:var(--human);background:var(--human-bg)}.gid.end{color:var(--term);background:var(--term-bg)}
 .kind{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint)}
 .chip{display:inline-flex;align-items:baseline;gap:4px;padding:0 6px;border-radius:5px;background:var(--chip);border:1px solid transparent;cursor:pointer;white-space:nowrap;font-size:12px;line-height:1.6}
 .chip .rid{font:11px var(--mono);color:var(--muted)}
@@ -168,8 +168,8 @@ body.tracing .node.tr{opacity:1}
 #run{max-width:240px}
 .node.sel{outline:2px solid var(--accent);outline-offset:2px}
 .node .hd{display:flex;gap:7px;align-items:center;padding:6px 10px;border-radius:9px 9px 0 0;cursor:move;position:relative;background:var(--step-bg)}
-.node.hard .hd{background:var(--hard-bg)}.node.soft .hd{background:var(--soft-bg)}.node.model .hd{background:var(--model-bg)}.node.human .hd{background:var(--human-bg)}
-.node.model,.node.human{border-style:dashed}
+.node.hard .hd{background:var(--hard-bg)}.node.soft .hd{background:var(--soft-bg)}.node.model .hd,.node.reason .hd{background:var(--model-bg)}.node.human .hd{background:var(--human-bg)}
+.node.model,.node.reason,.node.human{border-style:dashed}
 .node.params .hd{background:var(--param-bg)}
 .node .hd .t{font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .node .hd .gid{background:var(--card)}
@@ -221,7 +221,7 @@ body.tracing .node.tr{opacity:1}
 .box-for,.box-until{border-color:var(--accent)}
 .box-if,.box-else{border-style:dashed}
 .box-section{border-style:dotted;background:none}
-.box-finally{border-color:var(--term);border-style:dashed}
+.box-finally,.box-rollback{border-color:var(--term);border-style:dashed}
 .box-l{position:absolute;left:10px;top:4px;font:600 12px/1.4 var(--mono);color:var(--muted);cursor:pointer;background:var(--bg);padding:0 6px;border-radius:6px}
 .box-for .box-l,.box-until .box-l{color:var(--accent)}
 .box-t{font-weight:400;color:var(--faint)}
@@ -332,7 +332,7 @@ function load(B) {
   render();
 }
 function fromCatalogue(c, name) {  // a compiled catalogue (gen/<unit>.json), opened without rig.py serve: read only
-  return { file: name, text: null, errors: [], warnings: [], units: [{ name: c.unit, scope: c.scope, status: [], flow: !!(c.flow || []).length,
+  return { file: name, text: null, errors: [], warnings: [], units: [{ name: c.unit, status: [], flow: !!(c.flow || []).length,
     catalogue: c, skill: null, skill_ref: null, tool: null, levels: {}, rules_src: {}, presets_src: {} }] };
 }
 async function fetchBundle() {
@@ -411,7 +411,7 @@ function render() {
   $$(".tabs button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab === S.tab)));
   const sel = $("#unit");
   sel.hidden = units().length < 2 || S.tab === "units";
-  sel.replaceChildren(...units().map(u => new Option(u.name + " · " + u.scope, u.name)));
+  sel.replaceChildren(...units().map(u => new Option(u.name, u.name)));
   sel.value = S.unit || "";
   const U = curUnit(), pr = $("#preset"), ps = U ? Object.keys(U.presets_src) : [];
   pr.hidden = !ps.length || !S.served;
@@ -462,11 +462,15 @@ function unitsView() {
 function unitCard(U) {
   const c = cat(U);
   const card = el("section", { class: "card", id: "u-" + U.name },
-    el("h2", {}, U.name, el("span", { class: "scope" }, U.scope),
+    el("h2", {}, U.name,
       U.flow && c ? el("button", { style: "margin-left:auto;font-size:12px", onclick: () => { S.unit = U.name; S.tab = "graph"; store.set("tab", "graph"); render(); } }, "Graph ↗") : null),
-    el("div", { class: "chips" }, U.status.map(s => el("span", { class: "st" + (/hole|none|stale|remelted/.test(s) ? " warn" : "") }, s)), c ? c.uses.map(x => el("span", { class: "st" }, "uses " + x.unit + (x.file ? " (" + x.file + ")" : ""))) : null));
+    el("div", { class: "chips" }, U.status.map(s => el("span", { class: "st" + (/hole|none|stale|remelted/.test(s) ? " warn" : "") }, s)), c && c.queue ? el("span", { class: "st" }, "queue " + (c.queue.by || []).join(", ")) : null));
   if (!c) { card.append(el("p", { class: "dim" }, U.problem || "This unit does not compile.")); return card; }
   if (c.intent) card.append(el("p", { class: "lead" }, el("b", {}, "intent"), chips(U, c.intent, () => {})));
+  const ispec = c.intent_spec || {};
+  if (ispec.audience) card.append(el("p", { class: "lead" }, el("b", {}, "audience"), chips(U, ispec.audience, () => {})));
+  if (ispec.style) card.append(el("p", { class: "lead" }, el("b", {}, "style"), chips(U, ispec.style, () => {})));
+  for (const nv of ispec.never || []) card.append(el("p", { class: "lead" }, el("b", {}, "never"), chips(U, nv.text, () => {}), nv.gate ? el("span", { class: "dim" }, "  → " + nv.gate) : null));
   for (const n of c.notes || []) card.append(el("p", { class: "lead" }, el("b", {}, "note"), chips(U, n.text, () => {}), (n.evidence || []).map(e => el("span", { class: "dim" }, "  (evidence: " + e + ")"))));
   const ins = c.in || [], out = c.out;
   if (ins.length || out) card.append(el("p", { class: "lead" }, el("b", {}, "signature"),
@@ -492,7 +496,7 @@ function flowTable(U) {
   const c = cat(U), rowId = id => "n-" + U.name + "-" + id, blocks = Object.fromEntries((c.blocks || []).map(b => [b.id, b]));
   const go = id => () => { const tr = document.getElementById(rowId(id)); if (!tr) return; tr.scrollIntoView({ block: "center", behavior: "smooth" }); tr.classList.remove("flash"); void tr.offsetWidth; tr.classList.add("flash"); };
   const focusEd = (fid, rid) => { const e = $(`#${CSS.escape(rowId(fid))} [data-rule="${CSS.escape(rid)}"] input, #${CSS.escape(rowId(fid))} [data-rule="${CSS.escape(rid)}"] select`); e && e.focus(); };
-  const title = b => ({ for: `for ${b.item} in ${b.path}`, until: `until ${b.path}`, if: `if ${b.path}`, else: "else", section: b.name, finally: "finally" }[b.kind] || b.id);
+  const title = b => ({ for: `for ${b.item} in ${b.path}`, until: `until ${b.path}`, if: `if ${b.path}`, else: "else", section: b.name, rollback: "rollback", finally: "finally" }[b.kind] || b.id);
   const target = x => !x ? el("span", { class: "when" }, "the flow ends") : c.flow.some(f => f.id === x) ? nodeRef(U, x, go(x)) : el("span", { class: "gid" }, x);
   const strip = el("nav", { class: "flowstrip", "aria-label": "Flow" });
   c.flow.forEach((f, i) => { if (i) strip.append(el("span", { class: "arrow" }, "›")); const a = nodeRef(U, f.id, go(f.id)); a.href = "#" + rowId(f.id); a.onclick = e => { e.preventDefault(); go(f.id)(); }; strip.append(a); });
@@ -511,8 +515,8 @@ function flowTable(U) {
     }));
     if (!(f.reads || []).length) eds.append(el("span", { class: "none" }, "no rules"));
     const by = (f.by || []).join(", "), level = U.levels[f.id];
-    const who = by ? "by " + by : { model: "decided by the model", human: "decided by a person", step: f.lane === "model" ? "by the model" : "", end: "" }[f.kind] ?? "no code yet";
-    const extra = [f.if && "only if " + f.if, f.options && "options: " + f.options.join(" | "), f.out && "out " + f.out, f.timeout_text && "timeout " + f.timeout_text].filter(Boolean);
+    const who = by ? "by " + by : { model: "decided by the model", human: "decided by a person", reason: "reason (" + (f.mode || "careful") + ")", step: f.lane === "model" ? "by the model" : "", end: "" }[f.kind] ?? "no code yet";
+    const extra = [f.if && "only if " + f.if, f.options && "options: " + f.options.join(" | "), f.tools && "tools: " + f.tools.join(", "), f.budget != null && "budget " + f.budget, f.candidates != null && "candidates " + f.candidates, f.brief && "brief: " + f.brief.join(", "), f.out && "out " + f.out, f.timeout_text && "timeout " + f.timeout_text].filter(Boolean);
     return el("tr", { id: rowId(f.id), class: (f.reads || []).some(r => isChanged(U, r)) ? "changed" : "" },
       el("td", {}, el("div", {}, el("span", { class: "gid " + f.kind }, f.id), " ", el("span", { class: "kind" }, kindWord(f.kind))),
         f.name ? el("div", { style: "font-weight:600;margin-top:2px" }, f.name) : null,
@@ -547,7 +551,7 @@ function rulesTable(U) {
     if (r.group !== group) { group = r.group; rows.push(el("tr", {}, el("th", { colspan: 4, style: "text-transform:none" }, group))); }
     const lim = [has(r, "min") && "min " + r.min, has(r, "max") && "max " + r.max, has(r, "options") && "options: " + r.options.join(", ")].filter(Boolean).join(" · ");
     rows.push(el("tr", { class: isChanged(U, r.id) ? "changed" : "" },
-      el("td", { style: "width:40%" }, el("b", {}, r.label), el("div", { class: "code" }, r.id + (r.unit ? " · " + r.unit : "")),
+      el("td", { style: "width:40%" }, el("b", {}, r.label), r.ui ? el("span", { class: "st", style: "margin-left:6px" }, "ui: " + r.ui) : null, el("div", { class: "code" }, r.id),
         r.note ? el("div", { class: "dim", style: "font-size:12px" }, r.note) : null, r.evidence ? el("div", { class: "faint", style: "font-size:12px" }, "evidence: " + r.evidence) : null),
       el("td", {}, editor(U, r.id)), el("td", { class: "dim" }, lim || "—"),
       el("td", { class: "mono" }, (readers[r.id] || []).join(", ") || el("span", { style: "color:var(--warn)" }, "unused"))));
@@ -580,20 +584,11 @@ function jsonView() {
   const U = curUnit();
   if (!U || !cat(U)) return el("div", { class: "card" }, "No unit.");
   const text = JSON.stringify(cat(U), null, 1) + "\n";
-  const wrap = el("div", {}, el("div", { class: "card" },
+  return el("div", {}, el("div", { class: "card" },
     el("h2", {}, "Catalogue", el("span", { class: "scope" }, U.name)),
-    el("p", { class: "dim", style: "margin:4px 0 10px;font-size:13px" }, "The unit as JSON for a code runner (", el("code", {}, "rig.py compile json"), "): rules, presets and flow. ", el("code", {}, "rig.py from-json"), " turns it back into Rig."),
+    el("p", { class: "dim", style: "margin:4px 0 10px;font-size:13px" }, "The unit as JSON for a code runner (", el("code", {}, "rig.py compile json"), "): rules, presets and flow."),
     el("div", { class: "tool" }, el("span", { class: "spacer" }), copyBtn(text), el("button", { onclick: () => download(U.name + ".json", text, "application/json") }, "Download")),
     el("pre", { class: "out" }, text)));
-  if (U.tool) {
-    const tool = JSON.stringify(U.tool, null, 1) + "\n";
-    wrap.append(el("div", { class: "card" },
-      el("h2", {}, "Tool definition", el("span", { class: "scope" }, U.name)),
-      el("p", { class: "dim", style: "margin:4px 0 10px;font-size:13px" }, "The unit as a tool for a model that calls tools (", el("code", {}, "rig.py compile tool"), "): name, description and the JSON Schema of the inputs."),
-      el("div", { class: "tool" }, el("span", { class: "spacer" }), copyBtn(tool), el("button", { onclick: () => download(U.name + ".tool.json", tool, "application/json") }, "Download")),
-      el("pre", { class: "out" }, tool)));
-  }
-  return wrap;
 }
 
 // - Graph tab: the flow in three lanes, with the blocks as boxes ---
@@ -606,9 +601,9 @@ let G = { U: null, c: null, nodes: [], edges: [], boxes: [], byId: {}, pos: {} }
 const LANES = [["code", "code"], ["model", "the model"], ["person", "a person"]];
 const COL = 300, GAP = 70, LANE_PAD = 26;
 const posKey = () => "pos2." + S.B.file + "." + S.unit;
-const kindWord = k => k === "step" || k === "end" ? k : k + " gate";
+const kindWord = k => (k === "step" || k === "reason" || k === "end") ? k : k + " gate";
 function blockTitle(b) {
-  return { for: `for ${b.item} in ${b.path}`, until: `until ${b.path}`, if: `if ${b.path}`, else: "else", section: b.name || "section", finally: "finally" }[b.kind] || b.id;
+  return { for: `for ${b.item} in ${b.path}`, until: `until ${b.path}`, if: `if ${b.path}`, else: "else", section: b.name || "section", rollback: "rollback", finally: "finally" }[b.kind] || b.id;
 }
 function buildGraph(U) {
   const c = cat(U), byId = Object.fromEntries(c.flow.map(f => [f.id, f])), blocks = Object.fromEntries((c.blocks || []).map(b => [b.id, b]));
@@ -666,7 +661,7 @@ const fmt = rid => shown(G.U, rid);
 const fill = t => fillText(G.U, t);
 function byLineOf(f) {
   if ((f.by || []).length) return "by " + f.by.join(", ");
-  return { model: "decided by the model: a guess", human: "decided by a person", step: f.lane === "model" ? "done by the model" : "", end: "" }[f.kind] ?? "no code yet";
+  return { model: "decided by the model: a guess", human: "decided by a person", reason: "reason (" + (f.mode || "careful") + ")", step: f.lane === "model" ? "done by the model" : "", end: "" }[f.kind] ?? "no code yet";
 }
 function nodeEl(n) {
   const drag = { onpointerdown: e => startDrag(e, n) };
@@ -685,7 +680,7 @@ function nodeEl(n) {
       el("div", { class: "foot" }));
   }
   const f = n.f, k = f.kind, txt = f.check || f.do;
-  const tags = [f.if ? "if " + f.if : null, f.options ? "options: " + f.options.join(" | ") : null, f.out ? "out " + f.out : null,
+  const tags = [f.if ? "if " + f.if : null, f.mode ? "mode " + f.mode : null, f.tools ? "tools " + f.tools.length : null, f.budget != null ? "budget " + f.budget : null, f.candidates != null ? "candidates " + f.candidates : null, f.brief ? "brief " + f.brief.join(" ") : null, f.options ? "options: " + f.options.join(" | ") : null, f.out ? "out " + f.out : null,
     f.retry != null ? "retry " + (typeof f.retry === "string" ? fmt(f.retry) : f.retry) : null, f.timeout_text ? "timeout " + f.timeout_text : null].filter(Boolean);
   return el("div", { class: "node " + k + (G.starts.includes(f.id) ? " start" : ""), "data-node": n.id, onclick: e => { if (!e.target.closest("input,select")) select(n.id); } },
     el("div", { class: "hd", ...drag }, port("in flow", f.id + ":in"), el("span", { class: "gid " + k }, f.id), el("span", { class: "t", title: f.name || "" }, f.name || ""), el("span", { class: "kind" }, k)),
@@ -908,7 +903,7 @@ function inspector() {
       el("p", { class: "hint" }, { for: `The lines of this box run once for each item of ${b.path}. The item is ${b.item}. The runner saves the run after each item.`,
         until: `The lines of this box run, then again until ${b.path} is true: at most ${b.retry} more times.`,
         if: `The lines of this box run only when ${b.path} is not empty and not false.`, else: "The lines of this box run when the if before did not.",
-        section: "A heading: it has no effect on a run.", finally: "The lines of this box run after the run ends, also after an error." }[b.kind]),
+        section: "A heading: it has no effect on a run.", rollback: "The lines of this box run on hard fail, error, unattended deferral, or explicit restore.", finally: "The lines of this box run after the run ends, also after an error." }[b.kind]),
       b.tolerate != null ? sec("Tolerate", `more than ${b.tolerate}% of the items left: the block fails`) : null,
       (b.fail || []).length ? [el("div", { class: "k" }, "Fail"), b.fail.map(l => el("div", { class: "lk fail" }, el("span", { class: "sym" }, "✕"), link(l.to), l.when ? el("span", { class: "when" }, fill(l.when)) : null))] : null,
       el("div", { class: "k" }, "Lines"), b.body.map(x => el("div", { class: "lk" }, G.byId[x] ? link(x) : el("span", { class: "gid" }, x)))));

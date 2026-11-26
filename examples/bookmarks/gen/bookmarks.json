@@ -1,11 +1,9 @@
 {
- "rig": 1,
+ "rig": 2,
  "unit": "bookmarks",
- "scope": "agent",
  "preset": null,
  "intent": "clean up a bookmarks HTML file that Edge exported: remove exact duplicates, fold similar URLs as the person chooses, sort loose bookmarks into folders, and write a new file to import",
  "notes": [],
- "uses": [],
  "code": [
   {
    "prefix": "gates",
@@ -35,8 +33,8 @@
    "type": "string"
   }
  },
- "examples": [],
  "start": "read",
+ "rollback": null,
  "finally": null,
  "body": [
   "read",
@@ -847,5 +845,18 @@
    "first": "report",
    "next": "done"
   }
- ]
+ ],
+ "intent_spec": {
+  "text": "clean up a bookmarks HTML file that Edge exported: remove exact duplicates, fold similar URLs as the person chooses, sort loose bookmarks into folders, and write a new file to import",
+  "never": [
+   {
+    "text": "overwrite an existing output file unless permissions.overwrite is on",
+    "gate": "target"
+   },
+   {
+    "text": "write the new file without human approval",
+    "gate": "approve"
+   }
+  ]
+ }
 }

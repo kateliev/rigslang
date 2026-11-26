@@ -25,12 +25,12 @@ class Gates(unittest.TestCase):
 		self.assertFalse(v['pass'])
 		self.assertIn('limits.min_length', v['problems'][0])
 		self.assertFalse(gates.long_enough({'look': {'length': 12}}, rules(limits__min_length=20))['pass'])
-# >>> level 4
+# >>> level 3
 
 	def test_may_write(self):
 		self.assertFalse(gates.may_write({}, rules())['pass'])
 		self.assertTrue(gates.may_write({}, rules(permissions__write=True))['pass'])
-# <<< level 4
+# <<< level 3
 
 
 if __name__ == '__main__':

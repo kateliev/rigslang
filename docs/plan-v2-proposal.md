@@ -1,6 +1,6 @@
 # Draft proposal: Rig v2 — timeless, domain-agnostic agent orchestration
 
-Status: **Draft / proposal (not yet implemented).**
+Status: **Implemented in Rig v2 (2026-11-26).** See [status.md](status.md) and [skills/rig/spec.md](../skills/rig/spec.md).
 
 ## Guiding principle: separate the Idea from the World and the Caller
 

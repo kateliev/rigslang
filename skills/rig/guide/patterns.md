@@ -1,6 +1,6 @@
 # Patterns for a production tool
 
-A level 4 tool changes real files, works through many items, and needs the judgment of a person. These patterns come from a production agent. Each one answers a failure that happened.
+A level 3 (production) tool changes real files or host apps, works through many items, and needs the judgment of a person. These patterns come from a production agent. Each one answers a failure that happened.
 
 The doctor cannot check most of them. Check them yourself with the list at the end.
 
@@ -59,7 +59,7 @@ Sort every item that is not done by **who must act**:
 - At the end, the left items come back to the model as a short list, one time each.
 - A batch has a size limit, and it is a rule. The first batch is small.
 
-The runner has this: `tool.py batch` (with optional `--workers N` for parallel threads) runs a list and writes a report, `tool.py queues` lists the runs that wait by who must act (using the `.waiting.json` index), `tool.py drop RUN` clears abandoned waiting runs, and `tool.py prune` cleans old finished runs. A run that needs the model does not stop the batch: it waits in its folder.
+- The runner has this: `tool.py batch` (with optional `--workers N`), `tool.py next-batch` (discovering pending items from a unit's `queue` step, running one `batch.size` chunk unattended under `runs/.batch.lock` with a circuit breaker, rolling back via `rollback` and deferring waiting items, and returning a compact one-line `summary`), `tool.py queues`, `tool.py drop RUN`, `tool.py restore RUN`, `tool.py artifact RUN NAME` (for steps with `brief <keys>`), and `tool.py eval DATASET --baseline PATH`.
 
 **One large item.** Sometimes the item is one file with thousands of records, and the model or the person must answer for parts of it. Then the item is one run, and the flow has a `for` block:
 
@@ -136,7 +136,7 @@ A tool that works inside an application needs code that reaches it: an MCP serve
 - The steps run inside the host; the gates do not need it. So the gates and the flow can be tested on any computer, and only the steps need the host.
 - A tool that installs alone keeps its own copy of shared code. A check command says when a copy is stale (`rig.py build --check` does this for `rigkit.py`).
 
-## Check list for level 4
+## Check list for level 3 (production)
 
 - [ ] The default target is a copy. A real target needs a word from the person.
 - [ ] Every change that is hard to undo has a `permissions` rule, off by default, and a gate before the step.
