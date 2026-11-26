@@ -18,10 +18,10 @@ python3 RIG new DIR NAME --level 2
 ```
 
 ```bash
-python3 RIG doctor DIR
+python3 RIG doctor DIR [--json]
 ```
 
-`doctor` checks a tool against the list of its level, and prints each line as `ok` or `MISS`. A tool is at its level when nothing is missing. The level is one number in `rig.json`: to go up, change it and run `doctor`.
+`doctor` checks a tool against the list of its level, and prints each line as `ok` or `MISS` (`--json` prints structured JSON for agents). A tool is at its level when nothing is missing. The level is one number in `rig.json`: to go up, change it and run `doctor`.
 
 ## How to choose
 
@@ -56,6 +56,7 @@ What the doctor checks:
 - The compiled files are current.
 - No number stands in the text of a node.
 - `rig.json` names the tests command, and the tests pass.
+- Every `example` line on a Python `tool` unit executes against its bound function and matches its expected value.
 
 ## Level 2: checked
 
@@ -64,11 +65,12 @@ An agent unit with rules, steps and gates. `gates.py` holds the decisions, `step
 What the doctor adds:
 
 - The tool has at least one gate.
-- Every `hard` or `soft` gate names code that exists, and a test names that code.
-- Every rule is read by a step or a gate.
+- Every `hard` or `soft` gate names code that exists, and its test file references that function in code (verified via the Python AST, so comments and docstrings do not count).
+- Every rule is read by a step or a gate (for Python files, `R('group.name')` and `R.get('group.name')` calls are inferred automatically from the AST alongside `{group.name}` placeholders).
 - Every `model` gate has a `check`, and every `human` gate a question.
 - Every step says who does it: `by <code>` or `by model`.
-- A note: number rules with no note that says where the value comes from.
+- Every `by model` step declares an `out <type>`.
+- A note: number rules with no note that says where the value comes from; hardcoded numeric literals in `gates.py` (outside `-1`, `0`, `1`, defaults and subscript indices).
 - A note: the coverage. It is the share of the gates that tested code decides.
 
 At this level the tool already runs without a model up to its first `model` gate. That is the point: you can test everything before any model sees it.
@@ -102,7 +104,7 @@ A run of a real model is a second kind of flow test. Its folder keeps every answ
 What the doctor adds:
 
 - `README.md`, `notes/project-facts.md`, `notes/failures-log.md`, `bugs-and-fixes.md` and `reports/` exist.
-- A rule of the group `permissions` exists. It must guard every change that cannot be undone, and its default must be the safe value. The doctor checks only that the rule exists.
+- At least one rule of the group `permissions` exists, defaults to `off`, and is read by at least one `hard` gate.
 - A `human` gate holds the judgment of the person. If the tool needs none, `rig.json` says why in `"human"`.
 
 The doctor cannot check the rest of level 4. It is in [patterns.md](patterns.md): work on a copy, a way back, state that survives a restart, queues by who must act, and the review that starts from the marks of the person.

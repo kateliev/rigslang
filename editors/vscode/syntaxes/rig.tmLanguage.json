@@ -290,10 +290,6 @@
 			"match": "(?<![^\\s(])(?:on|off|true|false)(?=[\\s();]|$)",
 			"name": "constant.language.rig"
 		},
-		"unknown": {
-			"match": "(?<![^\\s(])\\?(?=[\\s();]|$)",
-			"name": "constant.language.unknown.rig"
-		},
 		"paren-open": {
 			"match": "\\(",
 			"name": "punctuation.section.parens.begin.rig"
@@ -336,9 +332,6 @@
 				},
 				{
 					"include": "#constant"
-				},
-				{
-					"include": "#unknown"
 				},
 				{
 					"include": "#paren-open"

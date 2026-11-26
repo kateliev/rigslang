@@ -97,7 +97,7 @@ rule notes.min_words 50 "Shortest release notes, in words"
 - Do not set a limit from one item. Say in the note how many items it was checked on.
 - A mode of the tool (fast and careful, old method and new method) is a `preset`: a named set of values.
 
-**Done when:** no number is left in the code or in the text of a node, and the doctor line "no number in the text" is ok.
+**Done when:** no number is left in the code or in the text of a node, and the doctor line "no number in the text" is ok (and no hardcoded-number note remains for `gates.py`).
 
 ## Stage 5. Move every decision into a gate
 
@@ -125,7 +125,7 @@ A `model` gate, a `human` gate and a step that the model does need a `sees` line
 
 Design each job of the model for the weakest model that will run it: a small, closed choice among candidates that code found ([weak-model.md](weak-model.md)).
 
-Each gate gets a test with the rule defaults, and a test with a changed rule. The checker counts a gate as tested only when the test file names its function.
+Each gate gets a test with the rule defaults, and a test with a changed rule. For Python files, the checker verifies via AST that the test file references the function in code (comments and docstrings do not count). Rule reads (`R('group.name')`) are also inferred from the Python AST, so `reads` lines are only needed for non-Python code or indirect reads.
 
 Two questions catch most missing gates:
 
@@ -162,9 +162,9 @@ Then write the regression set: one case for each end, and one for each fail line
 python3 RIG build DIR
 ```
 
-This compiles the catalogue, the skill and the tool definitions. See [fronts.md](fronts.md) for the plugin of a local model and for how to install the skill.
+This compiles the catalogue, the lean skill and the tool definitions. See [fronts.md](fronts.md) for the LM Studio plugin, the stdio MCP server (`tool.py mcp`, `rig.py mcp-config DIR`) and how to install the skill.
 
-Test each front the way it will be used: give the model one item and watch the calls. The first run with a model always finds a text that the model reads in another way than you meant. Fix the text in the source (an `intent`, a `check`, a `do`), not in the compiled file. A step that the model does gets an `out` type when its answer has a form: the worker of the plugin then gives it to the model one job at a time, out of the chat, and the runner refuses another form ([fronts.md](fronts.md), section 3).
+Test each front the way it will be used: give the model one item and watch the calls. The first run with a model always finds a text that the model reads in another way than you meant. Fix the text in the source (an `intent`, a `check`, a `do`), not in the compiled file. Every `by model` step requires an `out` type: the worker (`work_run` in the plugin, or `tool.py work` from the CLI/MCP) gives each job to the model in a new context, and the runner refuses another form ([fronts.md](fronts.md), sections 3 and 4).
 
 **Done when:** each front did one whole item, and you read the trace of that run.
 

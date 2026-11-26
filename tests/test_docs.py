@@ -41,9 +41,9 @@ def read(rel):
 def cli_commands():
 	'''The commands of Kit.cli, read from its code: cmd == 'x' and cmd in ('x', 'y').'''
 	src = inspect.getsource(rigkit.Kit.cli)
-	out = set(re.findall(r"cmd == '(\w+)'", src))
+	out = set(re.findall(r"cmd == '([\w-]+)'", src))
 	for group in re.findall(r"cmd in \(([^)]*)\)", src):
-		out |= set(re.findall(r"'(\w+)'", group))
+		out |= set(re.findall(r"'([\w-]+)'", group))
 	return out
 
 
@@ -57,7 +57,7 @@ def doc_commands(path):
 			continue
 		for part in m.group(1).split(' | '):
 			word = part.split()[0] if part.split() else ''
-			if re.match(r'^[a-z]+$', word):
+			if re.match(r'^[a-z][a-z-]*$', word):
 				out.add(word)
 	return out
 

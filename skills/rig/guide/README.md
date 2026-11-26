@@ -4,11 +4,12 @@ This guide says how to build an **instrumental agent**: a model that operates to
 
 | Page | Read it when |
 |---|---|
+| [../cheatsheet.md](../cheatsheet.md) | You want a 1-page reference of grammar, Python signatures, `rig.json` and commands. |
 | [levels.md](levels.md) | You choose how much a tool needs. A simple tool needs little. |
 | [build-order.md](build-order.md) | You build a new tool, from the first question to the last check. |
 | [patterns.md](patterns.md) | The tool changes real files, works on many items, or needs the judgment of a person. |
 | [weak-model.md](weak-model.md) | A local model will run the tool. You design a step or a gate that the model does. |
-| [fronts.md](fronts.md) | You connect the tool to Claude, to a local model, or to both. |
+| [fronts.md](fronts.md) | You connect the tool to Claude, to a local model, to an MCP host, or to all three. |
 | [rules.md](rules.md) | Always. One page: the rules that have no exception. |
 
 The pattern example is [examples/release-tool](../../../examples/release-tool/). When this guide and the example disagree, the example is right, because its tests run.
@@ -32,14 +33,7 @@ More instruction text does not fix this. The fix is to move work out of the text
 | **Gates** | The decisions. | Code where code can decide. Else the model, marked as a guess. Else a person. |
 | **Flow** | The order of the lines, the blocks (`for`, `until`, `if`, `finally`), and where a run can end. | The source file. Code walks it. |
 
-A gate has one of four kinds:
-
-| Kind | Who decides | What it means |
-|---|---|---|
-| `hard` | code | A fact. A fail goes to an end. |
-| `soft` | code | A fact. A fail is reported, and the run goes on. |
-| `model` | the model | A guess. The result says so. |
-| `human` | a person | The run waits. The model cannot answer. |
+A gate is `hard` or `soft` (code decides), `model` (the model decides; marked as a guess) or `human` (a person decides; the run waits). Full gate rules are in [spec.md](../spec.md).
 
 The model keeps the work it is good at: a judgment that no rule can hold, a step that needs language, a case that the flow did not expect. Everything else is code: also the search, the bookkeeping and the exact texts around that judgment. Design each job of the model for the weakest model that will run it ([weak-model.md](weak-model.md)).
 
@@ -76,16 +70,9 @@ These hold for the smallest tool and the largest.
 
 ## 5. Every front reads the same pool
 
-A tool has one core and several fronts.
+A tool has one core (`gates.py`, `steps.py`, `rigkit.py`, and the catalogue) and thin fronts: a lean compiled `skill/SKILL.md` for Claude, an LM Studio plugin for a local model, a zero-dependency stdio MCP server (`tool.py mcp`) for any MCP host, and a command line and graph page for a person. See [fronts.md](fronts.md) for every front and CLI command.
 
-| | What it is | Where the knowledge is |
-|---|---|---|
-| Core | `gates.py`, `steps.py`, the runner | In code and in the catalogue |
-| Front for Claude | `skill/SKILL.md` | Compiled from the source |
-| Front for a local model | A plugin with tool definitions and a short text | Compiled from the source |
-| Front for a person | The command line; the graph and table pages | The same catalogue |
-
-The fronts are thin. A front starts runs and passes answers. No front has a limit of its own, and no front decides a gate. A change of the source changes every front at the next build.
+No front has a limit of its own, and no front decides a gate. A change of the source reaches all fronts at the next build.
 
 ## 6. When to use the method, and when not
 

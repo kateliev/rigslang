@@ -22,15 +22,20 @@
   {
    "name": "band",
    "type": "str",
-   "text": "the name of the band"
+   "text": "the name of the band",
+   "schema": {
+    "type": "string"
+   }
   }
  ],
  "out": {
   "type": "text",
-  "text": "one paragraph, the albums as title (year), and the URL of the article"
+  "text": "one paragraph, the albums as title (year), and the URL of the article",
+  "schema": {
+   "type": "string"
+  }
  },
  "examples": [],
- "checks": [],
  "start": "find",
  "finally": null,
  "body": [
@@ -142,7 +147,8 @@
     "gates.article_found"
    ],
    "reads": [
-    "search.results"
+    "search.results",
+    "http.timeout"
    ],
    "fail": [
     {

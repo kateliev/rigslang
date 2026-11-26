@@ -19,10 +19,10 @@ A step of the model is a **job**. Give each job this shape:
 
 1. **Small.** One item, or one batch of short items (the bookmarks tool: 30 bookmarks).
 2. **Closed.** The model chooses among candidates that code found: "pick 1 to 5", not "find the best of 227". Code builds the candidates before the loop, one time for all items (a "prefetch").
-3. **Without history.** A new, empty context for each job. The worker of the plugin does this ([fronts.md](fronts.md), section 3). A long chat makes each answer slower and less sure.
-4. **Bound to a form.** The step has an `out` type. The answer must have that form, and the runner refuses another.
+3. **Without history.** A new, empty context for each job. Both the plugin worker (`work_run`) and the Python worker (`tool.py work`) do this ([fronts.md](fronts.md), sections 1 and 3). A long chat makes each answer slower and less sure.
+4. **Bound to a form.** Every `by model` step requires an `out` type. The answer must have that form, and the runner refuses another.
 5. **Checked.** A hard gate after the step checks every answer, with `retry` and then `fail -> continue`. A bad answer costs one retry, not the run.
-6. **Limited.** A cap on the tokens of one job (`max_tokens`). A model that repeats itself stops at the cap. The job then gives no result: the step waits again with the problems, and the worker asks again.
+6. **Limited.** A cap on the tokens of one job (`max_tokens`). A model that repeats itself stops at the cap. The worker sends the cap error (`meta.error`) to the driver, so `waiting.problems` tells the retry to keep values shorter.
 
 ## 3. What a small model does wrong
 
@@ -31,12 +31,12 @@ These come from real runs of the bookmarks tool with a local 35B model with abou
 | Do not ask the model to | What happened |
 |---|---|
 | Search a long list | With 227 folders it read the list line by line for each bookmark, then repeated the same lines: about 57,000 characters of thinking, and no answer. |
-| Copy a long exact string | With thinking off, it copied the run id `20261125-120008-01` as `20261125-1125-1125-…` without end. |
+| Copy a long exact string | With thinking off, it copied the old timestamp run id `20261125-120008-01` as `20261125-1125-1125-…` without end. |
 | Carry a long chat | Each batch made the chat about 10,000 tokens longer, and each answer slower: about 1.5 minutes for a batch of 30. |
 | Choose when one answer is safe | The present folder was choice 1. Without thinking, the model picked 1 for every bookmark of four batches. |
 | Reason in a field of the answer | A `why` or `topic` field before the pick did not help: the model copied the title into it. |
 
-The fixes were all in code: candidates from code, the present folder at its place by score (no safe first place), the jobs out of the chat, and the answer bound to a schema.
+The fixes were all in code: short sequential run ids (`r1`, `r2`, ...), candidates from code, the present folder at its place by score (no safe first place), the jobs out of the chat, and the answer bound to a schema.
 
 ## 4. Thinking: measure, do not assume
 

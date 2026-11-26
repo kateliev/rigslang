@@ -30,7 +30,7 @@ Read it as the pattern for a new tool. `python3 ../../skills/rig/rig.py new DIR 
 python3 tool.py run '{"folder": "tests/cases/good"}'
 ```
 
-Code walks `collect`, `notes`, `version`, `tests-required` and `tests`, then the run waits at `tone` for the model. The step `rewrite` is skipped: its line `if tone` is not true before the first answer of `tone`. Give the answer with the run id of the result:
+Code walks `collect`, `notes`, `version`, `tests-required` and `tests`, then the run waits at `tone` for the model. The step `rewrite` is skipped: its line `if tone.failed` is not true before the first answer of `tone`. Give the answer with the short run id of the result (for example `r1`):
 
 ```bash
 python3 tool.py answer RUN '{"pass": true}'

@@ -46,7 +46,7 @@ unit release agent
     check "the last test run passed; a fail is reported"
     by gates.tests_green
   step rewrite "Rewrite the notes" by model
-    if tone
+    if tone.failed
     do "rewrite the notes for users: plain words, and the upgrade steps; give the new text as the result"
     sees collect.notes rewrite tone
     out text

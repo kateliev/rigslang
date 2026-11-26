@@ -1,4 +1,4 @@
-"""Project commands of rig.py: new, build, doctor, test, plugin. Standard library only.
+"""Project commands of rig.py: new, build, doctor, test, plugin, mcp-config. Standard library only.
 
 A project is a folder with one rig.json file:
 
@@ -46,6 +46,8 @@ def manifest(folder):
 		raise SystemExit('{}: no rig.json here. Make a project with: rig.py new DIR NAME'.format(folder))
 	with open(path, encoding='utf-8') as f:
 		m = json.load(f)
+	if m.get('rig', 1) < 1:
+		raise SystemExit('{}: rig.json has "rig": {} (version 0). Set "rig": 1 and update the source.'.format(folder, m.get('rig')))
 	m.setdefault('level', 1)
 	m.setdefault('build', {})
 	m['sources'] = m['source'] if isinstance(m.get('source'), list) else [m.get('source')]
@@ -143,15 +145,10 @@ def front(m, files, main):
 				'parameters': {'type': 'object', 'properties': {'run': run, 'pass': {'type': 'boolean', 'description': 'true: the gate passes. false: it fails.'},
 					'why': {'type': 'string', 'description': 'The reason, in one sentence.'}}, 'required': ['run', 'pass']}})
 		model_steps = [f for f in c['flow'] if f['kind'] == 'step' and f['lane'] == 'model']
-		formed = [f for f in model_steps if f.get('schema')]
-		if formed:  # the steps with an "out" type are jobs for the worker: code gives them to the model one by one, out of the chat
+		if model_steps:  # every step of the model is a job for the worker: code gives them to the model one by one, out of the chat
 			tools.append({'name': 'work_run', 'kind': 'work',
-				'description': 'Do the jobs of a run that waits at {}: code gives each one to the model in a new context, with the answer in the form of "out", and goes on until the run needs you or the operator. It can take some minutes.'.format(' or '.join('"{}"'.format(f['id']) for f in formed)),
+				'description': 'Do the jobs of a run that waits at {}: code gives each one to the model in a new context, with the answer in the form of "out", and goes on until the run needs you or the operator. It can take some minutes.'.format(' or '.join('"{}"'.format(f['id']) for f in model_steps)),
 				'parameters': {'type': 'object', 'properties': {'run': run}, 'required': ['run']}})
-		if len(formed) < len(model_steps):
-			tools.append({'name': 'finish_step', 'kind': 'finish_step',
-				'description': 'Give the result of the step that a run waits at, when "waiting" has kind "step". Do what its "do" says first.',
-				'parameters': {'type': 'object', 'properties': {'run': run, 'result': {'description': 'What the step gave: a text, a number or an object.'}}, 'required': ['run', 'result']}})
 		tools.append({'name': 'run_status', 'kind': 'status', 'description': 'Show a run again: where it is and what it waits for.',
 			'parameters': {'type': 'object', 'properties': {'run': run}, 'required': ['run']}})
 		tools.append({'name': 'start_batch', 'kind': 'batch', 'description': 'Start a run for each item of a list. Gives a short summary and the path of the report. Use it for more than one item.',
@@ -164,10 +161,8 @@ def front(m, files, main):
 			'"outcome": the run ended. Tell the operator the end and the "problems". The end "error" means that code failed: tell the error text. Then go to the next item.']
 		if model_gates:
 			rules.append('"waiting" with kind "model": decide what "check" says. Call answer_gate with the run id, pass true or false, and why in one sentence.')
-		if formed:
-			rules.append('"waiting" with kind "step" and a "schema": do not do the job yourself. Call work_run with the run id, one time. Then read its result as the rules say; "work" tells how many jobs it did.')
-		if len(formed) < len(model_steps):
-			rules.append('"waiting" with kind "step" and no "schema" (only then): do what "do" says. Call finish_step with the run id and the result.')
+		if model_steps:
+			rules.append('"waiting" with kind "step": do not do the job yourself. Call work_run with the run id, one time. Then read its result as the rules say; "work" tells how many jobs it did.')
 		rules.append('"waiting" has "problems": your last answer at that node failed for these reasons. Fix them in the new answer.')
 		humans = [f for f in c['flow'] if f['kind'] == 'human']
 		if humans:
@@ -273,10 +268,84 @@ def test(folder, replay=None):
 
 
 # - doctor ---------------------------------------------
-def doctor(folder, run_tests=True):
+EXAMPLE_RUNNER = '''import importlib.util, json, os, sys
+cases = json.loads(sys.argv[1])
+def same(a, b):
+	if isinstance(a, bool) or isinstance(b, bool):
+		return type(a) is type(b) and a == b
+	if isinstance(a, (list, tuple)) and isinstance(b, (list, tuple)):
+		return len(a) == len(b) and all(same(x, y) for x, y in zip(a, b))
+	if isinstance(a, dict) and isinstance(b, dict):
+		return a.keys() == b.keys() and all(same(a[k], b[k]) for k in a)
+	return a == b
+mods, fails = {}, []
+for c in cases:
+	p = os.path.abspath(c['file'])
+	if p not in mods:
+		try:
+			d = os.path.dirname(p)
+			if d not in sys.path:
+				sys.path.insert(0, d)
+			spec = importlib.util.spec_from_file_location('_rig_ex_' + str(len(mods)), p)
+			mod = importlib.util.module_from_spec(spec)
+			spec.loader.exec_module(mod)
+			mods[p] = mod
+		except Exception as e:
+			mods[p] = e
+	if isinstance(mods[p], Exception):
+		fails.append('{} line {}: {}: {}'.format(c['unit'], c['line'], type(mods[p]).__name__, mods[p]))
+		continue
+	try:
+		got = getattr(mods[p], c['fn'])(*c['args'])
+	except Exception as e:
+		fails.append('{} line {}: {}: {}'.format(c['unit'], c['line'], type(e).__name__, e))
+		continue
+	if not same(got, c['expect']):
+		fails.append('{} line {}: got {!r}, expected {!r}'.format(c['unit'], c['line'], got, c['expect']))
+print(json.dumps(fails, ensure_ascii=False))
+'''
+
+
+def run_tool_examples(folder, units):
+	'''Run "example" lines of tool units against their bound Python functions in a subprocess.
+	-> None if no tool unit has runnable examples, else a list of failure descriptions.'''
+	cases = []
+	for u, ctx in units:
+		if u.word(1, 'tool') != 'tool' or not u.kids('example'):
+			continue
+		cf = rig.code_for(u.word(0), u)
+		base = ctx.base.get(u.word(0)) if ctx else None
+		if not cf or not base or not cf[0]['file'] or not cf[0]['file'].endswith('.py'):
+			continue
+		code_path = os.path.join(base, cf[0]['file'])
+		if not os.path.exists(code_path):
+			continue
+		for e in u.kids('example'):
+			arrow = next((i for i, a in enumerate(e.args) if rig.ser(a) == '=>'), None)
+			if arrow is None or arrow + 1 >= len(e.args):
+				continue
+			args = [rig.value(a) for a in e.args[:arrow]]
+			right = e.args[arrow + 1:]
+			expect = rig.value(right[0]) if len(right) == 1 else [rig.value(a) for a in right]
+			cases.append({'unit': u.word(0), 'line': e.line, 'file': code_path, 'fn': cf[1], 'args': args, 'expect': expect})
+	if not cases:
+		return None
+	try:
+		r = subprocess.run([sys.executable, '-c', EXAMPLE_RUNNER, json.dumps(cases)], cwd=folder, capture_output=True, text=True, timeout=60)
+	except (OSError, subprocess.TimeoutExpired) as e:
+		return [str(e)]
+	if r.returncode != 0:
+		lines = (r.stderr or r.stdout or 'example runner failed').strip().splitlines()
+		return [lines[-1] if lines else 'example runner failed']
+	lines = r.stdout.strip().splitlines()
+	return json.loads(lines[-1]) if lines else []
+
+
+def doctor(folder, run_tests=True, as_json=False):
 	'''Check the project against the list of its level. -> 0 when nothing is missing.'''
 	m = manifest(folder)
 	level = int(m['level'])
+	name = m.get('name', os.path.basename(os.path.abspath(folder)))
 	rows = []  # (level, 'ok' | 'MISS' | 'note', text)
 
 	def add(lv, ok, text, detail=None, soft=False):
@@ -285,11 +354,15 @@ def doctor(folder, run_tests=True):
 	try:
 		files = loaded(folder, m)
 	except SystemExit as e:
-		print('MISS  the source does not parse: {}'.format(e))
+		if as_json:
+			print(json.dumps({'name': name, 'level': level, 'level_name': LEVELS.get(level, '?'), 'ok': False, 'missing': 1,
+				'checks': [{'level': 1, 'state': 'MISS', 'text': 'the source does not parse: {}'.format(e)}], 'notes': []}, ensure_ascii=False, indent=1))
+		else:
+			print('MISS  the source does not parse: {}'.format(e))
 		return 1
 	errs, warns, units = [], [], []
 	for path, root, ctx in files:
-		e, w = rig.check(root, path)
+		e, w = rig.check(root, path, ctx)
 		errs += ['{} line {}: {}'.format(os.path.basename(path), ln, t) for ln, t in sorted(e)]
 		warns += ['{} line {}: {}'.format(os.path.basename(path), ln, t) for ln, t in sorted(w)]
 		units += [(u, ctx) for u in rig.units(root)]
@@ -314,12 +387,16 @@ def doctor(folder, run_tests=True):
 	if m.get('tests') and run_tests:
 		code, out = run_cmd(folder, m['tests'])
 		add(1, code == 0, 'the tests pass', (out.splitlines() or ['no output'])[-1])
+	if run_tests:
+		ex_fails = run_tool_examples(folder, units)
+		if ex_fails is not None:
+			add(1, not ex_fails, 'every example of a tool unit passes', '; '.join(ex_fails[:3]))
 
 	# Level 2: checked
 	gates = [(u, g, rig.gate_level(g, u, ctx, (u.word(0),))) for u, ctx in units for g in rig.flow_nodes(u) if g.head == 'gate']
 	add(2, bool(gates), 'the tool has at least one gate')
-	for name, bad in (('none', 'every hard or soft gate names code that exists'), ('code', 'a test names the code of every gate')):
-		got = ['{}.{}'.format(u.word(0), g.word(0)) for u, g, lv in gates if lv == name]
+	for kind_name, bad in (('none', 'every hard or soft gate names code that exists'), ('code', 'a test names the code of every gate')):
+		got = ['{}.{}'.format(u.word(0), g.word(0)) for u, g, lv in gates if lv == kind_name]
 		add(2, not got, bad, ', '.join(got))
 	unread = [w for w in warns if 'is not read by any step or gate' in w]
 	add(2, not unread, 'every rule is read by a step or a gate', '; '.join(unread[:3]))
@@ -327,6 +404,8 @@ def doctor(folder, run_tests=True):
 	add(2, not nobrief, 'every model gate has a check, and every human gate a question', '; '.join(nobrief))
 	nowho = [w for w in warns if 'say who does it' in w]
 	add(2, not nowho, 'every step says who does it: code, or the model', '; '.join(nowho))
+	noout = [w for w in warns if 'add "out <type>"' in w]
+	add(2, not noout, 'every step of the model has an "out" type', '; '.join(noout))
 	rules = [r for u, _ in units for r in u.kids('rule')]
 	bare_rules = [r.word(0) for r in rules if rig.rule_type(r) == 'number' and not r.kids('note')]
 	add(2, not bare_rules, 'every number rule has a note that says where the value comes from', ', '.join(bare_rules), soft=True)
@@ -367,17 +446,45 @@ def doctor(folder, run_tests=True):
 	for rel, why in (('README.md', 'how to set up and run the tool'), ('notes/project-facts.md', 'what is true about the project, for an agent on any computer'),
 			('notes/failures-log.md', 'what failed and why'), ('bugs-and-fixes.md', 'every code bug: symptom, cause, fix'), ('reports', 'the reports of the runs')):
 		add(4, os.path.exists(os.path.join(folder, rel)), '{} exists ({})'.format(rel, why))
-	perms = [r.word(0) for r in rules if r.word(0).startswith('permissions.')]
-	add(4, bool(perms), 'a rule of the group "permissions" guards every change that cannot be undone')
+	perm_rules = [(u, r) for u, _ in units for r in u.kids('rule') if (r.word(0) or '').startswith('permissions.')]
+	perm_problems = []
+	if not perm_rules:
+		perm_problems.append('no permissions.* rule')
+	else:
+		hard_reads = {}
+		for u, ctx in units:
+			hr = set()
+			for g in rig.flow_nodes(u):
+				if g.head == 'gate' and g.word(1) == 'hard':
+					hr.update(rig.node_reads(g, u, ctx))
+			hard_reads[id(u)] = hr
+		for u, r in perm_rules:
+			rid = r.word(0)
+			default = rig.value(r.args[1]) if len(r.args) > 1 else None
+			if default is not False:
+				perm_problems.append('{} must default to off'.format(rid))
+			if rid not in hard_reads[id(u)]:
+				perm_problems.append('{} is not read by a hard gate'.format(rid))
+	add(4, not perm_problems, 'a rule of the group "permissions" (default off, read by a hard gate) guards every change that cannot be undone', '; '.join(perm_problems))
 	humans = [g.word(0) for u, g, lv in gates if lv == 'human']
 	add(4, bool(humans) or bool(m.get('human')), 'a human gate holds the judgment of the person (or rig.json "human" says why none is needed)')
 
-	missing = 0
-	print('{} — level {} ({})'.format(m.get('name', os.path.basename(os.path.abspath(folder))), level, LEVELS.get(level, '?')))
+	missing = sum(1 for _, state, _ in rows if state == 'MISS')
+	other = [w for w in warns if not any(k in w for k in ('a number in the text', 'is not read by', 'has no check', 'has no question', 'say who does it', 'add "out <type>"', 'cannot be reached', 'run past its last line', 'no test names'))]
+	if as_json:
+		print(json.dumps({
+			'name': name,
+			'level': level,
+			'level_name': LEVELS.get(level, '?'),
+			'ok': missing == 0,
+			'missing': missing,
+			'checks': [{'level': lv, 'state': state, 'text': text} for lv, state, text in rows],
+			'notes': other,
+		}, ensure_ascii=False, indent=1))
+		return 1 if missing else 0
+	print('{} — level {} ({})'.format(name, level, LEVELS.get(level, '?')))
 	for lv, state, text in rows:
 		print('  {:<5} L{}  {}'.format(state, lv, text))
-		missing += state == 'MISS'
-	other = [w for w in warns if not any(k in w for k in ('a number in the text', 'is not read by', 'has no check', 'has no question', 'say who does it', 'cannot be reached', 'run past its last line', 'no test names'))]
 	for w in other:
 		print('  note      ' + w)
 	print('Nothing is missing for level {}.'.format(level) if not missing else '{} missing for level {}.'.format(missing, level))
@@ -505,6 +612,37 @@ def new(folder, name, level=2):
 	return 0
 
 
+def mcp_config(folder, api_url=None, model=None):
+	'''Print a ready-to-paste MCP server JSON config block for the project.'''
+	m = manifest(folder)
+	abs_dir = os.path.abspath(folder)
+	name = m.get('name') or os.path.basename(abs_dir)
+	parts = shlex.split(m.get('driver', 'python3 tool.py'))
+	if not parts:
+		raise SystemExit('{}: rig.json has an empty "driver"'.format(folder))
+	cmd = parts[0]
+	args = []
+	for a in parts[1:]:
+		p = os.path.join(abs_dir, a)
+		args.append(os.path.abspath(p) if not os.path.isabs(a) and os.path.exists(p) else a)
+	args.append('mcp')
+	if api_url:
+		args += ['--api-url', api_url]
+	if model:
+		args += ['--model', model]
+	cfg = {
+		'mcpServers': {
+			name: {
+				'command': cmd,
+				'args': args,
+				'cwd': abs_dir,
+			}
+		}
+	}
+	print(json.dumps(cfg, ensure_ascii=False, indent=2))
+	return 0
+
+
 def main(cmd, rest):
 	if cmd == 'new':
 		level = int(rig.option(rest, '--level') or 2)
@@ -514,6 +652,11 @@ def main(cmd, rest):
 	if cmd == 'plugin':
 		owner = rig.option(rest, '--owner') or 'local'
 		return plugin(rest[0] if rest else '.', owner)
+	if cmd == 'mcp-config':
+		api_url = rig.option(rest, '--api-url')
+		model = rig.option(rest, '--model')
+		folder = next((a for a in rest if not a.startswith('--')), '.')
+		return mcp_config(folder, api_url=api_url, model=model)
 	replay = rig.option(rest, '--replay') if cmd == 'test' else None
 	folder = next((a for a in rest if not a.startswith('--')), '.')
 	if cmd == 'test':
@@ -521,7 +664,5 @@ def main(cmd, rest):
 	if cmd == 'build':
 		return build(folder, '--check' in rest)
 	if cmd == 'doctor':
-		return doctor(folder, '--no-tests' not in rest)
-	if cmd == 'test':
-		return test(folder, rig.option(rest, '--replay'))
-	raise SystemExit('new, build, doctor or test')
+		return doctor(folder, '--no-tests' not in rest, '--json' in rest)
+	raise SystemExit('new, build, doctor, test, plugin or mcp-config')

@@ -65,19 +65,49 @@ export async function work(model: LLM, run: string, rootSetting?: string, status
     const chat = Chat.from([{ role: "system", content: RULES }, { role: "user", content: jobText(w) }]);
     let answer: unknown = undefined;
     let tokens: number | undefined;
+    let errorReason: string | undefined;
     try {
+      let rawText: string;
       if (limits.think) {
         const p = await model.respond(chat, { maxTokens: limits.max_tokens, temperature: 0.6 });
         tokens = p.stats?.predictedTokensCount;
-        answer = (JSON.parse(jsonIn(p.nonReasoningContent)) as { result?: unknown }).result;
+        rawText = jsonIn(p.nonReasoningContent);
       } else {
         const p = await model.respond(chat, { structured: { type: "json", jsonSchema: schema }, maxTokens: limits.max_tokens, temperature: 0.2 });
         tokens = p.stats?.predictedTokensCount;
-        answer = (JSON.parse(p.content) as { result?: unknown }).result;
+        rawText = p.content;
       }
-    } catch { /* cut at max_tokens, or no JSON: the answer below carries no result, and the run says why */ }
-    line = await driver(["answer", run, JSON.stringify({ result: answer ?? null }), "--node", w.node], rootSetting);
-    done.push({ node: w.node, item: w.item, seconds: Math.round((Date.now() - t) / 100) / 10, tokens, ok: answer !== undefined });
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(rawText);
+      } catch {
+        errorReason = tokens !== undefined && tokens >= limits.max_tokens
+          ? `hit max_tokens (${limits.max_tokens}) before finishing valid JSON; keep values shorter`
+          : "response was not valid JSON";
+      }
+      if (errorReason === undefined) {
+        if (parsed && typeof parsed === "object" && "result" in parsed && (parsed as { result?: unknown }).result !== undefined) {
+          answer = (parsed as { result?: unknown }).result;
+        } else {
+          errorReason = tokens !== undefined && tokens >= limits.max_tokens
+            ? `hit max_tokens (${limits.max_tokens}) before finishing valid JSON; keep values shorter`
+            : 'response JSON had no "result" field';
+        }
+      }
+    } catch (e) {
+      errorReason = tokens !== undefined && tokens >= limits.max_tokens
+        ? `hit max_tokens (${limits.max_tokens}) before finishing valid JSON; keep values shorter`
+        : `model call failed: ${e instanceof Error ? e.message : String(e)}`;
+    }
+    const seconds = Math.round((Date.now() - t) / 100) / 10;
+    const meta: Record<string, unknown> = {
+      model: model.identifier ?? "local",
+      seconds,
+      ...(tokens !== undefined ? { tokens } : {}),
+      ...(errorReason ? { error: errorReason } : {}),
+    };
+    line = await driver(["answer", run, JSON.stringify({ result: answer ?? null }), "--node", w.node, "--meta", JSON.stringify(meta)], rootSetting);
+    done.push({ node: w.node, item: w.item, seconds, tokens, ok: answer !== undefined });
   }
   try {
     const r = JSON.parse(line);

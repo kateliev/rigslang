@@ -1,6 +1,6 @@
 # __NAME__: the LM Studio front
 
-The plugin gives a local model the tools of `__NAME__`. It has no knowledge of its own: the tools and the rules text come from `src/gen/front.json`, which `rig.py build` compiles from the source of the tool. Each tool call goes to the driver of the tool, the same command line that Claude and a person use.
+The plugin gives a local model the tools of `__NAME__`. It has no knowledge of its own: the tools and the rules text come from `src/gen/front.json`, which `rig.py build` compiles from the source of the tool. Each tool call goes to the driver of the tool over a warm `serve-stdio` child process (restarting or falling back to a one-shot call if needed), using the same command line that Claude, MCP hosts and a person use.
 
 Do not edit this README, `src/bridge.ts`, `src/index.ts`, `src/tools.ts`, `src/worker.ts` or `src/gen/`: `rig.py build` writes them. Change the tool, then build.
 
@@ -36,7 +36,7 @@ node --no-warnings agent.ts "the task" --then "approve yes"
 
 ## The worker
 
-A step of the model with an `out` type is a job for the worker, not for the chat. The model calls `work_run` one time. The worker gives each job to the loaded model in a new context, gives the answer to the driver, and goes on until the run needs the operator or ends (`src/worker.ts`). The same from a terminal:
+Every `by model` step has an `out` type and is a job for the worker, not for the chat. When a result has `waiting.next_action` with `"call": "work_run"`, the model calls `work_run` one time. The worker gives each job to the loaded model in a new context, passes failure causes and metrics (`--meta`) to the driver, and goes on until the run needs the operator or ends (`src/worker.ts`). The same from a terminal:
 
 ```bash
 node --no-warnings work.ts RUN
@@ -46,6 +46,6 @@ Its settings are in `rig.json` of the tool: `"plugin": {"work": {"think": false,
 
 ## What the model cannot do
 
-- It cannot answer a `human` gate: there is no tool for that. The operator answers with a chat message that starts with `approve`, as the `say` text of the result gives it: `approve RUN yes`, `approve RUN no`, or, at a gate with options, `approve RUN` and the words of the answer (`approve RUN yes` takes the first option). The short form without the run id (`approve yes`) works only when exactly one run waits for a person; else the plugin refuses it and names the runs. The plugin runs that message before the model sees it, and the model reads only the result. The command in `waiting.command` does the same in a terminal.
+- It cannot answer a `human` gate: there is no tool for that, and `waiting.next_action` says `"call": "NONE"`. The operator answers with a chat message that starts with `approve`, as the `say` text of the result gives it: `approve r1 yes`, `approve r1 no`, or, at a gate with options, `approve r1` and the words of the answer (`approve r1 yes` takes the first option). The short form without the run id (`approve yes`) works when one run waits for a person, or when this chat session has an active waiting run; else the plugin refuses it and names the waiting runs. The plugin runs that message before the model sees it, and the model reads only the result. The command in `waiting.command` does the same in a terminal.
 - It cannot decide a gate that code decides: the driver refuses.
 - It cannot send code: the bridge passes JSON only, and starts the driver without a shell.

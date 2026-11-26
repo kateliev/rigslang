@@ -12,7 +12,6 @@
                                               and the JSON Schema of its inputs
         compile options: --preset NAME (use the values of a preset), -o OUT (write a file),
                                               --driver CMD (skill: a runner walks the flow)
-    python rig.py from-json FILE.json         a catalogue back to Rig (the same meaning)
     python rig.py serve FILE [UNIT]           the viewer for FILE on 127.0.0.1; Save writes FILE
         [--port 8765] [--json OUT] [--skill OUT] [--rules-ref] [--runs DIR]
                                               and compiles it again to OUT; --rules-ref makes
@@ -22,14 +21,18 @@
                                               and runner (levels 1 to 4: guide/levels.md)
     python rig.py build [DIR] [--check]       compile the source of a project to its fronts: the
                                               catalogue, the skill, the tool definitions
-    python rig.py doctor [DIR] [--no-tests]   check a project against the list of its level
+    python rig.py doctor [DIR] [--no-tests] [--json]
+                                              check a project against the list of its level
     python rig.py test [DIR] [--replay RUN]   run the tests of a project; --replay: run the flow
                                               again with the answers recorded in a run
     python rig.py plugin DIR [--owner NAME]   add the front for a local model: an LM Studio plugin
                                               that reads its tools and its rules from the build
+    python rig.py mcp-config DIR [--api-url URL] [--model NAME]
+                                              print an MCP server JSON config for the project
 
 The language is defined in spec.md (same folder).
 """
+import ast
 import json
 import os
 import re
@@ -42,7 +45,7 @@ ITEMS = FLOW + BLOCKS
 GATE_KINDS = ('hard', 'soft', 'model', 'human')
 SCOPES = ('tool', 'agent')
 LEVELS = ('none', 'code', 'tested')  # low to high; "model" and "human" are apart
-MATRIX = ('in', 'out', 'intent', 'example', 'check')
+MATRIX = ('in', 'out', 'intent', 'example')
 BASE_TYPES = ('str', 'text', 'word', 'path', 'int', 'float', 'bool', 'list', 'dict', 'any')
 TYPE_LISTS = ('list', 'tuple', 'record', 'maybe', 'one-of')
 NODE_KIDS = {
@@ -52,7 +55,7 @@ NODE_KIDS = {
 }
 BLOCK_OPTIONS = {'for': {'tolerate', 'fail'}, 'until': {'retry', 'fail'}}
 CHILDREN = {
-	'unit': {'in', 'out', 'intent', 'example', 'check', 'note', 'uses', 'code', 'rule', 'preset'} | set(ITEMS),
+	'unit': {'in', 'out', 'intent', 'example', 'note', 'uses', 'code', 'rule', 'preset'} | set(ITEMS),
 	'code': {'test', 'note'},
 	'preset': {'set'},
 	'rule': {'range', 'options', 'note'},
@@ -434,7 +437,27 @@ class Ctx(object):
 
 	def __init__(self, root, path=None):
 		self.units, self.files, self.base = {}, set(), {}
+		self._texts, self._asts = {}, {}
 		self.add(root, path)
+
+	def read_text(self, path):
+		p = os.path.normpath(os.path.abspath(path))
+		if p not in self._texts:
+			self._texts[p] = read_text(p)
+		return self._texts[p]
+
+	def parse_py(self, path):
+		p = os.path.normpath(os.path.abspath(path))
+		if p not in self._asts:
+			text = self.read_text(p)
+			if text is None:
+				self._asts[p] = None
+			else:
+				try:
+					self._asts[p] = ast.parse(text, filename=p)
+				except SyntaxError:
+					self._asts[p] = False
+		return self._asts[p]
 
 	def add(self, root, path):
 		base = os.path.dirname(os.path.abspath(path)) if path else None
@@ -497,6 +520,109 @@ def read_text(path):
 		return None
 
 
+def py_defines(tree, fn):
+	'''Does the Python AST define a function named fn?'''
+	return any(isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == fn for n in ast.walk(tree))
+
+
+def py_references(tree, fn):
+	'''Does the Python AST reference fn as code (Name or Attribute), not only in comments or strings?'''
+	return any((isinstance(n, ast.Name) and n.id == fn) or (isinstance(n, ast.Attribute) and n.attr == fn) for n in ast.walk(tree))
+
+
+def py_func_node(tree, fn):
+	'''The FunctionDef or AsyncFunctionDef named fn in a Python AST (top-level first).'''
+	for n in tree.body:
+		if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == fn:
+			return n
+	for n in ast.walk(tree):
+		if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == fn:
+			return n
+	return None
+
+
+def py_func_reads(tree, fn):
+	'''Rule ids passed as string constants to R(...) or R.get(...) inside fn (and same-module helpers it calls).'''
+	funcs = dict((n.name, n) for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)))
+	start = funcs.get(fn) or py_func_node(tree, fn)
+	if start is None:
+		return []
+	out, visited = [], set()
+
+	def walk(node):
+		if isinstance(node, ast.Call):
+			rid = None
+			if isinstance(node.func, ast.Name) and node.func.id == 'R' and node.args:
+				a0 = node.args[0]
+				if isinstance(a0, ast.Constant) and isinstance(a0.value, str) and RULE_ID.match(a0.value):
+					rid = a0.value
+			elif isinstance(node.func, ast.Attribute) and node.func.attr == 'get' and isinstance(node.func.value, ast.Name) and node.func.value.id == 'R' and node.args:
+				a0 = node.args[0]
+				if isinstance(a0, ast.Constant) and isinstance(a0.value, str) and RULE_ID.match(a0.value):
+					rid = a0.value
+			if rid and rid not in out:
+				out.append(rid)
+			if isinstance(node.func, ast.Name) and node.func.id in funcs and node.func.id not in visited:
+				visited.add(node.func.id)
+				walk(funcs[node.func.id])
+		for child in ast.iter_child_nodes(node):
+			walk(child)
+
+	visited.add(fn)
+	walk(start)
+	return out
+
+
+def py_hardcoded_numbers(tree, fn):
+	'''Hardcoded numeric literals inside a gate function, excluding -1/0/1, defaults, subscripts, range(), and round() precision.'''
+	node = py_func_node(tree, fn) if isinstance(tree, ast.Module) else None
+	if node is None:
+		return []
+	out = []
+
+	def record(v):
+		if v not in (-1, 0, 1) and v not in out:
+			out.append(v)
+
+	def walk(n):
+		if isinstance(n, ast.Subscript):
+			walk(n.value)
+			return
+		if isinstance(n, ast.Call):
+			if isinstance(n.func, ast.Name) and n.func.id == 'range':
+				return
+			if isinstance(n.func, ast.Name) and n.func.id == 'round':
+				if n.args:
+					walk(n.args[0])
+				return
+			walk(n.func)
+			for a in n.args:
+				walk(a)
+			for kw in n.keywords:
+				walk(kw.value)
+			return
+		if isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.USub) and isinstance(n.operand, ast.Constant) and isinstance(n.operand.value, (int, float)) and not isinstance(n.operand.value, bool):
+			record(-n.operand.value)
+			return
+		if isinstance(n, ast.Constant) and isinstance(n.value, (int, float)) and not isinstance(n.value, bool):
+			record(n.value)
+			return
+		if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+			for d in n.decorator_list:
+				walk(d)
+			for s in n.body:
+				walk(s)
+			return
+		if isinstance(n, ast.Lambda):
+			walk(n.body)
+			return
+		for child in ast.iter_child_nodes(n):
+			walk(child)
+
+	walk(node)
+	return out
+
+
 def bound_level(b, u, ctx):
 	'''The level of a name that a "code" line holds: none (the file or the function is missing),
 	code (the function exists), tested (a test file names it). Without the folder of the file: code.'''
@@ -504,10 +630,36 @@ def bound_level(b, u, ctx):
 	base = ctx.base.get(u.word(0)) if ctx else None
 	if not base:
 		return 'code'
-	text = read_text(os.path.join(base, c['file'])) if c['file'] else None
-	if text is None or not re.search(DEFINES.format(re.escape(fn)), text):
+	if not c['file']:
 		return 'none'
-	test = read_text(os.path.join(base, c['test'])) if c['test'] else None
+	code_path = os.path.join(base, c['file'])
+	if c['file'].endswith('.py'):
+		tree = ctx.parse_py(code_path)
+		if tree is None:
+			return 'none'
+		if isinstance(tree, ast.Module):
+			if not py_defines(tree, fn):
+				return 'none'
+		else:
+			text = ctx.read_text(code_path)
+			if text is None or not re.search(DEFINES.format(re.escape(fn)), text):
+				return 'none'
+	else:
+		text = ctx.read_text(code_path)
+		if text is None or not re.search(DEFINES.format(re.escape(fn)), text):
+			return 'none'
+	if not c['test']:
+		return 'code'
+	test_path = os.path.join(base, c['test'])
+	if c['test'].endswith('.py'):
+		test_tree = ctx.parse_py(test_path)
+		if test_tree is None:
+			return 'code'
+		if isinstance(test_tree, ast.Module):
+			return 'tested' if py_references(test_tree, fn) else 'code'
+		test = ctx.read_text(test_path)
+		return 'tested' if test and re.search(r'\b{}\b'.format(re.escape(fn)), test) else 'code'
+	test = ctx.read_text(test_path)
 	return 'tested' if test and re.search(r'\b{}\b'.format(re.escape(fn)), test) else 'code'
 
 
@@ -613,8 +765,9 @@ def placeholders(n):
 	return out
 
 
-def node_reads(f):
-	'''The rules that a step or gate reads: its "reads" lines and the rules named in its strings.'''
+def node_reads(f, u=None, ctx=None):
+	'''The rules that a step or gate reads: its "reads" lines, placeholders in its strings, retry rules,
+	and R("group.name") calls inferred from bound Python code.'''
 	out = []
 	for c in f.kids('reads'):
 		for a in c.args:
@@ -626,6 +779,17 @@ def node_reads(f):
 	for c in f.kids('retry'):
 		if c.args and c.args[0][0] == 'word' and c.word(0) not in out:
 			out.append(c.word(0))
+	if u is not None and ctx is not None:
+		base = ctx.base.get(u.word(0))
+		if base:
+			for b in f.kids('by'):
+				cf = code_for(b.word(0), u) if b.word(0) else None
+				if cf and cf[0]['file'] and cf[0]['file'].endswith('.py'):
+					tree = ctx.parse_py(os.path.join(base, cf[0]['file']))
+					if isinstance(tree, ast.Module):
+						for rid in py_func_reads(tree, cf[1]):
+							if rid not in out:
+								out.append(rid)
 	return out
 
 
@@ -820,10 +984,12 @@ def removed(c, parent):
 	return None
 
 
-def check(root, path=None):
+def check(root, path=None, ctx=None):
 	'''-> (errors, warnings): lists of (line, text). path: the file, to check the files of "code" and "uses" lines.'''
 	err, warn = [], []
 	names = set()
+	base = os.path.dirname(os.path.abspath(path)) if path else None
+	cctx = ctx or (Ctx(root, path) if path else None)
 	for top in root.children:
 		if top.head != 'unit':
 			err.append((top.line, '"{}" at the top level: only "unit" is allowed'.format(top.head)))
@@ -860,8 +1026,6 @@ def check(root, path=None):
 			bad = type_problem(t) if t else None
 			if bad:
 				warn.append((n.line, bad))
-		base = os.path.dirname(os.path.abspath(path)) if path else None
-		cctx = Ctx(root, path) if path else None
 		prefixes = [c['prefix'] for c in code_lines(u)]
 		for c in code_lines(u):
 			if not c['file']:
@@ -960,7 +1124,7 @@ def check(root, path=None):
 		read = set()
 		for f in nodes:
 			fid, kind = f.word(0), f.word(1) if f.head == 'gate' else f.head
-			read.update(node_reads(f))
+			read.update(node_reads(f, u, cctx))
 			for c in f.children:
 				if c.head == 'reads':
 					for a in c.args:
@@ -999,6 +1163,8 @@ def check(root, path=None):
 					warn.append((f.kids('out')[0].line, 'step "{}": "out" gives the form of the answer of the model; code returns its own value'.format(fid)))
 				if ('model' in bys or not bys) and not f.kids('do'):
 					warn.append((f.line, 'step "{}" is done by the model, but has no "do" that says what to do'.format(fid)))
+				if ('model' in bys or not bys) and not f.kids('out'):
+					warn.append((f.line, 'step "{}": add "out <type>" (for example "out text") so the answer has a checked form'.format(fid)))
 			if f.head == 'gate':
 				if kind == 'judge':
 					err.append((f.line, 'gate "{}": "judge" is a word of version 0: write model'.format(fid)))
@@ -1047,6 +1213,11 @@ def check(root, path=None):
 						err.append((b.line, '"{}" has no function "{}"'.format(c['file'], fn)))
 					elif level == 'code' and f.head == 'gate':
 						warn.append((b.line, 'no test names "{}": {}'.format(fn, 'add a test to "{}"'.format(c['test']) if c['test'] else 'add a "test <path>" line under its "code" line')))
+					if f.head == 'gate' and level != 'none' and c['file'] and c['file'].endswith('.py') and not os.path.basename(c['file']).startswith('test_'):
+						nums = py_hardcoded_numbers(cctx.parse_py(os.path.join(base, c['file'])), fn)
+						if nums:
+							shown = ', '.join(str(x) for x in nums[:5])
+							warn.append((f.line, 'gate "{}": hardcoded number ({}) in "{}" ({}): make it a rule and read it with R(...)'.format(f.word(0), shown, c['file'], fn)))
 		for it in walk_items(u):
 			if it.head not in BLOCKS:
 				continue
@@ -1164,7 +1335,7 @@ def lane_of(f):
 	return 'model' if not bys or 'model' in bys else 'code'
 
 
-def node_info(f, fl):
+def node_info(f, fl, u=None, ctx=None):
 	d = {'id': f.word(0), 'kind': f.word(1) if f.head == 'gate' else f.head, 'lane': lane_of(f)}
 	nm = name_of(f)
 	if nm:
@@ -1176,7 +1347,7 @@ def node_info(f, fl):
 	bys = [x.word(0) for x in f.kids('by') if x.word(0) != 'model']
 	if bys:
 		d['by'] = bys
-	rd = node_reads(f)
+	rd = node_reads(f, u, ctx)
 	if rd:
 		d['reads'] = rd
 	sees = [a[1] for c in f.kids('sees') for a in c.args]
@@ -1237,10 +1408,12 @@ def block_info(bid, b):
 
 
 def port_info(n):
-	'''An "in" or "out" node -> {"name", "type", "text"} ("name" for "in" only).'''
+	'''An "in" or "out" node -> {"name", "type", "text", "schema"} ("name" for "in" only; "schema" when typed).'''
 	name, t, text = in_parts(n)
 	d = {'name': name} if n.head == 'in' else {}
 	d.update({'type': ser(t) if t else None, 'text': text})
+	if t is not None:
+		d['schema'] = type_schema(t)
 	return d
 
 
@@ -1263,12 +1436,11 @@ def catalog(u, preset=None, ctx=None):
 		'in': [port_info(x) for x in u.kids('in')],
 		'out': port_info(u.kids('out')[0]) if u.kids('out') else None,
 		'examples': [' '.join(ser(a) for a in x.args) for x in u.kids('example')],
-		'checks': [text_of(x) for x in u.kids('check')],
 		'start': fl.start, 'finally': fl.final, 'body': [item_id(x, fl.bids) for x in items(u)],
 		'coverage': coverage(u, ctx),
 		'presets': presets_of(u),
 		'rules': [rule_info(r, toks.get(r.word(0))) for r in u.kids('rule')],
-		'flow': [node_info(f, fl) for f in flow_nodes(u)],
+		'flow': [node_info(f, fl, u, ctx) for f in flow_nodes(u)],
 		'blocks': [block_info(b, fl.blocks[b]) for b in order if b in fl.blocks],
 	}
 
@@ -1333,7 +1505,7 @@ def skill(u, rules_path=None, preset=None, driver=None):
 		return fill_values(u, t, preset)
 
 	def cell(t):
-		return t.replace('|', '\\|')
+		return t.replace('|', '\\|').replace('\n', ' ')
 	c = catalog(u, preset)
 	intent = fill(c['intent'])
 	out = ['---', 'name: ' + u.word(0), 'description: ' + intent, '---', '', '# ' + u.word(0), '']
@@ -1367,119 +1539,138 @@ def skill(u, rules_path=None, preset=None, driver=None):
 		out.append('')
 	if not c['flow']:
 		return '\n'.join(out).rstrip('\n') + '\n'
-	nodes = dict((f['id'], f) for f in c['flow'])
-	blocks = dict((b['id'], b) for b in c['blocks'])
 	if driver:
 		args = ' '.join("{}=<{}>".format(x['name'], x['type'] or 'value') for x in c['in'])
 		out += ['## How to run', '',
-			'Code walks this flow. You do not walk it yourself: you start a run and answer what waits.',
-			'Run every command in the folder of the tool (the folder that holds `rig.json`).', '',
-			'1. Start a run: `{} run \'<inputs as JSON>\'`{}.'.format(driver, ' (inputs: ' + args + ')' if args else ''),
-			'2. Read the result. It is one JSON object.',
-			'   - `outcome`: the run ended at that end. Report it, with `problems` first. `result` is what the run made (only when a step leads to the end).',
-			'   - `waiting`: the run stopped at a node that code cannot do. Read `kind`, `do` and `check`. `sees` holds the facts of the run that you need for this node: use them, and nothing else.',
-			'     - `model` (a gate): decide what `check` says. Answer: `{} answer <run> \'{{"pass": true}}\'` (or false, with `"why"`).'.format(driver),
-			'     - `step`: do what `do` says. Answer: `{} answer <run> \'{{"result": ...}}\'`. When `waiting` has `schema`, the result must have that form.'.format(driver),
-			'     - `human`: show the person the question (`name` and `check`), `sees`, and the text of `say` as it is (it names the answers; the first option is the default). Then wait. Give the answer of the person, never your own: `{} approve <run> yes` (or `no`), or `{} approve <run> <the words of the person>`.'.format(driver, driver),
-			'   - `problems` in `waiting`: your last answer at this node failed. Fix these problems in the new answer.',
-			'   - `refused`: the call was out of order. It is final: do not repeat it. Read `at` and continue from there.',
-			'3. Repeat step 2 until the result has `outcome`. The outcome `error` means that code failed: report the error text. Do not answer for code.', '',
-			'Never decide a hard or soft gate: code decides them. Use only values from a result or from the rules.',
-			'`{} status <run>` shows a run again; `{} rules` shows the rules.'.format(driver, driver), '',
-			'More than one item: `{} batch \'<a JSON list of inputs>\' --report reports/<name>.md`. Code starts a run for each item and gives a summary. Then answer the runs in `left_for_model`, one at a time (`status <run>` shows what each waits for). Give the person the list `waits_for_person` and the path of the report. `{} queues` shows what waits, at any time.'.format(driver, driver), '',
-			'## Flow (the map of the run)', '',
-			'The lines run in order. A gate that passes goes on to the next line.', '']
+			'Code walks this flow. Start a run and answer only what waits. Run every command in the folder that holds `rig.json`.', '',
+			'1. Start: `{} run \'<inputs as JSON>\'`{}.'.format(driver, ' (inputs: ' + args + ')' if args else ''),
+			'2. Read the JSON result:',
+			'   - `outcome`: the run ended. Report it, with `problems` first (and `result` if present). `error` means code failed.',
+			'   - `waiting` (`kind: model`): decide `check` from `sees`. Run `{} answer <run> \'{{"pass": true, "why": "..."}}\'` (or `false`).'.format(driver),
+			'   - `waiting` (`kind: step`): do `do` from `sees`. Run `{} answer <run> \'{{"result": ...}}\'` matching `schema` if present.'.format(driver),
+			'   - `waiting` (`kind: human`): show the person `name`, `check`, `sees`, and `say` word for word; wait, then run `{} approve <run> yes` (or `no` / their words). Never answer for a person.'.format(driver),
+			'   - `waiting.problems`: fix those problems in the new answer. `refused`: final — run `{} status <run>`.'.format(driver),
+			'3. Repeat step 2 until `outcome`. Never decide a hard or soft gate yourself.', '',
+			'More commands: `{} batch \'<JSON list>\' --report reports/<name>.md` (many items), `{} queues`, `{} status <run>`, `{} rules`, `{} flow`.'.format(driver, driver, driver, driver, driver), '']
+		code_steps = sum(1 for f in c['flow'] if f['kind'] == 'step' and f['lane'] == 'code')
+		code_gates = sum(1 for f in c['flow'] if f['kind'] in ('hard', 'soft') and f.get('by'))
+		interactive = [f for f in c['flow'] if f['kind'] in ('model', 'human') or (f['kind'] == 'step' and f['lane'] == 'model') or (f['kind'] in ('hard', 'soft') and not f.get('by'))]
+		ends = [f for f in c['flow'] if f['kind'] == 'end']
+		out += ['## Flow (summary)', '',
+			'The runner walks {} code {} and {} code {} automatically (`{} flow` shows the full map).'.format(
+				code_steps, 'step' if code_steps == 1 else 'steps',
+				code_gates, 'gate' if code_gates == 1 else 'gates', driver), '']
+		if interactive:
+			out += ['| Node | Kind | Action / check | Sees | Out / options |', '|---|---|---|---|---|']
+			for f in interactive:
+				k = f['kind']
+				kind_label = {'step': 'model step', 'model': 'model gate', 'human': 'human gate'}.get(k, k + ' gate (no code)')
+				if k == 'human':
+					action = ' — '.join(fill(f[x]) for x in ('name', 'check') if f.get(x))
+				else:
+					action = fill(f.get('do') or f.get('check') or f.get('name') or '')
+				sees = ', '.join('`{}`'.format(x) for x in f.get('sees', []))
+				if 'out' in f:
+					form = '`{}`'.format(f['out'])
+				elif 'options' in f:
+					form = ' / '.join('`{}`'.format(o) for o in f['options'])
+				else:
+					form = ''
+				out.append('| `{}` | {} | {} | {} | {} |'.format(f['id'], kind_label, cell(action), cell(sees), cell(form)))
+			out.append('')
+		if ends:
+			out += ['Ends: ' + ', '.join('`{}` — {}'.format(f['id'], fill(f['name'])) if f.get('name') else '`{}`'.format(f['id']) for f in ends) + '.', '']
 	else:
+		nodes = dict((f['id'], f) for f in c['flow'])
+		blocks = dict((b['id'], b) for b in c['blocks'])
 		out += ['## Flow', '',
 			'Do the lines in order, from the top. A gate that passes goes on to the next line. A gate that fails goes where its fail line says. Do not skip a gate.',
 			'A block holds the lines under it: "for each" runs them once for each item of a list, "until" runs them again until its path is true, "if" runs them only when its path is not empty and not false.', '']
 
-	def where(x):
-		if x is None:
-			return 'the flow ends'
-		if x in blocks:
-			return 'the block `{}`'.format(x)
-		return '`{}`'.format(x)
+		def where(x):
+			if x is None:
+				return 'the flow ends'
+			if x in blocks:
+				return 'the block `{}`'.format(x)
+			return '`{}`'.format(x)
 
-	def node(f, depth):
-		k = f['kind']
-		label = {'step': 'step', 'end': 'end'}.get(k, k + ' gate')
-		h = '#' * min(6, 3 + depth)
-		out.extend(['{} `{}`{} ({})'.format(h, f['id'], ' ' + fill(f['name']) if f.get('name') else '', label), ''])
-		if 'if' in f:
-			out.append('- Only when `{}` is not empty and not false. Else go on to the next line.'.format(f['if']))
-		for key, title in (('do', 'Do'), ('check', 'Check')):
-			if key in f:
-				out.append('- {}: {}'.format(title, fill(f[key])))
-		if 'reads' in f:
-			out.append('- Rules: ' + ', '.join('`{}`'.format(r) if rules_path or r not in byrule else '`{}` = {}'.format(r, val(r)) for r in f['reads']))
-		if 'sees' in f:
-			out.append('- Sees: ' + ', '.join('`{}`'.format(x) for x in f['sees']))
-		if 'out' in f:
-			out.append('- The answer has the type `{}`.'.format(f['out']))
-		by = ', '.join('`{}`'.format(b) for b in f.get('by', []))
-		guess = '- No code decides this gate yet: decide it yourself and label the result as a guess.'
-		if driver and by and k in ('step', 'hard', 'soft'):
-			out.append('- {} by code: {}. The runner does this.'.format('Done' if k == 'step' else 'Decided', by))
-		elif k == 'step' and f['lane'] == 'model':
-			out.append('- You do this step{}.'.format(' when the run waits here' if driver else ''))
-		elif k == 'step' and by:
-			out.append('- Code: run {}.'.format(by))
-		elif k == 'hard':
-			out.append('- Decided by code: run {} and obey its result. Do not decide this gate yourself.'.format(by) if by else guess)
-		elif k == 'soft':
-			out.append('- Decided by code: run {}. If it fails, report it and go on to the next line.'.format(by) if by else guess)
-		elif k == 'model':
-			out.append('- You decide this gate. Label the result as a guess.')
-		elif k == 'human':
-			out.append('- A person decides. Stop and ask the person. Do not decide this gate yourself.')
-			if 'options' in f:
-				out.append('- The answers: {}. The first is the default: the answer when the person only agrees. Code ({}) reads the answer; when it does not understand it, ask again.'.format(', '.join('`{}`'.format(o) for o in f['options']), by))
-		if 'timeout_text' in f:
-			out.append('- Time limit: {}.{}'.format(f['timeout_text'], ' After it, the gate fails with the reason timeout.' if k == 'human' else ''))
-		if 'retry' in f:
-			out.append('- On fail: do `{}` again, at most {} times. Then take the fail line.'.format(f.get('back'), f['retry']))
-		for n in f.get('notes', []):
-			out.append('- Note: ' + fill(n['text']))
-		if not driver and k != 'end':
-			out.append('- Next: {}.'.format(where(f.get('next'))))
-		for l in f.get('fail', []):
-			if l.get('continue'):
-				out.append('- Fail: leave this item, note it for the report, and go on to the next item of `{}`.'.format(l['to']))
-			else:
-				out.append('- Fail: go to `{}`{}.'.format(l['to'], ' ({})'.format(fill(l['when'])) if 'when' in l else ''))
-		if k == 'end':
-			out.append('- Stop here.' + (' Then do the block `finally`.' if c.get('finally') else ''))
-		out.append('')
+		def node(f, depth):
+			k = f['kind']
+			label = {'step': 'step', 'end': 'end'}.get(k, k + ' gate')
+			h = '#' * min(6, 3 + depth)
+			out.extend(['{} `{}`{} ({})'.format(h, f['id'], ' ' + fill(f['name']) if f.get('name') else '', label), ''])
+			if 'if' in f:
+				out.append('- Only when `{}` is not empty and not false. Else go on to the next line.'.format(f['if']))
+			for key, title in (('do', 'Do'), ('check', 'Check')):
+				if key in f:
+					out.append('- {}: {}'.format(title, fill(f[key])))
+			if 'reads' in f:
+				out.append('- Rules: ' + ', '.join('`{}`'.format(r) if rules_path or r not in byrule else '`{}` = {}'.format(r, val(r)) for r in f['reads']))
+			if 'sees' in f:
+				out.append('- Sees: ' + ', '.join('`{}`'.format(x) for x in f['sees']))
+			if 'out' in f:
+				out.append('- The answer has the type `{}`.'.format(f['out']))
+			by = ', '.join('`{}`'.format(b) for b in f.get('by', []))
+			guess = '- No code decides this gate yet: decide it yourself and label the result as a guess.'
+			if k == 'step' and f['lane'] == 'model':
+				out.append('- You do this step.')
+			elif k == 'step' and by:
+				out.append('- Code: run {}.'.format(by))
+			elif k == 'hard':
+				out.append('- Decided by code: run {} and obey its result. Do not decide this gate yourself.'.format(by) if by else guess)
+			elif k == 'soft':
+				out.append('- Decided by code: run {}. If it fails, report it and go on to the next line.'.format(by) if by else guess)
+			elif k == 'model':
+				out.append('- You decide this gate. Label the result as a guess.')
+			elif k == 'human':
+				out.append('- A person decides. Stop and ask the person. Do not decide this gate yourself.')
+				if 'options' in f:
+					out.append('- The answers: {}. The first is the default: the answer when the person only agrees. Code ({}) reads the answer; when it does not understand it, ask again.'.format(', '.join('`{}`'.format(o) for o in f['options']), by))
+			if 'timeout_text' in f:
+				out.append('- Time limit: {}.{}'.format(f['timeout_text'], ' After it, the gate fails with the reason timeout.' if k == 'human' else ''))
+			if 'retry' in f:
+				out.append('- On fail: do `{}` again, at most {} times. Then take the fail line.'.format(f.get('back'), f['retry']))
+			for n in f.get('notes', []):
+				out.append('- Note: ' + fill(n['text']))
+			if k != 'end':
+				out.append('- Next: {}.'.format(where(f.get('next'))))
+			for l in f.get('fail', []):
+				if l.get('continue'):
+					out.append('- Fail: leave this item, note it for the report, and go on to the next item of `{}`.'.format(l['to']))
+				else:
+					out.append('- Fail: go to `{}`{}.'.format(l['to'], ' ({})'.format(fill(l['when'])) if 'when' in l else ''))
+			if k == 'end':
+				out.append('- Stop here.' + (' Then do the block `finally`.' if c.get('finally') else ''))
+			out.append('')
 
-	def block(b, depth):
-		k = b['kind']
-		if k == 'section':
-			out.extend(['{} {}'.format('#' * min(6, 3 + depth), fill(b.get('name', ''))), ''])
+		def block(b, depth):
+			k = b['kind']
+			if k == 'section':
+				out.extend(['{} {}'.format('#' * min(6, 3 + depth), fill(b.get('name', ''))), ''])
+				body(b['body'], depth + 1)
+				return
+			head = {'for': 'For each `{}` in `{}`'.format(b.get('item'), b.get('path')), 'until': 'Until `{}` is true'.format(b.get('path')),
+				'if': 'If `{}`'.format(b.get('path')), 'else': 'Else (when the `if` before did not run)', 'finally': 'Finally: always, after the run ends (also after an error)'}[k]
+			out.append('**{}** (block `{}`):'.format(head, b['id']))
+			if k == 'for':
+				out.append('- Do the lines of this block once for each item. The item is `{}`.'.format(b.get('item')))
+				if 'tolerate' in b:
+					out.append('- When more than {}% of the items are left (fail -> continue), the block fails after the last item.'.format(b['tolerate']))
+			if k == 'until':
+				out.append('- Do the lines of this block, then again until `{}` is true: at most {} more times.'.format(b.get('path'), b.get('retry')))
+			for l in b.get('fail', []):
+				out.append('- Fail: go to `{}`.'.format(l['to']))
+			out.append('')
 			body(b['body'], depth + 1)
-			return
-		head = {'for': 'For each `{}` in `{}`'.format(b.get('item'), b.get('path')), 'until': 'Until `{}` is true'.format(b.get('path')),
-			'if': 'If `{}`'.format(b.get('path')), 'else': 'Else (when the `if` before did not run)', 'finally': 'Finally: always, after the run ends (also after an error)'}[k]
-		out.append('**{}** (block `{}`):'.format(head, b['id']))
-		if k == 'for':
-			out.append('- Do the lines of this block once for each item. The item is `{}`.'.format(b.get('item')))
-			if 'tolerate' in b:
-				out.append('- When more than {}% of the items are left (fail -> continue), the block fails after the last item.'.format(b['tolerate']))
-		if k == 'until':
-			out.append('- Do the lines of this block, then again until `{}` is true: at most {} more times.'.format(b.get('path'), b.get('retry')))
-		for l in b.get('fail', []):
-			out.append('- Fail: go to `{}`.'.format(l['to']))
-		out.append('')
-		body(b['body'], depth + 1)
-		out.extend(['**End of the block `{}`.**'.format(b['id']), ''])
+			out.extend(['**End of the block `{}`.**'.format(b['id']), ''])
 
-	def body(ids, depth):
-		for x in ids:
-			if x in nodes:
-				node(nodes[x], depth)
-			elif x in blocks:
-				block(blocks[x], depth)
-	body(c['body'], 0)
+		def body(ids, depth):
+			for x in ids:
+				if x in nodes:
+					node(nodes[x], depth)
+				elif x in blocks:
+					block(blocks[x], depth)
+		body(c['body'], 0)
 	guessed = guessed_gates(c)
 	if guessed:
 		names = ', '.join(guessed)
@@ -1490,123 +1681,6 @@ def skill(u, rules_path=None, preset=None, driver=None):
 			'Do not leave this line out. A person must see which results are guesses.'
 			+ (' Write it for each run in which you decided a gate, also when the run ended early.' if driver else ''), '']
 	return '\n'.join(out).rstrip('\n') + '\n'
-
-
-# - Decompile: catalogue (JSON) -> Rig ---------------
-def quote(t):
-	return '"' + str(t).replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n') + '"'
-
-
-def token(v, t='text'):
-	if isinstance(v, bool):
-		return 'on' if v else 'off'
-	if isinstance(v, (int, float)):
-		return repr(v)
-	if isinstance(v, list):
-		return '(' + ' '.join(token(x) for x in v) + ')'
-	if t == 'pattern':
-		return '/' + v + '/'
-	if t == 'choice' and re.match(r'^[A-Za-z_][\w.-]*$', v):
-		return v
-	return quote(v)
-
-
-def from_catalog(c):
-	'''A catalogue (as made by catalog()) -> Rig text. Not the original layout; the same meaning.'''
-	out = ['unit {} {}'.format(c['unit'], c.get('scope', 'agent'))]
-	if c.get('intent'):
-		out.append('  intent ' + quote(c['intent']))
-	for x in c.get('uses', []):
-		out.append('  uses ' + x['unit'] + (' ' + x['file'] if x.get('file') else ''))
-	for x in c.get('code', []):
-		out.append('  code ' + (x['prefix'] + ' ' if x.get('prefix') else '') + x['file'])
-		if x.get('test'):
-			out.append('    test ' + x['test'])
-	for x in c.get('in', []):
-		out.append('  in ' + x['name'] + (' ' + x['type'] if x.get('type') else '') + (' ' + quote(x['text']) if x.get('text') else ''))
-	o = c.get('out')
-	if o is not None:
-		out.append('  out' + (' ' + o['type'] if o.get('type') else '') + (' ' + quote(o['text']) if o.get('text') else ''))
-	for x in c.get('examples', []):
-		out.append('  example ' + x)
-	for x in c.get('checks', []):
-		out.append('  check ' + quote(x))
-
-	def notes(ns, ind):
-		for n in ns:
-			out.append(ind + 'note ' + quote(n['text']))
-	notes(c.get('notes', []), '  ')
-	types = {}
-	for r in c.get('rules', []):
-		t = r.get('type', 'text')
-		types[r['id']] = t
-		out.append('  rule {} {}'.format(r['id'], token(r.get('default', r.get('value')), t)) + (' ' + quote(r['label']) if r.get('label') and r['label'] != r['id'] else ''))
-		if 'min' in r or 'max' in r:
-			out.append('    range {} {}'.format(token(r.get('min')), token(r.get('max'))))
-		if 'options' in r:
-			out.append('    options ' + ' | '.join(token(o, 'choice') for o in r['options']))
-		if 'note' in r:
-			out.append('    note ' + quote(r['note']))
-	for name, sets in c.get('presets', {}).items():
-		out.append('  preset ' + name)
-		for rid, v in sets.items():
-			out.append('    set {} {}'.format(rid, token(v, types.get(rid, 'text'))))
-	nodes = dict((f['id'], f) for f in c.get('flow', []))
-	blocks = dict((b['id'], b) for b in c.get('blocks', []))
-
-	def node(f, ind):
-		k = f['kind']
-		head = 'gate {} {}'.format(f['id'], k) if k in GATE_KINDS else '{} {}'.format(k, f['id'])
-		out.append(ind + head + (' ' + quote(f['name']) if f.get('name') else ''))
-		i2 = ind + '  '
-		if 'if' in f:
-			out.append(i2 + 'if ' + f['if'])
-		for key in ('retry',):
-			if key in f:
-				out.append(i2 + 'retry {}'.format(f[key]))
-		if 'options' in f:
-			out.append(i2 + 'options ' + ' | '.join(str(o) for o in f['options']))
-		for key in PROSE:
-			if key in f:
-				out.append(i2 + '{} {}'.format(key, quote(f[key])))
-		for b in f.get('by', []):
-			out.append(i2 + 'by ' + b)
-		if k == 'step' and f.get('lane') == 'model':
-			out.append(i2 + 'by model')
-		if 'out' in f:
-			out.append(i2 + 'out ' + f['out'])
-		if f.get('reads'):
-			out.append(i2 + 'reads ' + ' '.join(f['reads']))
-		if f.get('sees'):
-			out.append(i2 + 'sees ' + ' '.join(f['sees']))
-		if 'timeout_text' in f:
-			out.append(i2 + 'timeout ' + f['timeout_text'])
-		notes(f.get('notes', []), i2)
-		for l in f.get('fail', []):
-			out.append(i2 + 'fail -> {}{}'.format('continue' if l.get('continue') else l['to'], ' ' + quote(l['when']) if 'when' in l else ''))
-
-	def block(b, ind):
-		k = b['kind']
-		head = {'for': 'for {} in {}'.format(b.get('item'), b.get('path')), 'until': 'until ' + str(b.get('path')), 'if': 'if ' + str(b.get('path')),
-			'else': 'else', 'section': 'section ' + quote(b.get('name', '')), 'finally': 'finally'}[k]
-		out.append(ind + head)
-		i2 = ind + '  '
-		if 'tolerate' in b:
-			out.append(i2 + 'tolerate {}%'.format(b['tolerate']))
-		if 'retry' in b:
-			out.append(i2 + 'retry {}'.format(b['retry']))
-		for l in b.get('fail', []):
-			out.append(i2 + 'fail -> ' + l['to'] + (' ' + quote(l['when']) if 'when' in l else ''))
-		body(b['body'], i2)
-
-	def body(ids, ind):
-		for x in ids:
-			if x in nodes:
-				node(nodes[x], ind)
-			elif x in blocks:
-				block(blocks[x], ind)
-	body(c.get('body', []), '  ')
-	return '\n'.join(out) + '\n'
 
 
 # - Command line -------------------------------------
@@ -1679,7 +1753,7 @@ def compile_to(kind, u, preset=None, rules_path=None, ctx=None, driver=None):
 def outputs(path, unit=None, json_out=None, skill_out=None, rules_ref=False, preset=None):
 	'''Compile FILE to the files that agents read. -> the paths written.'''
 	text, root = load(path)
-	err, _ = check(root)
+	err, _ = check(root, path)
 	if err:
 		raise SystemExit('{}: line {}: {}'.format(path, err[0][0], err[0][1]))
 	u = pick(root, unit)
@@ -1696,21 +1770,6 @@ def outputs(path, unit=None, json_out=None, skill_out=None, rules_ref=False, pre
 	return done
 
 
-def bound_levels(path):
-	'''For the viewer, which cannot read the code files: unit -> {"by" name -> level}.'''
-	try:
-		text, root = load(path)
-	except SystemExit:
-		return {}
-	ctx, out = Ctx(root, path), {}
-	for u in units(root):
-		names = [b.word(0) for f in flow_nodes(u) for b in f.kids('by')] + [u.word(0)]
-		got = dict((b, bound_level(b, u, ctx)) for b in names if b and code_for(b, u))
-		if got:
-			out[u.word(0)] = got
-	return out
-
-
 def run_file(folder, run_id):
 	'''The file of one run: <runs>/<id>/run.json (the run folder of version 1), or <runs>/<id>.json.'''
 	if not re.match(r'^[\w.-]+$', run_id or ''):
@@ -1721,24 +1780,34 @@ def run_file(folder, run_id):
 	return None
 
 
+def run_sort_key(run_id):
+	m = re.match(r'^r(\d+)$', run_id or '')
+	return (1, int(m.group(1)), '') if m else (0, 0, run_id or '')
+
+
 def run_list(folder):
 	'''The runs of a tool (the files that rigkit writes), newest first, for the viewer.'''
-	out = []
+	rows = []
 	if not os.path.isdir(folder):
-		return out
-	for n in sorted(os.listdir(folder), reverse=True)[:200]:
+		return []
+	names = [n for n in os.listdir(folder) if not n.startswith('.') and n != 'waiting.json']
+	names.sort(key=lambda n: run_sort_key(n[:-5] if n.endswith('.json') else n), reverse=True)
+	for n in names[:200]:
 		p = run_file(folder, n[:-5] if n.endswith('.json') else n)
 		if not p:
 			continue
 		try:
 			with open(p, encoding='utf-8') as f:
 				r = json.load(f)
+			if not isinstance(r, dict) or 'id' not in r or 'at' not in r:
+				continue
 			o = r.get('outcome')
 			state = 'ended at {}'.format(o.get('end') or o.get('label') or 'a stop') if o else 'waits at ' + str(r['at'])
-			out.append({'id': r['id'], 'state': state})
+			rows.append((r.get('started') or '', run_sort_key(r['id']), {'id': r['id'], 'state': state}))
 		except (OSError, ValueError, KeyError, TypeError, AttributeError):
 			pass
-	return out
+	rows.sort(key=lambda x: (x[0], x[1]), reverse=True)
+	return [x[2] for x in rows]
 
 
 def bundle(text, path=None):
@@ -1751,9 +1820,9 @@ def bundle(text, path=None):
 	except RigError as e:
 		out['errors'] = [[e.line, str(e).split(': ', 1)[-1]]]
 		return out
-	err, warn = check(root, path)
-	out['errors'], out['warnings'] = [list(x) for x in sorted(err)], [list(x) for x in sorted(warn)]
 	ctx = Ctx(root, path) if path else Ctx(root)
+	err, warn = check(root, path, ctx)
+	out['errors'], out['warnings'] = [list(x) for x in sorted(err)], [list(x) for x in sorted(warn)]
 	for u in units(root):
 		name = u.word(0) or '?'
 		d = {'name': name, 'scope': u.word(1, 'tool'), 'status': unit_status(u, ctx), 'flow': has_flow(u)}
@@ -1809,14 +1878,9 @@ def serve(path, port, runs=None, **outs):
 			elif self.path.startswith('/viewer'):
 				with open(page, encoding='utf-8') as f:
 					self.reply(200, f.read(), 'text/html; charset=utf-8')
-			elif self.path == '/file':
-				with open(path, encoding='utf-8', newline='') as f:
-					self.reply(200, f.read(), 'text/plain; charset=utf-8')
 			elif self.path == '/bundle':
 				with open(path, encoding='utf-8', newline='') as f:
 					self.reply(200, json.dumps(bundle(f.read(), path), ensure_ascii=False))
-			elif self.path == '/levels':
-				self.reply(200, json.dumps(bound_levels(path)))
 			elif self.path == '/runs':
 				self.reply(200, json.dumps(run_list(runs)))
 			elif self.path.startswith('/runs/') and run_file(runs, self.path[6:]):
@@ -1832,7 +1896,7 @@ def serve(path, port, runs=None, **outs):
 			if self.path == '/compile':  # compile changed text for the viewer; write nothing
 				return self.reply(200, json.dumps(bundle(text, path), ensure_ascii=False))
 			try:
-				err, _ = check(parse(text))
+				err, _ = check(parse(text), path)
 			except RigError as e:
 				return self.reply(400, json.dumps({'error': str(e)}))
 			if err:
@@ -1868,13 +1932,13 @@ def main(argv):
 		sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 	except Exception:
 		pass
-	if argv and argv[0] in ('new', 'build', 'doctor', 'test', 'plugin'):
+	if argv and argv[0] in ('new', 'build', 'doctor', 'test', 'plugin', 'mcp-config'):
 		import rig_project
 		return rig_project.main(argv[0], list(argv[1:]))
 	if argv and argv[0] in ('hash', 'prove', 'probe', 'stamp', 'emit'):
 		print('"{}" is a command of version 0: casts and hashes are gone. The code lives in files; its tests prove it (rig.py test).'.format(argv[0]))
 		return 2
-	if len(argv) < 2 or argv[0] not in ('check', 'json', 'compile', 'from-json', 'serve'):
+	if len(argv) < 2 or argv[0] not in ('check', 'json', 'compile', 'serve'):
 		print(__doc__)
 		return 2
 	cmd, rest = argv[0], list(argv[1:])
@@ -1884,19 +1948,10 @@ def main(argv):
 		if not rest:
 			raise SystemExit('compile {} FILE [UNIT]'.format(kind))
 		text, root = load(rest[0])
-		err, _ = check(root)
+		err, _ = check(root, rest[0])
 		if err:
 			raise SystemExit('{}: line {}: {}'.format(rest[0], err[0][0], err[0][1]))
 		result = compile_to(kind, pick(root, rest[1] if len(rest) > 1 else None), preset, rules, Ctx(root, rest[0]), driver)
-		if out:
-			write(out, result)
-		else:
-			sys.stdout.write(result)
-		return 0
-	if cmd == 'from-json':
-		out = option(rest, '-o')
-		with open(rest[0], encoding='utf-8') as f:
-			result = from_catalog(json.load(f))
 		if out:
 			write(out, result)
 		else:
@@ -1916,7 +1971,7 @@ def main(argv):
 			print(path)
 			for u in units(root):
 				print('  {:<28} {}'.format('{} ({})'.format(u.word(0), u.word(1, 'tool')), '; '.join(unit_status(u, ctx))))
-			err, warn = check(root, path)
+			err, warn = check(root, path, ctx)
 			for line, t in sorted(err):
 				print('  error   line {}: {}'.format(line, t))
 			for line, t in sorted(warn):

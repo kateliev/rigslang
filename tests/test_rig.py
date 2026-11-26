@@ -231,6 +231,11 @@ class Blocks(unittest.TestCase):
 		self.assertEqual(node(self.c, 'make')['lane'], 'code')
 		w = warnings(unit('  step s\n    do "x"\n  end e\n'))
 		self.assertTrue(any('say who does it' in t for _, t in w))
+		self.assertTrue(any('add "out <type>"' in t for _, t in w))
+		w2 = warnings(unit('  step s by model\n    do "x"\n  end e\n'))
+		self.assertTrue(any('add "out <type>"' in t for _, t in w2))
+		w3 = warnings(unit('  step s by model\n    do "x"\n    out text\n  end e\n'))
+		self.assertFalse(any('add "out <type>"' in t for _, t in w3))
 		err = errors(unit('  gate g hard by model\n    fail -> e\n  end e\n'))
 		self.assertTrue(any('not "by model"' in t for _, t in err))
 
@@ -252,8 +257,9 @@ class Blocks(unittest.TestCase):
 
 	def test_check(self):
 		self.assertEqual(node(self.c, 'ok')['check'], 'the number is even and at most {limits.max}')
-		c = catalogue('unit x tool\n  check "every result is even"\n  code x.py\n')
-		self.assertEqual(c['checks'], ['every result is even'])
+		self.assertNotIn('checks', self.c)
+		w = warnings('unit x tool\n  check "every result is even"\n  code x.py\n')
+		self.assertTrue(any('not a known word inside "unit"' in t for _, t in w))
 
 	def test_range_and_the_label(self):
 		r = next(r for r in self.c['rules'] if r['id'] == 'limits.max')
@@ -328,7 +334,15 @@ class Compile(unittest.TestCase):
 	def test_skill_with_a_runner(self):
 		text = rig.skill(self.unit(), None, None, 'python3 tool.py')
 		self.assertIn('python3 tool.py run', text)
+		self.assertIn('python3 tool.py flow', text)
+		self.assertIn('## Flow (summary)', text)
+		self.assertIn('| `rewrite` | model step |', text)
+		self.assertIn('| `tone` | model gate |', text)
+		self.assertIn('| `approve` | human gate |', text)
+		self.assertIn('Ends: `done`', text)
 		self.assertNotIn('Next: ', text)
+		self.assertNotIn('### `collect`', text)
+		self.assertNotIn('### `notes`', text)
 
 	def test_skill_shows_the_blocks(self):
 		text = rig.skill(rig.units(rig.parse(FLOW))[0])
@@ -341,16 +355,6 @@ class Compile(unittest.TestCase):
 		r = [x for x in c['rules'] if x['id'] == 'notes.min_words'][0]
 		self.assertEqual((r['value'], r['default']), (10, 50))
 		self.assertIn('at least 10 words', rig.skill(self.unit(), None, 'hotfix'))
-
-	def test_catalogue_round_trip(self):
-		def meaning(c):
-			return dict((k, v) for k, v in c.items() if k != 'coverage')  # coverage depends on the files, not on the unit
-		for text in [FLOW] + [open(p, encoding='utf-8').read() for p in EXAMPLES]:
-			for u in rig.units(rig.parse(text)):
-				c = rig.catalog(u)
-				back = rig.from_catalog(c)
-				self.assertEqual(meaning(rig.catalog(rig.units(rig.parse(back))[0])), meaning(c), u.word(0))
-				self.assertEqual(rig.check(rig.parse(back))[0], [], u.word(0))
 
 	def test_command_line(self):
 		out = subprocess.check_output([sys.executable, TOOL, 'compile', 'json', RELEASE, '--preset', 'hotfix']).decode('utf-8')
@@ -400,6 +404,60 @@ class Levels(unittest.TestCase):
 		path = temp_rig(self, 'unit x agent\n  uses y nothere.rig\n')
 		_, warn = rig.check(rig.load(path)[1], path)
 		self.assertTrue(any('does not exist' in t for _, t in warn))
+
+	def test_ast_bound_level_ignores_comments_and_strings(self):
+		folder = tempfile.mkdtemp(prefix='rig-test-')
+		self.addCleanup(shutil.rmtree, folder, True)
+		with open(os.path.join(folder, 'gates.py'), 'w', encoding='utf-8') as f:
+			f.write('# def fake_fn(state, R): return True\ndef real_fn(state, R):\n\treturn True\n')
+		with open(os.path.join(folder, 'test_gates.py'), 'w', encoding='utf-8') as f:
+			f.write('"""real_fn is only in a docstring"""\n# and real_fn in a comment\nx = "real_fn"\n')
+		path = os.path.join(folder, 'x.rig')
+		with open(path, 'w', encoding='utf-8') as f:
+			f.write('unit x agent\n  code g gates.py\n    test test_gates.py\n  gate a hard by g.real_fn\n    fail -> e\n  gate b hard by g.fake_fn\n    fail -> e\n  end e\n')
+		root = rig.load(path)[1]
+		ctx = rig.Ctx(root, path)
+		u = rig.units(root)[0]
+		self.assertEqual(rig.bound_level('g.fake_fn', u, ctx), 'none')
+		self.assertEqual(rig.bound_level('g.real_fn', u, ctx), 'code')
+		self.assertTrue(ctx._texts and ctx._asts)
+		with open(os.path.join(folder, 'test_gates.py'), 'w', encoding='utf-8') as f:
+			f.write('import gates\ndef test_it():\n\tassert gates.real_fn({}, None)\n')
+		ctx2 = rig.Ctx(root, path)
+		self.assertEqual(rig.bound_level('g.real_fn', u, ctx2), 'tested')
+
+	def test_inferred_rule_reads_from_python_code(self):
+		folder = tempfile.mkdtemp(prefix='rig-test-')
+		self.addCleanup(shutil.rmtree, folder, True)
+		with open(os.path.join(folder, 'gates.py'), 'w', encoding='utf-8') as f:
+			f.write('def helper(R):\n\treturn R.get("limits.extra")\ndef ok(state, R):\n\treturn state["x"] <= R("limits.max") and helper(R)\n')
+		path = os.path.join(folder, 'x.rig')
+		with open(path, 'w', encoding='utf-8') as f:
+			f.write('unit x agent\n  code g gates.py\n  rule limits.max 10 "Max"\n  rule limits.extra on "Extra"\n  gate a hard by g.ok\n    fail -> e\n  end e\n')
+		root = rig.load(path)[1]
+		ctx = rig.Ctx(root, path)
+		err, warn = rig.check(root, path, ctx)
+		self.assertEqual(err, [])
+		self.assertFalse(any('not read' in t for _, t in warn), warn)
+		c = rig.catalog(rig.units(root)[0], None, ctx)
+		self.assertEqual(node(c, 'a')['reads'], ['limits.max', 'limits.extra'])
+
+	def test_hardcoded_number_in_gate_warns(self):
+		folder = tempfile.mkdtemp(prefix='rig-test-')
+		self.addCleanup(shutil.rmtree, folder, True)
+		with open(os.path.join(folder, 'gates.py'), 'w', encoding='utf-8') as f:
+			f.write('def bad(state, R):\n\treturn state["x"] > 42\n'
+				'def clean(state, R, default_n=10):\n\tx = state["items"][2]\n\ty = state["word"][:-3]\n\tfor i in range(5):\n\t\tpass\n\treturn len(y) > 0 and round(x, 2) >= -1 and x <= 1\n')
+		path = os.path.join(folder, 'x.rig')
+		with open(path, 'w', encoding='utf-8') as f:
+			f.write('unit x agent\n  code g gates.py\n  gate a hard by g.bad\n    fail -> e\n  gate b hard by g.clean\n    fail -> e\n  end e\n')
+		root = rig.load(path)[1]
+		err, warn = rig.check(root, path)
+		self.assertEqual(err, [])
+		hard_warns = [(ln, t) for ln, t in warn if 'hardcoded number' in t]
+		self.assertEqual(len(hard_warns), 1, hard_warns)
+		self.assertEqual(hard_warns[0][0], 3)
+		self.assertIn('42', hard_warns[0][1])
 
 
 class Types(unittest.TestCase):

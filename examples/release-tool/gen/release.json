@@ -22,15 +22,20 @@
   {
    "name": "folder",
    "type": "path",
-   "text": "the release folder: it holds NOTES.md, VERSION and tests.json"
+   "text": "the release folder: it holds NOTES.md, VERSION and tests.json",
+   "schema": {
+    "type": "string"
+   }
   }
  ],
  "out": {
   "type": "text",
-  "text": "the end of the run: published, ready (dry run) or stopped, with the problems"
+  "text": "the end of the run: published, ready (dry run) or stopped, with the problems",
+  "schema": {
+   "type": "string"
+  }
  },
  "examples": [],
- "checks": [],
  "start": "collect",
  "finally": null,
  "body": [
@@ -210,7 +215,7 @@
    "schema": {
     "type": "string"
    },
-   "if": "tone",
+   "if": "tone.failed",
    "next": "rewritten"
   },
   {
@@ -304,6 +309,9 @@
    "do": "write published.json into the folder",
    "by": [
     "steps.publish"
+   ],
+   "reads": [
+    "permissions.publish"
    ],
    "next": "done"
   },

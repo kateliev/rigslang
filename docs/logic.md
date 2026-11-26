@@ -22,7 +22,7 @@ A model that does a job with tools goes wrong in three ways:
 
 A tool is one `.rig` file and normal code files. The source says the order of the work and who decides. The code (`steps.py`, `gates.py`) does the work and the decisions. A runner (`rigkit.py`) walks the flow.
 
-The fronts are compiled from the source: a skill for Claude, a plugin for a local model, a command line and a graph page for a person. No front has a limit of its own, and no front decides a gate. A change of the source reaches all fronts at the next build.
+The fronts are compiled from the source: a lean skill for Claude, a plugin for a local model, a zero-dependency stdio MCP server for any MCP host, and a command line and graph page for a person. No front has a limit of its own, and no front decides a gate. A change of the source reaches all fronts at the next build.
 
 ## 4. The flow is the order of the lines
 
@@ -48,17 +48,17 @@ A correction is `retry <n>` on the gate that checks: on fail, the run goes back 
 
 Every node has a decider: code, the model, or a person. The catalogue writes it as the `lane` of the node, and the graph page draws the nodes in three bands. A person sees at once how much of the flow is code, and where the model or a person acts.
 
-**Coverage** is the share of the gates that tested code decides. It is not a goal by itself: a gate that needs judgment stays a `model` gate. The goal is that no gate is a guess by accident.
+**Coverage** is the share of the gates that tested code decides. For Python files, the checker parses the AST to confirm each gate function is defined and referenced in code (not only in comments or docstrings) by its test file. Coverage is not a goal by itself: a gate that needs judgment stays a `model` gate. The goal is that no gate is a guess by accident.
 
-A `human` gate is the only place where the person decides, and the model can never answer it. The runner refuses an answer of the model there; the plugin has no tool for it. A gate with `options` takes the words of the person and gives them to code, which asks again when it does not understand them.
+A `human` gate is the only place where the person decides, and the model can never answer it. The runner refuses an answer of the model there; neither the plugin nor the MCP server exposes a tool for it. A gate with `options` takes the words of the person and gives them to code, which asks again when it does not understand them.
 
 ## 6. Runs that can be read again
 
-A run has a folder. The runner keeps four things there:
+Each run gets a short sequential id (`r1`, `r2`, ...) and its own folder. A `.waiting.json` index in `runs/` lets `queues` read only open waiting runs. Inside `runs/<run id>/`, the runner keeps four things:
 
 - **A pinned copy of the flow and the rules.** A run that started before a change goes on as it began, and says that the source changed.
-- **Every answer** of the model and of the person, in order.
-- **The state before each line** outside a loop. `rerun --from <line>` starts a new run there, with changed rules: a fix of code or of a value can be tried on the item where it failed, with no new answers.
+- **Every answer** of the model and of the person, in order, with optional timing and token metadata.
+- **Per-node checkpoints (`marks/<node>.json`)** before each line outside a loop. `rerun --from <line>` starts a new run there, with changed rules: a fix of code or of a value can be tried on the item where it failed, with no new answers.
 - **The progress of a loop.** The run is saved after each item, so a stopped process goes on from the next item.
 
 `replay` plays the recorded answers again with the current code: a flow test with no model. Together with the regression set (written answers) and the tests of the code, it shows what a change does before a model or a person sees it.

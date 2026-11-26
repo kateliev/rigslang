@@ -5,16 +5,15 @@
 // The model gives only data. The command names are fixed here, the arguments travel as one
 // JSON string, and the driver starts without a shell: the words of the model cannot become code.
 
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import frontJson from "./gen/front.json" with { type: "json" };
 
 export type FrontTool = {
   name: string;
-  kind: string; // run | batch | queues | answer_gate | finish_step | work | status | call
+  kind: string; // run | batch | queues | answer_gate | work | status | call
   unit?: string; // kind "call": the name of the tool unit
-  node?: string; // kind "finish_step": the one step that this tool answers (its schema is the "out" type)
   description: string;
   parameters: { type: string; properties: Record<string, unknown>; required: string[] };
 };
@@ -37,7 +36,6 @@ export function argvFor(tool: FrontTool, p: Record<string, unknown>): string[] {
   const run = String(p.run ?? "");
   if (tool.kind === "run") return ["run", JSON.stringify(p)];
   if (tool.kind === "answer_gate") return ["answer", run, JSON.stringify(p.why ? { pass: p.pass === true, why: String(p.why) } : { pass: p.pass === true })];
-  if (tool.kind === "finish_step") return ["answer", run, JSON.stringify({ result: p.result }), ...(tool.node ? ["--node", tool.node] : [])];
   if (tool.kind === "status") return ["status", run];
   if (tool.kind === "queues") return ["queues"];
   if (tool.kind === "batch") return ["batch", JSON.stringify(Array.isArray(p.items) ? p.items : []), "--report", `reports/batch-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.md`];
@@ -58,27 +56,216 @@ function start(command: string[], cwd: string, seconds: number): Promise<{ code:
 
 const quote = (s: string) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`);
 
-/** A run that waits for a person: add the exact command for the operator, with the tool folder.
- *  The model cannot answer a human gate; it only passes this text on. */
-export function withCommand(line: string, root: string): string {
+/** Decorate a driver response for the plugin front: remove CLI-only waiting.answer,
+ *  add a front-specific waiting.next_action, and add waiting.command on human gates. */
+export function decorate(line: string, root: string): string {
   try {
     const r = JSON.parse(line);
-    if (r?.waiting?.kind !== "human" || !r.run) return line;
-    r.waiting.command = `cd ${quote(root)} && ${front.driver.map(quote).join(" ")} approve ${r.run} yes`;
+    if (!r || typeof r !== "object" || !r.waiting || typeof r.waiting !== "object") return line;
+    delete r.waiting.answer;
+    if (r.run) {
+      if (r.waiting.kind === "human") {
+        r.waiting.command = `cd ${quote(root)} && ${front.driver.map(quote).join(" ")} approve ${r.run} yes`;
+        r.waiting.next_action = { call: "NONE", show_verbatim: r.waiting.say ?? "" };
+      } else if (r.waiting.kind === "step") {
+        r.waiting.next_action = { call: "work_run", args: { run: r.run } };
+      } else if (r.waiting.kind === "model") {
+        r.waiting.next_action = { call: "answer_gate", args: { run: r.run, pass: "<true|false>", why: "<one sentence>" } };
+      }
+    }
     return JSON.stringify(r);
   } catch {
     return line;
   }
 }
 
-/** Run the driver with these arguments in the tool folder. -> its last JSON line, or an error as JSON. */
-async function drive(args: string[], root: string): Promise<string> {
+export const withCommand = decorate;
+
+const activeRunByRoot = new Map<string, string>();
+
+function finishLine(line: string, root: string): string {
+  try {
+    const r = JSON.parse(line);
+    if (r && typeof r === "object" && typeof r.run === "string" && r.run) {
+      if (r.waiting) activeRunByRoot.set(root, r.run);
+      else if (r.outcome && activeRunByRoot.get(root) === r.run) activeRunByRoot.delete(root);
+    }
+  } catch { /* not JSON */ }
+  return decorate(line, root);
+}
+
+type StdioPending = {
+  id: number;
+  resolve: (line: string) => void;
+  reject: (err: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+};
+
+type StdioSession = {
+  root: string;
+  child: ChildProcessWithoutNullStreams | null;
+  cmd: string[] | null;
+  buf: string;
+  nextId: number;
+  pending: StdioPending | null;
+  queue: Promise<void>;
+};
+
+const sessions = new Map<string, StdioSession>();
+
+function setRef(handle: unknown, on: boolean): void {
+  const h = handle as { ref?: () => void; unref?: () => void } | null;
+  if (on) h?.ref?.();
+  else h?.unref?.();
+}
+
+function setSessionRef(session: StdioSession, on: boolean): void {
+  const c = session.child;
+  if (!c) return;
+  setRef(c, on);
+  setRef(c.stdin, on);
+  setRef(c.stdout, on);
+  setRef(c.stderr, on);
+}
+
+function killSession(session: StdioSession, reason?: Error): void {
+  const p = session.pending;
+  if (p) {
+    clearTimeout(p.timer);
+    session.pending = null;
+    p.reject(reason ?? new Error("driver closed"));
+  }
+  const c = session.child;
+  session.child = null;
+  session.buf = "";
+  if (!c) return;
+  try { c.stdin.end(); } catch { /* ignore */ }
+  try { c.stdout.destroy(); } catch { /* ignore */ }
+  try { c.stderr.destroy(); } catch { /* ignore */ }
+  try { c.kill(); } catch { /* ignore */ }
+  setRef(c, false);
+}
+
+/** Shut down warm driver child processes cleanly (call on CLI exit). */
+export function closeDriver(root?: string): void {
+  if (root !== undefined) {
+    const key = resolve(root);
+    const s = sessions.get(key);
+    if (s) { killSession(s); sessions.delete(key); }
+    return;
+  }
+  for (const s of sessions.values()) killSession(s);
+  sessions.clear();
+}
+
+function spawnChild(session: StdioSession): ChildProcessWithoutNullStreams {
+  const cmd = session.cmd ?? front.driver;
+  const child = spawn(cmd[0], [...cmd.slice(1), "serve-stdio"], { cwd: session.root, shell: false, windowsHide: true });
+  session.child = child;
+  session.buf = "";
+  child.stdin.on("error", () => {});
+  child.stderr.on("data", () => {});
+  child.stdout.on("data", (chunk: Buffer | string) => {
+    if (session.child !== child) return;
+    session.buf += typeof chunk === "string" ? chunk : chunk.toString("utf8");
+    let nl: number;
+    while ((nl = session.buf.indexOf("\n")) >= 0) {
+      const raw = session.buf.slice(0, nl).trim();
+      session.buf = session.buf.slice(nl + 1);
+      if (!raw) continue;
+      const p = session.pending;
+      if (!p) continue;
+      try {
+        const msg = JSON.parse(raw) as { id?: unknown; code?: unknown; result?: unknown };
+        if (msg && typeof msg === "object" && msg.id === p.id && msg.result !== null && typeof msg.result === "object") {
+          clearTimeout(p.timer);
+          session.pending = null;
+          setSessionRef(session, false);
+          p.resolve(JSON.stringify(msg.result));
+          continue;
+        }
+      } catch { /* malformed */ }
+      killSession(session, new Error("malformed serve-stdio output"));
+      break;
+    }
+  });
+  child.on("error", (e: NodeJS.ErrnoException) => {
+    if (session.child !== child) return;
+    if (e.code === "ENOENT" && cmd[0] === "python3") {
+      session.cmd = ["python", ...front.driver.slice(1)];
+      const err = new Error("ENOENT_PYTHON3") as Error & { retryPython?: boolean };
+      err.retryPython = true;
+      killSession(session, err);
+      return;
+    }
+    killSession(session, e);
+  });
+  child.on("close", (code) => {
+    if (session.child !== child) return;
+    killSession(session, new Error(`serve-stdio exited (${code ?? "signal"})`));
+  });
+  return child;
+}
+
+function sendOnce(session: StdioSession, args: string[]): Promise<string> {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const child = session.child ?? spawnChild(session);
+    const id = ++session.nextId;
+    const timer = setTimeout(() => {
+      const err = new Error(`stopped after ${front.timeout_s} seconds`) as Error & { timeout?: boolean };
+      err.timeout = true;
+      killSession(session, err);
+    }, front.timeout_s * 1000);
+    session.pending = { id, resolve: resolvePromise, reject: rejectPromise, timer };
+    setSessionRef(session, true);
+    try {
+      child.stdin.write(JSON.stringify({ id, argv: args }) + "\n");
+    } catch (e) {
+      killSession(session, e instanceof Error ? e : new Error(String(e)));
+    }
+  });
+}
+
+function requestStdio(root: string, args: string[]): Promise<string> {
+  let session = sessions.get(root);
+  if (!session) {
+    session = { root, child: null, cmd: null, buf: "", nextId: 0, pending: null, queue: Promise.resolve() };
+    sessions.set(root, session);
+  }
+  const run = session.queue.then(async () => {
+    try {
+      return await sendOnce(session, args);
+    } catch (e) {
+      if ((e as { retryPython?: boolean })?.retryPython) {
+        return await sendOnce(session, args);
+      }
+      throw e;
+    }
+  });
+  session.queue = run.then(() => {}, () => {});
+  return run;
+}
+
+async function driveOneShot(args: string[], root: string): Promise<string> {
   let r = await start([...front.driver, ...args], root, front.timeout_s);
   // "python3" is "python" on some computers.
   if (r.missing && front.driver[0] === "python3") r = await start(["python", ...front.driver.slice(1), ...args], root, front.timeout_s);
   const lines = r.out.split("\n").map((l) => l.trim()).filter((l) => l.startsWith("{"));
-  if (lines.length) return withCommand(lines[lines.length - 1], root);
+  if (lines.length) return finishLine(lines[lines.length - 1], root);
   return JSON.stringify({ ok: false, error: (r.err || r.out || "the driver gave no result").trim().slice(-400) });
+}
+
+/** Run the driver with these arguments in the tool folder. -> its last JSON line, or an error as JSON. */
+async function drive(args: string[], root: string): Promise<string> {
+  try {
+    const line = await requestStdio(root, args);
+    return finishLine(line, root);
+  } catch (e) {
+    if ((e as { timeout?: boolean })?.timeout) {
+      return JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) });
+    }
+    return driveOneShot(args, root);
+  }
 }
 
 /** Run the driver with these arguments, in the tool folder of the setting. -> one JSON text. */
@@ -97,17 +284,17 @@ export async function callTool(tool: FrontTool, params: Record<string, unknown>,
 
 /** The words of a message of the operator that answers a human gate: "approve [RUN] [WORDS]".
  *  The words are "yes" or "no", or, at a gate with options, the words of the answer ("yes" or
- *  nothing: the first option). A run id has the form 20261125-101500-01. -> [run or "", words] or null. */
+ *  nothing: the first option). A run id has the form r1 (or legacy 20261125-101500-01). -> [run or "", words] or null. */
 export function approval(text: string): [string, string[]] | null {
-  const m = text.trim().match(/^approve(?:\s+(\d{8}-\d{6}-\d+))?(?:\s+(.*))?$/is);
+  const m = text.trim().match(/^approve(?:\s+(r\d+|\d{8}-\d{6}-\d+))?(?:\s+(.*))?$/is);
   if (!m) return null;
   return [m[1] ?? "", (m[2] ?? "").split(/\s+/).filter(Boolean)];
 }
 
 /** A message of the operator that starts with "approve" answers the human gate as the person.
  *  Only the operator's own message can do this: it is no tool, so the model cannot call it.
- *  Without a run id, the one run that waits for a person is meant. -> the result as JSON, or null
- *  when the message is no approval. */
+ *  Without a run id, the one run that waits for a person (or this session's active run) is meant.
+ *  -> the result as JSON, or null when the message is no approval. */
 export async function operatorAnswer(text: string, rootSetting?: string): Promise<string | null> {
   const a = approval(text);
   if (!a) return null;
@@ -117,8 +304,15 @@ export async function operatorAnswer(text: string, rootSetting?: string): Promis
   if (!run) {
     let waits: { run: string }[] = [];
     try { waits = JSON.parse(await drive(["queues"], root)).waits_for_person ?? []; } catch { /* no list */ }
-    if (waits.length !== 1) return refused(`${waits.length} runs wait for a person. Write the run id: approve <run id> ${words.join(" ")}. They are: ${waits.map((w) => w.run).join(", ") || "none"}.`);
-    run = waits[0].run;
+    if (waits.length === 1) {
+      run = waits[0].run;
+    } else if (waits.length > 1) {
+      const active = activeRunByRoot.get(root);
+      if (active && waits.some((w) => w.run === active)) run = active;
+    }
+    if (!run) {
+      return refused(`${waits.length} runs wait for a person. Write the run id: approve <run id> ${words.join(" ")}. They are: ${waits.map((w) => w.run).join(", ") || "none"}.`);
+    }
   }
   return drive(["approve", run, ...words], root);
 }

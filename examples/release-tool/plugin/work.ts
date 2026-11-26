@@ -5,9 +5,14 @@
 // The progress goes to stderr; the last result of the tool goes to stdout.
 
 import { LMStudioClient } from "@lmstudio/sdk";
+import { closeDriver } from "./src/bridge.ts";
 import { work } from "./src/worker.ts";
 
 const run = process.argv[2];
 if (!run) { console.log("Give the run id: node --no-warnings work.ts RUN"); process.exit(1); }
-const model = await new LMStudioClient().llm.model();
-console.log(await work(model, run, undefined, (text) => console.error(text)));
+try {
+  const model = await new LMStudioClient().llm.model();
+  console.log(await work(model, run, undefined, (text) => console.error(text)));
+} finally {
+  closeDriver();
+}

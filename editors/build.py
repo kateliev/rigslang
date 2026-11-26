@@ -64,7 +64,6 @@ ITEMS = [
 	('bar', B + r'\|' + A, {0: 'punctuation.separator.rig'}),
 	('number', B + r'[-+]?\d+(?:\.\d+)?' + A, {0: 'constant.numeric.rig'}),
 	('constant', B + r'(?:on|off|true|false)' + A, {0: 'constant.language.rig'}),
-	('unknown', B + r'\?' + A, {0: 'constant.language.unknown.rig'}),
 	('paren-open', r'\(', {0: 'punctuation.section.parens.begin.rig'}),
 	('paren-close', r'\)', {0: 'punctuation.section.parens.end.rig'}),
 ]
@@ -168,7 +167,10 @@ def main():
 	check = '--check' in sys.argv[1:]
 	stale = []
 	for path, text in ((VSCODE, vscode()), (SUBLIME, sublime())):
-		old = open(path, encoding='utf-8').read() if os.path.exists(path) else None
+		old = None
+		if os.path.exists(path):
+			with open(path, encoding='utf-8') as f:
+				old = f.read()
 		if old == text:
 			continue
 		if check:

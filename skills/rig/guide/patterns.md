@@ -59,7 +59,7 @@ Sort every item that is not done by **who must act**:
 - At the end, the left items come back to the model as a short list, one time each.
 - A batch has a size limit, and it is a rule. The first batch is small.
 
-The runner has this: `tool.py batch` runs a list and writes a report, and `tool.py queues` lists the runs that wait, by who must act. A run that needs the model does not stop the batch: it waits in its file.
+The runner has this: `tool.py batch` (with optional `--workers N` for parallel threads) runs a list and writes a report, `tool.py queues` lists the runs that wait by who must act (using the `.waiting.json` index), `tool.py drop RUN` clears abandoned waiting runs, and `tool.py prune` cleans old finished runs. A run that needs the model does not stop the batch: it waits in its folder.
 
 **One large item.** Sometimes the item is one file with thousands of records, and the model or the person must answer for parts of it. Then the item is one run, and the flow has a `for` block:
 

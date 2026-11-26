@@ -1,17 +1,18 @@
 # Rig
 
-**Rig** is a kit and a method for building **instrumental agents**: a model that operates tools to do a defined job. You describe a tool one time, and Rig gives you the same tool for Claude (a skill), for a local model (an LM Studio plugin) and for a person (a command line and a graph).
+**Rig** is a kit and a method for building **instrumental agents**: a model that operates tools to do a defined job. You describe a tool one time, and Rig gives you the same tool for Claude (a lean skill), for a local model (an LM Studio plugin), for any MCP host (a stdio MCP server) and for a person (a command line and a graph).
 
 The name is the three parts of the work: **R**eason, **I**ntent, **G**ate. The model reasons, and only where judgment is needed. The intent says what the tool must do. Gates decide whether it did: in code where code can decide, by the model where it cannot (marked as a guess), and by a person where the call is theirs.
 
 ## The idea in one picture
 
-```
+```text
    one source                      one core                         thin fronts
    release.rig              ┌─  gates.py   decisions     ┌─  skill/SKILL.md    Claude
    rules, steps,   build    │   steps.py   the work      │   plugin/           a local model
-   gates, ends     ──────►  │   tool.py    the runner  ──┤   tool.py ...       a person
-                            └─  gen/*.json catalogue     └─  the graph page    a person
+   gates, ends     ──────►  │   tool.py    the runner  ──┼─  tool.py mcp       any MCP host
+                            └─  gen/*.json catalogue     ├─  tool.py ...       a person
+                                                         └─  the graph page    a person
 ```
 
 - **Rules** hold every number and switch, in one place.
@@ -55,7 +56,7 @@ cd examples/release-tool
 python3 tool.py run '{"folder": "tests/cases/good"}'
 ```
 
-Code walks five nodes (the step `rewrite` is skipped: its `if` is not true yet), then the run waits for the model at the gate `tone`. Its README goes on from there. To see its flow as a graph:
+Code walks five nodes (the step `rewrite` is skipped: its `if tone.failed` is not true yet), then the run waits for the model at the gate `tone`. Its README goes on from there. To see its flow as a graph:
 
 ```bash
 python3 ../../skills/rig/rig.py serve release.rig --json gen/release.json
@@ -66,9 +67,9 @@ python3 ../../skills/rig/rig.py serve release.rig --json gen/release.json
 | Path | What it is |
 |---|---|
 | [skills/rig/guide/](skills/rig/guide/) | **The method.** One page of ideas, then the levels, the build order, the patterns for production tools, the fronts, and the rules with no exception. |
-| [skills/rig/SKILL.md](skills/rig/SKILL.md) | The skill for an AI agent: one entry, and one file for each task. Portable: copy the folder `skills/rig`. |
-| [skills/rig/rig.py](skills/rig/rig.py) | The tool, Python standard library only: `new`, `build`, `doctor`, `test`, `plugin` for projects; `check`, `serve`, `compile`, `from-json` for `.rig` files. |
-| [skills/rig/kit/rigkit.py](skills/rig/kit/rigkit.py) | The runtime: rules, verdicts, runs (each in its own folder, with a pinned copy of the flow and the recorded answers), rerun and replay, the command line of a tool. One file; each tool keeps a copy. |
+| [skills/rig/SKILL.md](skills/rig/SKILL.md) | The skill for an AI agent: one entry, a 1-page [cheatsheet](skills/rig/cheatsheet.md), and one file for each task. Portable: copy the folder `skills/rig`. |
+| [skills/rig/rig.py](skills/rig/rig.py) | The tool, Python standard library only: `new`, `build`, `doctor`, `test`, `plugin`, `mcp-config` for projects; `check`, `serve`, `compile` for `.rig` files. |
+| [skills/rig/kit/rigkit.py](skills/rig/kit/rigkit.py) | The runtime: rules, verdicts, short-id runs (`r1`, `r2`, ...) in their own folders (pin, record, per-node marks), rerun, replay, refusals, parallel batches, queues, model-agnostic worker (`work`), stdio MCP server (`mcp`), warm `serve-stdio`, and the tool CLI. One file; each tool keeps a copy. |
 | [skills/rig/kit/templates/](skills/rig/kit/templates/) | What `new` and `plugin` copy. |
 | [skills/rig/spec.md](skills/rig/spec.md) | The language of `.rig` files: one page of grammar, a short list of words. |
 | [viewer/index.html](viewer/index.html) | The viewer: units as tables, the flow as a graph in three lanes (code, model, person) with the blocks as boxes, the compiled skill and JSON. Values can be changed. One file, no install; it has no parser: `rig.py serve` compiles for it. |
@@ -112,7 +113,7 @@ unit release agent
 
 - The lines run in order. A gate that passes goes on to the next line; a fail goes to an end.
 - A `{group.name}` in a text names a rule. A number in a text gets a warning.
-- `by gates.notes_ok` names a function in `gates.py`. The checker refuses a name with no function, and counts the gate as **tested** only when the test file names it.
+- `by gates.notes_ok` names a function in `gates.py`. The checker refuses a name with no function, and counts the gate as **tested** only when the test file references it in code (verified via the Python AST).
 - **Coverage** is the share of the gates that checked code decides. The rest are named: this many by the model, this many by a person.
 
 ## Tests
@@ -129,7 +130,7 @@ The method was taken from a private production agent, where one procedure runs o
 
 ## Status
 
-Language version 1, in work (2026-11-25). The kit, the guide and the first example came on 2026-11-15, and the language can still change. [docs/status.md](docs/status.md) says what is done and what is open.
+Language version 1, updated 2026-11-26. [docs/status.md](docs/status.md) says what is verified and what is open.
 
 To give the skill to an agent, copy or link `skills/rig/` into the agent's skills folder (for example `.claude/skills/rig/`).
 

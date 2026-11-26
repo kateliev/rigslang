@@ -70,7 +70,7 @@ class Steps(unittest.TestCase):
 		self.assertEqual(sorted(b['map']), ['Other favorites > Clubs', 'Other favorites > Cooking', 'Other favorites > Programming', 'Other favorites > Travel'])
 		self.assertIn('Python', b['map']['Other favorites > Programming'])
 		s['sort'] = [{'id': x['id'], 'folder': 'Other favorites > Hobbies', 'new': True} for x in b['bookmarks']]
-		self.assertEqual(self.go(s, 'keep'), {'pass': True, 'batch': 1, 'moved': 10, 'new': ['Other favorites > Hobbies']})
+		self.assertEqual(steps.keep(s, self.R), {'pass': True, 'batch': 1, 'moved': 10, 'new': ['Other favorites > Hobbies']})
 		s['batch'] = 2
 		b = self.go(s, 'prepare')
 		self.assertEqual((b['batch'], b['new_so_far']), (2, ['Other favorites > Hobbies']))

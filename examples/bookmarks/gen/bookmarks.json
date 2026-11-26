@@ -22,15 +22,20 @@
   {
    "name": "file",
    "type": "path",
-   "text": "the bookmarks HTML file that Edge exported (Settings, Favorites, Export favorites)"
+   "text": "the bookmarks HTML file that Edge exported (Settings, Favorites, Export favorites)",
+   "schema": {
+    "type": "string"
+   }
   }
  ],
  "out": {
   "type": "text",
-  "text": "the path of the new bookmarks file and of its report"
+  "text": "the path of the new bookmarks file and of its report",
+  "schema": {
+   "type": "string"
+  }
  },
  "examples": [],
- "checks": [],
  "start": "read",
  "finally": null,
  "body": [
@@ -448,11 +453,11 @@
    "reads": [
     "sort.loose_depth",
     "sort.host_elsewhere",
-    "sort.batch",
     "sort.choices",
     "keep.bar",
     "similar.skip_hosts",
-    "similar.skip_pattern"
+    "similar.skip_pattern",
+    "sort.batch"
    ],
    "next": "for:batch",
    "block": "section:Sorting"
@@ -542,10 +547,9 @@
    "kind": "hard",
    "lane": "code",
    "name": "Every bookmark once, in a known folder",
-   "check": "the answer has every id of the batch once and no other id, no changed URL or title, a pick that is one of the choices of that bookmark, or a folder (it counts in place of the pick) of the file or a new folder under one, at most {sort.new_per_batch} new folders in the batch and {sort.new_max} in all; then the batch is saved",
+   "check": "the answer has every id of the batch once and no other id, no changed URL or title, a pick that is one of the choices of that bookmark, or a folder (it counts in place of the pick) of the file or a new folder under one, at most {sort.new_per_batch} new folders in the batch and {sort.new_max} in all",
    "by": [
-    "gates.sort_ok",
-    "steps.keep"
+    "gates.sort_ok"
    ],
    "reads": [
     "sort.new_per_batch",
@@ -560,14 +564,21 @@
      "continue": true
     }
    ],
-   "next": "for:batch",
+   "next": "keep",
    "back": "sort",
-   "block": "for:batch",
-   "notes": [
-    {
-     "text": "steps.keep saves a batch that passed: it runs only after gates.sort_ok passes"
-    }
-   ]
+   "block": "for:batch"
+  },
+  {
+   "id": "keep",
+   "kind": "step",
+   "lane": "code",
+   "name": "Save the sorted batch",
+   "do": "save the checked answer of the model for this batch",
+   "by": [
+    "steps.keep"
+   ],
+   "next": "for:batch",
+   "block": "for:batch"
   },
   {
    "id": "folders",
@@ -577,6 +588,9 @@
    "do": "list the new folders that the model proposed, with the number of bookmarks and some titles for each",
    "by": [
     "steps.folders"
+   ],
+   "reads": [
+    "sort.title_chars"
    ],
    "next": "new-ok",
    "block": "section:Sorting"
@@ -617,7 +631,9 @@
    ],
    "reads": [
     "links.check",
-    "links.folder"
+    "links.folder",
+    "sort.title_chars",
+    "similar.max_group"
    ],
    "next": "share",
    "block": "section:Output"
@@ -809,7 +825,8 @@
    "body": [
     "prepare",
     "sort",
-    "sort-ok"
+    "sort-ok",
+    "keep"
    ],
    "first": "prepare",
    "next": "folders"

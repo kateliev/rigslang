@@ -2,6 +2,7 @@
 """__NAME__: one command line for every front (the Claude skill, a plugin, a person).
 
     python3 tool.py call __NAME__ '{"text": "some words"}'
+    python3 tool.py mcp                         run as a stdio MCP server
 
 Each call prints one JSON line: {"ok", "tool", "result"}, or {"refused"}, or {"ok": false, "error"}.
 """

@@ -239,8 +239,8 @@ def prepare(state, R):
 
 
 def keep(state, R):
-	'''The second code of the gate sort-ok: it runs only after gates.sort_ok passed, and saves the answer
-	of the model for the batch. A batch with no saved file stays unsorted; the report lists it.'''
+	'''Save the checked answer of the model for the batch. Runs after gate sort-ok passes.
+	A batch with no saved file stays unsorted; the report lists it.'''
 	b = state['prepare']
 	known = [p for p in b['folders'] if p not in b['new_so_far']]
 	_, new = bm.sort_problems(state['sort'], b['bookmarks'], known, b['new_so_far'], R)

@@ -99,7 +99,6 @@ contexts:
     - include: bar
     - include: number
     - include: constant
-    - include: unknown
     - include: paren-open
     - include: paren-close
 
@@ -144,10 +143,6 @@ contexts:
   constant:
     - match: '(?<![^\s(])(?:on|off|true|false)(?=[\s();]|$)'
       scope: constant.language.rig
-
-  unknown:
-    - match: '(?<![^\s(])\?(?=[\s();]|$)'
-      scope: constant.language.unknown.rig
 
   paren-open:
     - match: '\('

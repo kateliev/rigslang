@@ -8,7 +8,7 @@
 // The tool calls and their results go to stderr; the words of the model go to stdout.
 
 import { Chat, LMStudioClient } from "@lmstudio/sdk";
-import { forModel, front, operatorAnswer } from "./src/bridge.ts";
+import { closeDriver, forModel, front, operatorAnswer } from "./src/bridge.ts";
 import { tools } from "./src/tools.ts";
 
 const turns: string[] = [];
@@ -19,19 +19,23 @@ for (const a of process.argv.slice(2)) {
 turns.push(words.join(" "));
 if (!turns[0]) { console.log('Give the task: node --no-warnings agent.ts "..." [--then "..."]...'); process.exit(1); }
 
-const model = await new LMStudioClient().llm.model();
-const chat = Chat.empty();
-const log = (line: string) => console.error(line);
-for (const [i, turn] of turns.entries()) {
-  const answer = await operatorAnswer(turn);
-  if (answer !== null) log(`= operator: ${turn}\n< ${answer}`);
-  const text = answer === null ? turn : forModel(turn, answer);
-  chat.append("user", i === 0 && front.prompt ? `${front.prompt}\n\n${text}` : text);
-  if (i > 0) console.log(`\n--- operator: ${turn}\n`);
-  await model.act(chat, tools(undefined, log, async () => model), {
-    onMessage: (m) => {
-      chat.append(m);
-      if (m.getRole() === "assistant" && m.getText().trim()) console.log(m.getText());
-    },
-  });
+try {
+  const model = await new LMStudioClient().llm.model();
+  const chat = Chat.empty();
+  const log = (line: string) => console.error(line);
+  for (const [i, turn] of turns.entries()) {
+    const answer = await operatorAnswer(turn);
+    if (answer !== null) log(`= operator: ${turn}\n< ${answer}`);
+    const text = answer === null ? turn : forModel(turn, answer);
+    chat.append("user", i === 0 && front.prompt ? `${front.prompt}\n\n${text}` : text);
+    if (i > 0) console.log(`\n--- operator: ${turn}\n`);
+    await model.act(chat, tools(undefined, log, async () => model), {
+      onMessage: (m) => {
+        chat.append(m);
+        if (m.getRole() === "assistant" && m.getText().trim()) console.log(m.getText());
+      },
+    });
+  }
+} finally {
+  closeDriver();
 }

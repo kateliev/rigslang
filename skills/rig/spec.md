@@ -46,7 +46,6 @@ A file holds one or more `unit` nodes. Every other word goes inside a unit.
 | `out [type] ["text"]` | The output. The text says what the output is. |
 | `intent "text"` | What the unit must do, in controlled language. |
 | `example <arg>* => <value>` | One input/output pair. |
-| `check "text"` | A condition that every result must meet, in plain words. |
 
 **Types.** A type is a word or a short list:
 
@@ -63,7 +62,7 @@ A file holds one or more `unit` nodes. Every other word goes inside a unit.
 | `(maybe T)` | a value of type T, or no value. In a `record`, the field can be missing. |
 | `(one-of v1 v2 …)` | one of these values |
 
-The checker warns about a type that it does not know.
+The checker warns about a type that it does not know. Each `in` port compiles its type to a JSON Schema (`schema`), and the runner validates inputs against those schemas at runtime (`Kit.run` and `Kit.call`), refusing a mismatch.
 
 ### Context
 
@@ -73,7 +72,7 @@ The checker warns about a type that it does not know.
 | `uses <unit> [file]` | This unit depends on another unit. Give the file when the other unit is in another `.rig` file; the path is relative to this file. |
 | `code <path>` | The function of this unit is in the file at `path` (relative to the `.rig` file). The function has the name of the unit (`-` becomes `_`). |
 | `code <prefix> <path>` | The functions of the steps and gates of this unit are in the file at `path`. A `by` line names one as `prefix.function`, for example `by gates.notes_ok`. |
-| ↳ `test <path>` | Optional child of `code`: the test file of that code. A function that the test file names is **tested**. |
+| ↳ `test <path>` | Optional child of `code`: the test file of that code. For Python (`.py`) files, the checker parses the AST to confirm the function is defined and referenced in code (not only in comments or docstrings) in the test file; other languages fall back to name matching. Such a function is **tested**. |
 | `rule <group.name> <value> ["label"]` | A parameter. The id has a group and a name, joined by a dot. The value is a number, `on`/`off`, a word, a string, a `/regex/` or a `( list )`. The string after the value is the label that a person reads; put the unit of the value in it: `rule sort.batch 60 "Bookmarks in one batch"`. |
 | ↳ `range <min> <max>` | Optional child of `rule`: the limits of a number. |
 | ↳ `options a \| b \| c` | Optional child of `rule`: the values that the rule can have. |
@@ -87,7 +86,6 @@ unit sizes tool
   in text str "the text to measure"
   out (record words int characters int) "the counts"
   example "two words" => (2 9)
-  check "the counts are not below zero"
   code tools.py
     test tests/test_tools.py
   rule size.max 1000 "Longest text, in characters"
@@ -119,10 +117,10 @@ Children of `step` and `gate`:
 |---|---|---|
 | `do "text"` | step | What the step does. |
 | `by <prefix.function>` | step, gate | The code that does the step or decides the gate. The name must be a function of a `code` line, a unit of this file, or a unit in a `uses` line. More than one `by`: they run in order; for a gate, until one fails. |
-| `by model` | step | The model does this step. A step with no `by` is done by the model too, with a warning: say it. |
-| `out <type>` | step | The type of what the step gives. For a `by model` step, the compilers use it as the schema of the answer, so the model cannot give the wrong form; the runner refuses another form. |
+| `by model` | step | The model does this step. Every `by model` step requires an `out <type>` line (`rig.py check` warns and `doctor` level 2 flags its absence). A step with no `by` is done by the model too, with a warning: say it. |
+| `out <type>` | step | The type of what the step gives. Required on every `by model` step: the compilers use it as the schema of the answer, so the model cannot give the wrong form, and the runner refuses another form. |
 | `check "text"` | gate | What the gate checks, or what the model or the person must decide, in plain words. |
-| `reads <rule-id>*` | step, gate | The rules that this node uses. A rule named as `{group.name}` in the text of the node is read too, so `reads` is needed only for rules that the text does not name. |
+| `reads <rule-id>*` | step, gate | The rules that this node uses. A rule named as `{group.name}` in the text, used by `retry`, or read in bound Python code via `R('group.name')` or `R.get('group.name')` is inferred automatically from the AST. `reads` is optional for Python code and needed only for non-Python code or indirect reads. |
 | `sees <path>*` | step, gate | What the one who does the node gets from the state of the run: for a `model` gate, a `human` gate, or a step that the model does. A path is a step id, an input, or the item of a `for`, then keys: `sees read.summary write`. Without it, the model judges blind. |
 | `options a \| b \| c` | human gate | The answers that the person can give. The first is the default: the answer when the person only accepts. A gate with `options` needs `by`: the code that reads the answer. |
 | `retry <n>` | hard gate, model gate | On fail: do the nearest step before the gate again (only gates may stand between them), at most `n` times. Then take the `fail` line. `n` is a whole number, or the id of a number rule. |
@@ -225,19 +223,19 @@ A `human` gate has two forms:
 
 | Level | When |
 |---|---|
-| **tested** | `by` names a function of a `code` line, the function exists in the file, and the `test` file of that line names it. |
-| **code** | `by` names a function of a `code` line that no test names, or a unit whose own code is not tested. |
+| **tested** | `by` names a function of a `code` line, the function exists in the file, and the `test` file of that line references it in code (verified via AST for `.py` files, name matching for other languages). |
+| **code** | `by` names a function of a `code` line that no test references, or a unit whose own code is not tested. |
 | **model** | a `model` gate: the model decides. |
 | **human** | a `human` gate: a person decides. |
 | **none** | a `hard` or `soft` gate with no `by`, or with a `by` that names nothing (also: a function that is not in its file). |
 
 A gate with more than one `by` has the lowest level of them. A unit in another file counts only when the tool can read that file; else it counts as code. `rig.py check` and `rig.py serve` read the `code` files and their tests.
 
-**Tested** means only that a test file names the function. Run the tests yourself (`rig.py test`, Section 7).
+**Tested** confirms that the function is defined and referenced in code (not only in comments or docstrings) by its test file. Run the tests yourself (`rig.py test`, Section 7).
 
 **Coverage** of a flow = tested gates ÷ all gates. The status also shows the count at each level.
 
-**Numbers in the text.** A number in the `do` or `check` text of a step or gate gets a warning. Make it a rule and write `{group.name}`: then the value has one place.
+**Numbers in text and gates.** A number in the `do` or `check` text of a step or gate gets a warning. `rig.py check` also warns about hardcoded numeric literals in Python gate files (ignoring `-1`, `0`, `1`, default parameter values and subscript indices). Make a limit a rule, read it with `R('group.name')`, and write `{group.name}` in text: then the value has one place.
 
 ## 3. Words of version 0
 
@@ -247,23 +245,25 @@ Version 1 refuses the words of language version 0. The error of `rig.py check` n
 
 The **runner** is `rigkit.py` (folder `kit/`). It reads the catalogue (Section 6) and walks the flow:
 
-- Code does the steps and decides the `hard` and `soft` gates.
+- **Short run ids.** Each run gets a short sequential id (`r1`, `r2`, ...), reserved atomically by creating its folder. The ISO timestamp stays in `run.json` (`started`).
+- **Input validation.** `Kit.run` and `Kit.call` validate inputs against each `in` port's compiled `schema` and refuse mismatches.
+- Code does the steps and decides the `hard` and `soft` gates. Each gate stores `{"pass": bool, "failed": bool, ...}` in `state[<gate id>]`, so later steps or blocks can check `if <gate>.failed`.
 - At a `model` gate, a `human` gate, or a step that the model does, the run stops and waits for an answer. The runner refuses an answer for another node, an answer of the model at a `human` gate, and an answer for a node that code does.
 - A step whose answer does not have the form of its `out` type waits again, with the problems.
-- When a run waits, its result carries the values of the `sees` paths of that node, and the problems that failed after the last answer at that node. At a `human` gate it also carries `say`: the exact messages that answer it, with the run id (`approve <run> yes`, `approve <run> no`, or `approve <run> <option>` for each option).
+- When a run waits, its result carries the values of the `sees` paths of that node, and the problems that failed after the last answer at that node. At a `human` gate it also carries `say`: the exact messages that answer it, with the run id (`approve r1 yes`, `approve r1 no`, or `approve r1 <option>` for each option).
 - When a run ends at an end that a step leads to, its result carries `result`: the value of that step.
 
-**The run folder.** Each run has a folder: `runs/<run id>/`.
+**The run folder.** Each run has a folder: `runs/<run id>/`. The runner also maintains `runs/.waiting.json`, an index of open waiting runs, so `queues` reads only waiting runs (rebuilt automatically if missing).
 
 | File | What it holds |
 |---|---|
 | `run.json` | The run: where it is, its state, its trace, its problems. |
 | `flow.json` | **Pin**: a copy of the compiled flow at the start of the run. `resume` and the answers use this copy. When the source changed since, the result says so, and the run goes on with its copy. |
 | `rules.json` | The rule values of the run. |
-| `answers.json` | **Record**: each answer of the model and of the person, in order. |
-| `marks.json` | The state of the run before each line outside a loop. `rerun` starts there. |
+| `answers.json` | **Record**: each answer of the model and of the person, in order, with optional `meta` (`model`, `seconds`, `tokens`, `error`). |
+| `marks/<node>.json` | Per-node checkpoint of the state before each top-level line outside a loop. `rerun` starts there. (Legacy `marks.json` is still read if present.) |
 
-**Commands of the runner.** The `driver` of a project (for example `python3 tool.py`) has the commands `run`, `batch`, `queues`, `answer`, `approve`, `resume`, `status`, `rerun`, `replay`, `rules`, `flow`, `call` and `regress`. Each prints one JSON line. The table of the commands and the keys of a result are in [guide/fronts.md](guide/fronts.md), section 1. `rerun` starts a new run from the state before a line (**rerun**); `replay` plays the recorded answers again with the current code (**replay**).
+**Commands of the runner.** The `driver` of a project (for example `python3 tool.py`) has the commands `run`, `batch [--workers N]`, `queues`, `answer [--node ID] [--meta JSON]`, `approve`, `work`, `mcp`, `serve-stdio`, `drop`, `list`, `prune`, `resume`, `status`, `rerun`, `replay`, `rules`, `flow`, `call` and `regress`. Each prints one JSON line (except `serve-stdio` and `mcp`, which loop over stdio). The table of the commands and the keys of a result are in [guide/fronts.md](guide/fronts.md), section 1. `rerun` starts a new run from the state before a line (**rerun**); `replay` plays the recorded answers again with the current code (**replay**).
 
 ## 5. Timeouts and errors
 
@@ -284,26 +284,28 @@ One unit compiles to the forms that agents read. The `.rig` file stays the one s
 | **Skill** (Markdown) | an agent that follows instructions, for example a `SKILL.md` | `rig.py compile skill FILE [UNIT]` |
 | **Tool** (JSON) | a model that calls tools: name, description and JSON Schema of the inputs | `rig.py compile tool FILE [UNIT]` |
 
-- **Catalogue.** `"rig": 1`. The keys: `unit`, `scope`, `intent`, `notes`, `uses`, `code`, `in`, `out`, `examples`, `checks`, `start`, `finally`, `body`, `coverage`, `preset` (the preset of the compile, or `null`), `presets`, `rules`, `flow` and `blocks`. Each rule has `id`, `group`, `label`, `type` (`number`, `switch`, `choice`, `text`, `pattern` or `list`), `value` and `default`, and when they exist `min`, `max`, `options` and `note`. Each node of `flow` has `id`, `kind` (`step`, `hard`, `soft`, `model`, `human` or `end`), `lane` (`code`, `model`, `person` or `end`: who decides), and when they exist `name`, `do`, `check`, `by`, `reads`, `sees`, `out` and `schema`, `options`, `retry` and `back` (the step that `retry` does again), `timeout` (seconds) and `timeout_text`, `if`, `fail` (a list of `{"to", "when", "continue"}`), `next`, `block` (the block that holds it) and `notes`. Each block has `id` (`for:<item>`, `until:<path>`, `if:<path>`, `else:<path>`, `section:<name>`, `finally`), `kind`, `body` (the ids of its lines), `first`, `next`, and its own fields (`item`, `path`, `tolerate`, `retry`, `fail`, `else`, `name`, and `block` for a block inside another block). Every edge is written out, so the runner and the viewer do not read the order of the lines again. `rig.py from-json` turns a catalogue back into Rig with the same meaning.
+- **Catalogue.** `"rig": 1`. The keys: `unit`, `scope`, `intent`, `notes`, `uses`, `code`, `in`, `out`, `examples`, `start`, `finally`, `body`, `coverage`, `preset` (the preset of the compile, or `null`), `presets`, `rules`, `flow` and `blocks`. Each rule has `id`, `group`, `label`, `type` (`number`, `switch`, `choice`, `text`, `pattern` or `list`), `value` and `default`, and when they exist `min`, `max`, `options` and `note`. Each node of `flow` has `id`, `kind` (`step`, `hard`, `soft`, `model`, `human` or `end`), `lane` (`code`, `model`, `person` or `end`: who decides), and when they exist `name`, `do`, `check`, `by`, `reads`, `sees`, `out` and `schema`, `options`, `retry` and `back` (the step that `retry` does again), `timeout` (seconds) and `timeout_text`, `if`, `fail` (a list of `{"to", "when", "continue"}`), `next`, `block` (the block that holds it) and `notes`. Each block has `id` (`for:<item>`, `until:<path>`, `if:<path>`, `else:<path>`, `section:<name>`, `finally`), `kind`, `body` (the ids of its lines), `first`, `next`, and its own fields (`item`, `path`, `tolerate`, `retry`, `fail`, `else`, `name`, and `block` for a block inside another block). Every edge is written out, so the runner and the viewer do not read the order of the lines again.
 - **Skill.** The rules as a table, then the lines of the flow in order, with the blocks: what to do, what to check, the code to run and obey, and where to go next. A `model` gate tells the agent to label its result as a guess. A `human` gate tells the agent to stop and ask the person.
-- **Skill with a runner.** With `--driver CMD`, the skill does not ask the agent to walk the flow. The runner walks it in code. The agent starts a run with `CMD run`, and answers only the nodes that code cannot do, with `CMD answer`. Use this form whenever the unit has a runner: a gate that lives only in the text of a skill is a suggestion, and a gate in a runner is a fact.
+- **Skill with a runner.** With `--driver CMD`, the skill does not ask the agent to walk the flow. The runner walks it in code. The agent starts a run with `CMD run`, and answers only the nodes that code cannot do, with `CMD answer`. The skill lists a compact summary table of the model and human nodes instead of every code-only node (`CMD flow` shows the full map). Use this form whenever the unit has a runner: a gate that lives only in the text of a skill is a suggestion, and a gate in a runner is a fact.
 - **Report.** When a flow has gates that the agent decides itself (`model` gates, and `hard` or `soft` gates with no `by`), the skill ends with a Report section. It tells the agent to end its answer with one line, `Guessed:` and the ids of those gates that it decided.
 - **Tool.** `name` is the unit name. `description` is the intent, with the rule values written in. `parameters` is a JSON Schema object: one property for each `in`, with the text as its description. An input whose type is `(maybe T)` is not required. `returns` is the JSON Schema of the `out` type.
-- **The plugin front.** When `rig.json` has `"plugin"`, `rig.py build` writes `plugin/src/gen/front.json`: the tools, the rules text and the driver for a local model (`rig.py plugin DIR`, Section 7). A `by model` step with an `out` type is a job for the **worker**: the front gets the tool `work_run`, and code gives each job to the model in a new context, with the schema of that type for the answer. A step of the model with no `out` type gets the tool `finish_step`. A flow with a gate for the model gets `answer_gate`. No tool answers a `human` gate.
+- **The plugin front.** When `rig.json` has `"plugin"`, `rig.py build` writes `plugin/src/gen/front.json`: the tools, the rules text and the driver for a local model (`rig.py plugin DIR`, Section 7). The bridge keeps a warm `tool.py serve-stdio` child process per session (falling back to one-shot spawn if needed), removes CLI-only `waiting.answer`, adds a self-directing `waiting.next_action` object, and tracks the active waiting run per session. Every `by model` step has an `out` type and uses `work_run`: code runs each job in a new context with the schema of that type, passes failure causes and `--meta` metrics (`model`, `seconds`, `tokens`) to the driver, and stops when the run waits for a person or a `model` gate. A flow with a gate for the model gets `answer_gate`. No tool answers a `human` gate.
+- **The MCP server front.** `tool.py mcp` runs a zero-dependency JSON-RPC 2.0 MCP server over stdio (`initialize`, `ping`, `tools/list`, `tools/call`). It exposes `start_run`, `answer_gate` (when model gates exist), `work_run` (when `--api-url` and `--model` are configured) or `answer_step` (when model steps exist without a worker), `run_status`, `start_batch`, `queues`, `drop_run`, and level-1 tools. It never exposes a tool for `human` gates, and adds MCP-specific `waiting.next_action`. `rig.py mcp-config DIR` prints a ready-to-paste JSON config block.
 - **Values.** By default, the compilers write each value in place of `{group.name}`. With `--rules PATH`, the skill refers to the catalogue at PATH instead. With `--preset NAME`, the values of that preset are used.
 - **Serve.** `rig.py serve FILE` shows the file in the viewer. The viewer has no parser: `rig.py` compiles the file and gives the viewer the result (`/bundle`). The viewer draws the blocks as boxes, and each node in the band of who decides it: code, the model or the person. A changed rule value is compiled again (`/compile`); Save writes the `.rig` file. With the runs of the tool (`--runs DIR`; default: the folder `runs` next to FILE), the graph shows the path of one run.
 
 ## 7. Projects: a unit with its code, its runner and its fronts
 
-A **project** is a folder with one `rig.json` file. It names the `.rig` source, the level of the tool, and the files that are compiled from the source. The guide (`guide/`, next to this file) explains the levels and the build order.
+A **project** is a folder with one `rig.json` file (`"rig": 1`). It names the `.rig` source, the level of the tool, and the files that are compiled from the source. The guide (`guide/`, next to this file) explains the levels and the build order.
 
 | Command | What it does |
 |---|---|
 | `rig.py new DIR NAME [--level N]` | Make a project folder from the templates: the `.rig` source, the code files, the tests, the runner, and the folders for notes and reports. |
-| `rig.py build [DIR]` | Compile the source to every front that `rig.json` lists: the catalogue, the skill, the tool definitions, the plugin front. `--check`: write nothing, and fail if a compiled file is not current. |
-| `rig.py doctor [DIR]` | Check the project against the list of its level. It prints what is missing. |
+| `rig.py build [DIR] [--check]` | Compile the source to every front that `rig.json` lists: the catalogue, the lean skill, the tool definitions, the plugin front. `--check`: write nothing, and fail if a compiled file is not current. |
+| `rig.py doctor [DIR] [--no-tests] [--json]` | Check the project against the list of its level. It prints what is missing (`--json`: structured JSON output). |
 | `rig.py test [DIR] [--replay RUN]` | Run the tests of the project (the `tests` command of `rig.json`), or replay one recorded run. |
 | `rig.py plugin DIR [--owner NAME]` | Add the front for a local model: an LM Studio plugin in `plugin/`, which reads its tools and its rules from the build (`guide/fronts.md`). |
+| `rig.py mcp-config DIR [--api-url URL] [--model NAME]` | Print a ready-to-paste MCP server JSON config block for Claude Desktop, Claude Code, Cursor, LM Studio or Windsurf. |
 
 ## 8. The rules of the interpreter
 

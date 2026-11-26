@@ -23,9 +23,9 @@ Sync is on, so a change in Edge goes to every device. Do it in this order:
 | `file-ok`, `sort-ok`, `share`, `verify`, `target` | hard gate | code |
 | `choose` (similar URLs, a page at a time), `new-ok` (new folders), `approve` (the report) | human gate | the person. `choose` and `new-ok` have `options`: code (`steps.apply`, `steps.accept`) reads the answer, and the gate asks again when it does not understand it |
 | `sort` (one batch of bookmarks into folders) | step | the model; its answer has the type of `out`. In the plugin, the worker gives each batch to the model in a new context (`work_run`), with the answer bound to that schema |
-| `read`, `similar`, `show`, `loose`, `prepare`, `folders`, `report`, `build`, `place` | step | code |
+| `read`, `similar`, `show`, `loose`, `prepare`, `keep`, `folders`, `report`, `build`, `place` | step | code |
 
-The flow is written in language version 1: 18 steps and gates and 4 ends (version 0 had 30 and 5). The lines run in order. Two `for` blocks hold the loops: `for page in similar.pages` (the pages of choices) and `for batch in loose.batches` (the batches to sort). The runner saves the run after each page and each batch.
+The flow is written in language version 1: 19 steps and gates and 4 ends (23 nodes in all; version 0 had 30 and 5). The lines run in order. Two `for` blocks hold the loops: `for page in similar.pages` (the pages of choices) and `for batch in loose.batches` (the batches to sort). The runner saves the run after each page and each batch.
 
 What code does, in order:
 
@@ -59,7 +59,7 @@ The model starts a run. When the run needs you, the model shows the question and
 | `approve no` | Similar URLs: keep every URL, here and later. New folders: make none. Report: write nothing. |
 | `approve yes 2=no` | New folders: make all but number 2. |
 
-The short forms above work only when exactly one run waits for you. When more than one run waits, the plugin refuses them and names the runs: then write the run id, for example `approve 20261123-232451-01 yes`. The `say` text of the question gives each answer in this long form. The plugin passes your `approve` message to the tool as your answer before the model reads it. The model cannot answer for you. The same answer works in a terminal: the result has the command in `waiting.command`.
+The short forms above work when one run waits for you, or when this chat session has an active waiting run. When several runs wait and none is active in this chat, the plugin refuses the short form and names them: then write the short run id, for example `approve r1 yes`. The `say` text of the question gives each answer in this long form. The plugin passes your `approve` message to the tool as your answer before the model reads it. The model cannot answer for you. The same answer works in a terminal: the result has the command in `waiting.command`.
 
 A long file does not fit in one chat. When the chat is full, open a new chat and write "Go on with my bookmarks run". The model calls `queues`, finds the run, and goes on from the last saved batch.
 

@@ -3,7 +3,7 @@
 ; checks every answer and writes the new file. A person chooses in the similar groups, agrees to new
 ; folders and agrees to the dry-run report. The model only sorts loose bookmarks into folders.
 ; Language version 1: the lines run in order; "for" runs a page of choices, or a batch to sort, once
-; for each item. 18 steps and gates, 4 ends.
+; for each item. 19 steps and gates, 4 ends.
 ; The tool never changes the export or a live file of the browser: it writes a new HTML file to import.
 
 unit bookmarks agent
@@ -72,7 +72,6 @@ unit bookmarks agent
 
   step read "Read the export" by steps.read
     do "read the bookmarks file: every folder with its path, every bookmark with its title, URL, folder and date"
-    reads files.work
   gate file-ok hard "A bookmarks export"
     check "the file is a bookmarks file in the Netscape HTML form, with at least one bookmark; the live JSON file of the browser is refused"
     by gates.file_ok
@@ -83,11 +82,10 @@ unit bookmarks agent
       do "find copies of one URL, ignoring http or https, www, a last slash, a #part and the tracking parameters of dupes.tracking; keep the copy in the deeper folder, else the oldest. Then group the URLs of one site where one path starts with another; fold the plain variants of similar.index_names; skip the sites of similar.skip_hosts and similar.skip_pattern; cut the groups into pages"
       by steps.dupes
       by steps.group
-      reads dupes.tracking keep.bar similar.index_names similar.skip_hosts similar.skip_pattern similar.max_group similar.page_size
+      reads dupes.tracking keep.bar similar.index_names similar.skip_hosts similar.skip_pattern similar.max_group
     for page in similar.pages
       step show "Show the page" by steps.page
         do "write the page of groups into a file; when the person said rest on an earlier page, decide this page as they said, and ask nothing"
-        reads sort.title_chars
       gate choose human "Which URLs to keep?"
         if show.ask
         options yes | yes rest | no
@@ -99,24 +97,24 @@ unit bookmarks agent
   section "Sorting"
     step loose "Find loose and misfiled bookmarks" by steps.loose
       do "leave alone the bookmarks that fit their folder; take the loose ones (sort.loose_depth) and the likely misfiled ones (sort.host_elsewhere; not for a site of similar.skip_hosts); cut them into batches of sort.batch. Then, once for all batches, find for each one the folders most like it: its present folder and the best others, sort.choices in all"
-      reads sort.loose_depth sort.host_elsewhere sort.batch sort.choices keep.bar similar.skip_hosts similar.skip_pattern
+      reads sort.loose_depth sort.host_elsewhere sort.choices keep.bar similar.skip_hosts similar.skip_pattern
     for batch in loose.batches
       tolerate 20%
       fail -> held "too many batches are left unsorted"
       step prepare "The batch for the model" by steps.prepare
         do "give the bookmarks of the batch, each with its numbered choices, a map of the top folders with the names of their sub-folders, and the new folders of the earlier batches; keep the whole folder list for the gate"
-        reads sort.url_chars sort.title_chars keep.bar
+        reads sort.url_chars sort.title_chars
       step sort "Sort the batch" by model
         do "for each bookmark of the batch, first write topic: what the page is about, in a few words. Name the subject, not the site: for a shop, what it sells; for a profile, what the person makes. Then pick the choice whose folder is about that topic. now is the number of its present folder: pick now when that folder fits the topic, and move the bookmark only when another choice fits clearly better. Look only at the choices of that bookmark, and decide each bookmark once. When no choice fits, keep pick and also give \"folder\": the whole path of a folder of map, with > between the names; folder then counts in place of pick. When no folder fits at all, give as folder the whole path of a new folder under a folder of a choice or of map, and \"new\": true; at most {sort.new_per_batch} new folders in this batch. A folder of new_so_far needs no \"new\". Give the result as a list with one object for each bookmark: {\"id\": <id>, \"topic\": \"<a few words>\", \"pick\": <number>}. Do not change a URL or a title. When waiting has problems, your last answer failed: fix them"
         sees prepare.batch prepare.of prepare.bookmarks prepare.map prepare.new_so_far
         out (list (record id int topic str pick int folder (maybe str) new (maybe bool)))
       gate sort-ok hard "Every bookmark once, in a known folder"
-        check "the answer has every id of the batch once and no other id, no changed URL or title, a pick that is one of the choices of that bookmark, or a folder (it counts in place of the pick) of the file or a new folder under one, at most {sort.new_per_batch} new folders in the batch and {sort.new_max} in all; then the batch is saved"
+        check "the answer has every id of the batch once and no other id, no changed URL or title, a pick that is one of the choices of that bookmark, or a folder (it counts in place of the pick) of the file or a new folder under one, at most {sort.new_per_batch} new folders in the batch and {sort.new_max} in all"
         by gates.sort_ok
-        by steps.keep
         retry sort.rounds
         fail -> continue "the batch stays unsorted"
-        note "steps.keep saves a batch that passed: it runs only after gates.sort_ok passes"
+      step keep "Save the sorted batch" by steps.keep
+        do "save the checked answer of the model for this batch"
     step folders "Collect the new folders" by steps.folders
       do "list the new folders that the model proposed, with the number of bookmarks and some titles for each"
     gate new-ok human "Make these new folders?"
@@ -130,7 +128,6 @@ unit bookmarks agent
   section "Output"
     step report "Write the dry-run report" by steps.report
       do "count and list what the new file would remove, fold, move and make, and write the report into the work folder; write nothing else. When links.check is on, a later version checks the links first and moves dead ones to links.folder; now it only reads dead.json of the work folder, when it exists"
-      reads links.check links.folder
     gate share hard "Not too much removed"
       check "the plan removes at most {safety.max_removed} percent of the bookmarks"
       by gates.share_ok
@@ -141,19 +138,16 @@ unit bookmarks agent
       fail -> declined "the person said no"
     step build "Build the new file" by steps.build
       do "write the new file into the work folder and read it again"
-      reads files.out
     gate verify hard "The new file keeps what it must"
       check "the new file has every bookmark that stays, with its title and URL, every folder of the export with its name, every new folder, and every moved bookmark in its new folder"
       by gates.verify
       fail -> held "the new file failed its check"
     gate target hard "The output file is free"
-      reads permissions.overwrite
       check "no file has the name of the output, or the rule permissions.overwrite is on"
       by gates.may_place
       fail -> held "the output file exists"
     step place "Place the new file" by steps.place
       do "copy the checked file to the folder of files.out; the export and the files of the browser stay as they are"
-      reads permissions.overwrite
   end done "Written: import the new file into Edge"
   end bad-file "Not a bookmarks export"
   end held "Held back by a safety check: nothing written"

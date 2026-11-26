@@ -7,7 +7,7 @@ description: Build and maintain instrumental agents with Rig - tools and agents 
 
 Rig is a kit and a method for building **instrumental agents**: a model that operates tools to do a defined job. Its name is the three parts of the work: **R**eason (the model: judgment, and only where it is needed), **I**ntent (what the tool must do, in plain words), **G**ate (who decides whether it did: code, the model, or a person).
 
-One `.rig` file is the source of a tool: its rules, steps, gates and ends. The order of its lines is the order of the flow; a few blocks (`for`, `until`, `if`, `else`, `section`, `finally`) hold loops and choices. The code lives in normal files. A runner walks the flow: code does the steps and decides the gates, and the run stops only where it needs the model or a person. The Claude skill and the local-model plugin of a tool are compiled from the source, and both call the same code.
+One `.rig` file is the source of a tool: its rules, steps, gates and ends. The order of its lines is the order of the flow; a few blocks (`for`, `until`, `if`, `else`, `section`, `finally`) hold loops and choices. The code lives in normal files. A runner walks the flow: code does the steps and decides the gates, and the run stops only where it needs the model or a person. The Claude skill, the local-model plugin and the stdio MCP server of a tool are all driven from the same compiled source.
 
 `RIG` below means `python3 <this folder>/rig.py` (Python 3, standard library only).
 
@@ -15,11 +15,12 @@ One `.rig` file is the source of a tool: its rules, steps, gates and ends. The o
 
 | Task | Read |
 |---|---|
+| Quick reference: grammar, Python signatures, `rig.json`, CLI | [cheatsheet.md](cheatsheet.md) (one page) |
 | Build a new tool or agent | [guide/README.md](guide/README.md) (the method, one page), then [guide/build-order.md](guide/build-order.md) |
 | Choose how much a tool needs | [guide/levels.md](guide/levels.md) |
 | Change a tool: a value, a gate, the flow, the code | [change.md](change.md) |
 | Design a step or a gate that a local model does | [guide/weak-model.md](guide/weak-model.md) |
-| Connect a tool to Claude or to a local model | [guide/fronts.md](guide/fronts.md) |
+| Connect a tool to Claude, a local model, or an MCP host | [guide/fronts.md](guide/fronts.md) |
 | A tool that changes real files, works on many items, or needs the eye of a person | [guide/patterns.md](guide/patterns.md) |
 | A question about a word of the language | [spec.md](spec.md) |
 
@@ -32,14 +33,15 @@ The pattern to copy is the example tool `examples/release-tool` of the Rig repos
 | Command | Use |
 |---|---|
 | `RIG new DIR NAME --level N` | Make a project: a working tool of level 1 to 4, to change into the real one. |
-| `RIG build DIR` | Compile the source to the catalogue, the skill, the tool definitions and the plugin front. `--check`: fail if a compiled file is not current. |
-| `RIG doctor DIR` | Check the project against the list of its level. Each line is `ok` or `MISS`. |
+| `RIG build DIR` | Compile the source to the catalogue, the lean skill, the tool definitions and the plugin front. `--check`: fail if a compiled file is not current. |
+| `RIG doctor DIR [--json]` | Check the project against the list of its level. Each line is `ok` or `MISS` (`--json` prints structured output). |
 | `RIG test DIR [--replay RUN]` | Run the tests of the project, or play the recorded answers of one run again with the current code. |
 | `RIG plugin DIR --owner NAME` | Add the LM Studio plugin: the front for a local model. |
+| `RIG mcp-config DIR [--api-url URL] [--model NAME]` | Print a ready-to-paste MCP server JSON config block for the project. |
 | `RIG check FILE` | Validate a `.rig` file. Show the status and the coverage of each unit. |
 | `RIG serve FILE --json OUT` | Show the file as tables and as a graph on 127.0.0.1. Values can be changed there. |
-| `python3 tool.py run '<JSON>'` | In a project: start a run. `batch`, `queues`, `answer`, `approve`, `resume`, `status`, `rerun`, `replay`, `rules`, `flow`, `call`, `regress`: see [guide/fronts.md](guide/fronts.md). |
-| `RIG compile json\|skill\|tool FILE`, `RIG from-json FILE` | One unit to one form, and a catalogue back to Rig. `build` uses the same compilers. |
+| `python3 tool.py run '<JSON>'` | In a project: start a run. Also `batch`, `queues`, `answer`, `approve`, `work`, `mcp`, `serve-stdio`, `drop`, `list`, `prune`, `resume`, `status`, `rerun`, `replay`, `rules`, `flow`, `call`, `regress`: see [guide/fronts.md](guide/fronts.md). |
+| `RIG compile json\|skill\|tool FILE` | One unit to one form. `build` uses the same compilers. |
 
 ## How to work
 

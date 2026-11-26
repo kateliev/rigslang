@@ -31,7 +31,7 @@ It needs Python 3 and the network.
 python3 tool.py run '{"band": "Pink Floyd"}'
 ```
 
-The run waits at `is-band`, with the title, the description and the summary of the article in `sees`. Answer with the run id of the result:
+The run waits at `is-band`, with the title, the description and the summary of the article in `sees`. Answer with the short run id of the result (for example `r1`):
 
 ```bash
 python3 tool.py answer RUN '{"pass": true}'
