@@ -1,0 +1,576 @@
+[
+ {
+  "name": "no list fits the story",
+  "inputs": {
+   "story": "A rounded sans for the menu of a bakery"
+  },
+  "rules": {
+   "names.seed": 7
+  },
+  "answers": {
+   "topic": {
+    "result": {
+     "list": "none",
+     "why": "the story asks for nothing of the lists"
+    }
+   }
+  },
+  "expect": {
+   "end": "no-list",
+   "path": [
+    "lists",
+    "topic",
+    "topic-ok",
+    "has-list",
+    "no-list"
+   ]
+  }
+ },
+ {
+  "name": "the model names a list the tool does not have, twice",
+  "inputs": {
+   "story": "A sturdy serif for a museum show about the siege of Troy"
+  },
+  "rules": {
+   "names.seed": 7
+  },
+  "answers": {
+   "topic": [
+    {
+     "result": {
+      "list": "greek-heroes",
+      "why": "Troy"
+     }
+    },
+    {
+     "result": {
+      "list": "iliad",
+      "why": "Troy"
+     }
+    }
+   ]
+  },
+  "expect": {
+   "end": "held",
+   "path": [
+    "lists",
+    "topic",
+    "topic-ok",
+    "topic",
+    "topic-ok",
+    "held"
+   ]
+  }
+ },
+ {
+  "name": "the model chooses names that were not drawn, twice",
+  "inputs": {
+   "story": "A sturdy serif for a museum show about the siege of Troy"
+  },
+  "rules": {
+   "names.seed": 7
+  },
+  "answers": {
+   "topic": {
+    "result": {
+     "list": "trojan-heroes",
+     "why": "the story is about the siege of Troy"
+    }
+   },
+   "pick": [
+    {
+     "result": [
+      {
+       "name": "Achilles",
+       "why": "the best known hero of Troy"
+      },
+      {
+       "name": "Hector",
+       "why": "the first fighter of Troy"
+      },
+      {
+       "name": "Odysseus",
+       "why": "the hero of the long way home"
+      }
+     ]
+    },
+    {
+     "result": [
+      {
+       "name": "Achilles",
+       "why": "the best known hero of Troy"
+      },
+      {
+       "name": "Hector",
+       "why": "the first fighter of Troy"
+      },
+      {
+       "name": "Odysseus",
+       "why": "the hero of the long way home"
+      }
+     ]
+    }
+   ]
+  },
+  "expect": {
+   "end": "held",
+   "path": [
+    "lists",
+    "topic",
+    "topic-ok",
+    "has-list",
+    "sample",
+    "pick",
+    "picks-ok",
+    "pick",
+    "picks-ok",
+    "held"
+   ]
+  }
+ },
+ {
+  "name": "a name is longer than family.max_name",
+  "inputs": {
+   "story": "A sturdy serif for a museum show about the siege of Troy"
+  },
+  "rules": {
+   "names.seed": 7,
+   "family.max_name": 7
+  },
+  "answers": {
+   "topic": {
+    "result": {
+     "list": "trojan-heroes",
+     "why": "the story is about the siege of Troy"
+    }
+   },
+   "pick": {
+    "result": [
+     {
+      "name": "Odysseus",
+      "why": "the hero of the long way home; the long name reads well in a serif"
+     },
+     {
+      "name": "Diomedes",
+      "why": "a bold fighter at the walls of Troy; round letters for a sturdy face"
+     },
+     {
+      "name": "Glaucus",
+      "why": "an ally who fought for Troy; a short name with an open G"
+     }
+    ]
+   }
+  },
+  "expect": {
+   "end": "held",
+   "path": [
+    "lists",
+    "topic",
+    "topic-ok",
+    "has-list",
+    "sample",
+    "pick",
+    "picks-ok",
+    "names",
+    "names-ok",
+    "held"
+   ]
+  }
+ },
+ {
+  "name": "the model gate says the names do not fit",
+  "inputs": {
+   "story": "A sturdy serif for a museum show about the siege of Troy"
+  },
+  "rules": {
+   "names.seed": 7
+  },
+  "answers": {
+   "topic": {
+    "result": {
+     "list": "trojan-heroes",
+     "why": "the story is about the siege of Troy"
+    }
+   },
+   "pick": {
+    "result": [
+     {
+      "name": "Odysseus",
+      "why": "the hero of the long way home; the long name reads well in a serif"
+     },
+     {
+      "name": "Diomedes",
+      "why": "a bold fighter at the walls of Troy; round letters for a sturdy face"
+     },
+     {
+      "name": "Glaucus",
+      "why": "an ally who fought for Troy; a short name with an open G"
+     }
+    ]
+   },
+   "fits": {
+    "pass": false,
+    "why": "Glaucus is a minor ally"
+   }
+  },
+  "expect": {
+   "end": "held",
+   "path": [
+    "lists",
+    "topic",
+    "topic-ok",
+    "has-list",
+    "sample",
+    "pick",
+    "picks-ok",
+    "names",
+    "names-ok",
+    "fits",
+    "held"
+   ]
+  }
+ },
+ {
+  "name": "the person chooses none",
+  "inputs": {
+   "story": "A sturdy serif for a museum show about the siege of Troy"
+  },
+  "rules": {
+   "names.seed": 7
+  },
+  "answers": {
+   "topic": {
+    "result": {
+     "list": "trojan-heroes",
+     "why": "the story is about the siege of Troy"
+    }
+   },
+   "pick": {
+    "result": [
+     {
+      "name": "Odysseus",
+      "why": "the hero of the long way home; the long name reads well in a serif"
+     },
+     {
+      "name": "Diomedes",
+      "why": "a bold fighter at the walls of Troy; round letters for a sturdy face"
+     },
+     {
+      "name": "Glaucus",
+      "why": "an ally who fought for Troy; a short name with an open G"
+     }
+    ]
+   },
+   "fits": {
+    "pass": true,
+    "why": "all three are heroes of the siege of Troy"
+   },
+   "choose": {
+    "person": true,
+    "pass": false
+   }
+  },
+  "expect": {
+   "end": "declined",
+   "path": [
+    "lists",
+    "topic",
+    "topic-ok",
+    "has-list",
+    "sample",
+    "pick",
+    "picks-ok",
+    "names",
+    "names-ok",
+    "fits",
+    "choose",
+    "declined"
+   ]
+  }
+ },
+ {
+  "name": "the folder of the family exists",
+  "inputs": {
+   "story": "A sturdy serif for a museum show about the siege of Troy"
+  },
+  "rules": {
+   "names.seed": 7,
+   "files.out": "tests/cases/taken"
+  },
+  "answers": {
+   "topic": {
+    "result": {
+     "list": "trojan-heroes",
+     "why": "the story is about the siege of Troy"
+    }
+   },
+   "pick": {
+    "result": [
+     {
+      "name": "Odysseus",
+      "why": "the hero of the long way home; the long name reads well in a serif"
+     },
+     {
+      "name": "Diomedes",
+      "why": "a bold fighter at the walls of Troy; round letters for a sturdy face"
+     },
+     {
+      "name": "Glaucus",
+      "why": "an ally who fought for Troy; a short name with an open G"
+     }
+    ]
+   },
+   "fits": {
+    "pass": true,
+    "why": "all three are heroes of the siege of Troy"
+   },
+   "choose": {
+    "person": true,
+    "answer": "2"
+   }
+  },
+  "expect": {
+   "end": "held",
+   "path": [
+    "lists",
+    "topic",
+    "topic-ok",
+    "has-list",
+    "sample",
+    "pick",
+    "picks-ok",
+    "names",
+    "names-ok",
+    "fits",
+    "choose",
+    "free",
+    "held"
+   ]
+  }
+ },
+ {
+  "name": "retries, a wrong answer of the person, then the placeholders",
+  "inputs": {
+   "story": "A sturdy serif for a museum show about the siege of Troy"
+  },
+  "rules": {
+   "names.seed": 7,
+   "files.out": "tests/out"
+  },
+  "answers": {
+   "topic": [
+    {
+     "result": {
+      "list": "heroes",
+      "why": "Troy"
+     }
+    },
+    {
+     "result": {
+      "list": "trojan-heroes",
+      "why": "the story is about the siege of Troy"
+     }
+    }
+   ],
+   "pick": [
+    {
+     "result": [
+      {
+       "name": "Achilles",
+       "why": "the best known hero of Troy"
+      },
+      {
+       "name": "Hector",
+       "why": "the first fighter of Troy"
+      },
+      {
+       "name": "Odysseus",
+       "why": "the hero of the long way home"
+      }
+     ]
+    },
+    {
+     "result": [
+      {
+       "name": "Odysseus",
+       "why": "the hero of the long way home; the long name reads well in a serif"
+      },
+      {
+       "name": "Diomedes",
+       "why": "a bold fighter at the walls of Troy; round letters for a sturdy face"
+      },
+      {
+       "name": "Glaucus",
+       "why": "an ally who fought for Troy; a short name with an open G"
+      }
+     ]
+    }
+   ],
+   "fits": {
+    "pass": true,
+    "why": "all three are heroes of the siege of Troy"
+   },
+   "choose": [
+    {
+     "person": true,
+     "answer": "4"
+    },
+    {
+     "person": true,
+     "answer": "Diomedes"
+    }
+   ]
+  },
+  "expect": {
+   "end": "done",
+   "path": [
+    "lists",
+    "topic",
+    "topic-ok",
+    "topic",
+    "topic-ok",
+    "has-list",
+    "sample",
+    "pick",
+    "picks-ok",
+    "pick",
+    "picks-ok",
+    "names",
+    "names-ok",
+    "fits",
+    "choose",
+    "choose",
+    "free",
+    "write",
+    "written",
+    "report",
+    "done"
+   ]
+  }
+ },
+ {
+  "name": "the winds, the default choice",
+  "inputs": {
+   "story": "A light italic for a sailing club: the names of the winds"
+  },
+  "rules": {
+   "names.seed": 7,
+   "files.out": "tests/out"
+  },
+  "answers": {
+   "topic": {
+    "result": {
+     "list": "winds",
+     "why": "the story asks for the winds"
+    }
+   },
+   "pick": {
+    "result": [
+     {
+      "name": "Zephyrus",
+      "why": "the light west wind of spring, for a light italic"
+     },
+     {
+      "name": "Boreas",
+      "why": "the north wind; a short, firm name"
+     },
+     {
+      "name": "Notus",
+      "why": "the south wind; five letters with round forms"
+     }
+    ]
+   },
+   "fits": {
+    "pass": true,
+    "why": "all three are winds"
+   },
+   "choose": {
+    "person": true
+   }
+  },
+  "expect": {
+   "end": "done",
+   "path": [
+    "lists",
+    "topic",
+    "topic-ok",
+    "has-list",
+    "sample",
+    "pick",
+    "picks-ok",
+    "names",
+    "names-ok",
+    "fits",
+    "choose",
+    "free",
+    "write",
+    "written",
+    "report",
+    "done"
+   ]
+  }
+ },
+ {
+  "name": "a tree story draws from plants",
+  "inputs": {
+   "story": "A calm book face named after a tree"
+  },
+  "rules": {
+   "names.seed": 7,
+   "files.out": "tests/out"
+  },
+  "answers": {
+   "topic": {
+    "result": {
+     "list": "plants",
+     "why": "the story asks for a tree, and plants is the list of trees"
+    }
+   },
+   "pick": {
+    "result": [
+     {
+      "name": "Metasequoia glyptostroboides",
+      "why": "the dawn redwood, a calm and very old tree"
+     },
+     {
+      "name": "Sequoiadendron giganteum",
+      "why": "the giant sequoia stands still for thousands of years"
+     },
+     {
+      "name": "Chamaecyparis nootkatensis",
+      "why": "a quiet cypress of the northern coast"
+     }
+    ]
+   },
+   "fits": {
+    "pass": true,
+    "why": "all three are trees, as the story asks"
+   },
+   "choose": {
+    "person": true,
+    "answer": "1"
+   }
+  },
+  "expect": {
+   "end": "done",
+   "path": [
+    "lists",
+    "topic",
+    "topic-ok",
+    "has-list",
+    "sample",
+    "pick",
+    "picks-ok",
+    "names",
+    "names-ok",
+    "fits",
+    "choose",
+    "free",
+    "write",
+    "written",
+    "report",
+    "done"
+   ]
+  }
+ }
+]

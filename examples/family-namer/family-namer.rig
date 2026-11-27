@@ -1,0 +1,96 @@
+; family-namer: name a new font family after what a story asks for, then make placeholder files.
+; Code holds the lists of names and draws at random. A fast model step only picks the list that
+; the story asks for. A creative reason block chooses three names from the draw, with reasons.
+; Code checks every name; the model guesses whether they fit; a person chooses one.
+; The output folder is the input of font-names: run it there to shorten the file names.
+; Build: python3 ../../skills/rig/rig.py build .    Run: python3 tool.py run '{"story": "..."}'
+
+unit family-namer
+  intent "name a new font family after a figure or a thing that the story asks for: a name drawn at random from a list of the tool, chosen with reasons, and valid as a family name"
+    audience "type designers who name a new family"
+    style "three names, one sentence of reason for each, no invented names"
+    never "propose a name that is not in a list of the tool" -> picks-ok
+    never "write files without the choice of a person" -> choose
+    never "write into a folder that exists" -> free
+  in story text "what the family is for, and what it should be named after"
+  out text "the chosen name, its reason, and the folder of placeholder font files"
+  code gates gates.py
+    test tests/test_gates.py
+  code steps steps.py
+    test tests/test_steps.py
+
+  rules names
+    lists "lists" "Folder of the name lists, one JSON file for each list"
+    sample 8 3..30 "Names that code draws at random from the list"
+      note "at least the three candidates of pick (with 2, every run is held back at picks-ok); eight gives the model a choice and keeps the prompt short. The smallest list has 13 names"
+    seed 0 0.._ "Seed of the draw; 0 makes a new draw for each run"
+      note "a fixed seed makes a run repeatable: the regression set uses one"
+  rules family
+    styles ["Regular", "Italic", "Bold", "BoldItalic"] "Styles of the placeholder family"
+    formats [".otf"] "File formats of the placeholders"
+    max_name 28 3..63 "Longest family name, in characters"
+      note "name ID 1 has at most 31 characters; 28 leaves room for a short word such as Text"
+  rule files.out "out" "Folder for the new families, relative to the tool folder"
+
+  ; The lines run in order. A gate that passes goes on to the next line; a fail goes to an end.
+  step lists "Read the lists" by steps.lists
+    do "read the name lists: the name of each list, what it holds, and how many names it has"
+    reads names.lists
+  step topic "Choose a list" by model
+    do "read the story and pick the one list whose names the story asks for. Give its name exactly as in lists, or none when no list fits"
+    sees story lists
+    out {list: str, why: str}
+  gate topic-ok hard "An answer the tool knows" by gates.topic_ok
+    check "the answer names one of the lists, or none"
+    retry 1
+    fail -> held "the model named no list of the tool"
+  gate has-list hard "A list fits the story" by gates.has_list
+    check "the answer is a list, not none"
+    fail -> no-list "no list of the tool fits the story"
+  step sample "Draw names" by steps.sample
+    do "draw names at random from the list, each with its note"
+    reads names.*
+  reason pick "Choose names"
+    intent "choose the names that fit the story best, as a type designer names a family"
+      style "one sentence of reason for each name: the story, and how the name looks in letters"
+    do "from the drawn names, choose the three that fit the story best, best first. Give each name exactly as drawn, and one sentence why it fits"
+    mode creative
+    candidates 3
+    sees story topic sample
+    out {name: str, why: str}
+  gate picks-ok hard "Names from the draw" by gates.picks_ok
+    check "each pick is a drawn name, and no name comes twice"
+    retry 1
+    fail -> held "the model chose names that were not drawn"
+  step names "Family names" by steps.names
+    do "make each pick a family name: Latin letters and digits, no spaces; list the families that exist in files.out"
+    reads family.max_name files.out
+  gate names-ok hard "Valid family names" by gates.names_ok
+    check "each family name has only ASCII letters and digits, starts with a letter, has at most {family.max_name} characters, and no two are the same"
+    fail -> held "a name is not a valid family name"
+  gate fits model "The names fit the story"
+    check "pass when each name fits what the story asks for; fail when a name ignores it"
+    sees story pick
+    fail -> held "the names do not fit the story"
+  gate choose human "Which name for the family?"
+    check "show the person the three names with their reasons. A name can be the name of a font that exists, or a trademark: the tool cannot check that"
+    sees names
+    options 1 | 2 | 3
+    by steps.choice
+    fail -> declined "the person chose none"
+  gate free hard "The family folder is new" by gates.free
+    check "no folder of the chosen family is in files.out yet"
+    fail -> held "the folder of that family exists"
+  step write "Write the placeholders" by steps.write
+    do "make the folder of the family in files.out, with one empty file for each style and format: Family-Style.otf"
+    reads family.styles family.formats files.out
+  gate written hard "Every placeholder is there" by gates.written
+    check "every placeholder file is in the new folder, and nothing else"
+    fail -> held "a placeholder is missing"
+  step report "The result" by steps.report
+    do "give the chosen name, its reason, the seed of the draw, and the folder of the placeholders"
+    note "the run shows the value of the step before its end; without this step the run ends after a gate and gives no result"
+  end done "Named: run font-names on the new folder"
+  end no-list "No list fits the story"
+  end held "Held back: nothing written"
+  end declined "The person chose none: nothing written"

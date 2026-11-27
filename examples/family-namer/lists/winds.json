@@ -1,0 +1,20 @@
+{
+ "name": "winds",
+ "about": "The Greek gods of the winds (the Anemoi): the four chief winds and the lesser winds",
+ "source": "https://en.wikipedia.org/wiki/Anemoi",
+ "names": [
+  {"name": "Boreas", "note": "North wind: the cold air of winter"},
+  {"name": "Zephyrus", "note": "West wind: light breezes of spring and early summer"},
+  {"name": "Notus", "note": "South wind: the storms of late summer and autumn"},
+  {"name": "Eurus", "note": "Southeast wind: a storm wind that tosses ships"},
+  {"name": "Kaikias", "note": "Northeast wind: shown with a shield full of hail"},
+  {"name": "Apeliotes", "note": "Southeast wind: rain that helps the farmers"},
+  {"name": "Skiron", "note": "Northwest wind: the start of winter"},
+  {"name": "Lips", "note": "Southwest wind: shown with the stern of a ship"},
+  {"name": "Argestes", "note": "Northwest wind: a wind that clears the sky"},
+  {"name": "Thrascias", "note": "North-northwest wind"},
+  {"name": "Euronotus", "note": "South-southeast wind"},
+  {"name": "Iapyx", "note": "Northwest wind, near the direction of Skiron"},
+  {"name": "Libonotus", "note": "South-southwest wind"}
+ ]
+}

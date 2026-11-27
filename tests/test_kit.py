@@ -19,6 +19,7 @@ import rig_project  # noqa: E402
 import rigkit  # noqa: E402
 
 FONT_NAMES = os.path.join(ROOT, 'examples', 'font-names')  # the pattern example
+FAMILY_NAMER = os.path.join(ROOT, 'examples', 'family-namer')  # level 2: its output folder is the input of font-names
 
 FLOW = '''unit demo
   in n int "a number"
@@ -1243,7 +1244,7 @@ try {
 			shutil.rmtree(tmp)
 
 	def test_examples_are_current_and_complete(self):
-		for folder in (FONT_NAMES,):
+		for folder in (FONT_NAMES, FAMILY_NAMER):
 			self.assertEqual(self.quiet(rig_project.build, folder, True)[0], 0, 'run: rig.py build ' + folder)
 			code, out = self.quiet(rig_project.doctor, folder)
 			self.assertEqual(code, 0, out)

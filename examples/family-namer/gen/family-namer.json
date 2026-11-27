@@ -1,0 +1,490 @@
+{
+ "rig": 2,
+ "unit": "family-namer",
+ "preset": null,
+ "intent": "name a new font family after a figure or a thing that the story asks for: a name drawn at random from a list of the tool, chosen with reasons, and valid as a family name",
+ "notes": [],
+ "code": [
+  {
+   "prefix": "gates",
+   "file": "gates.py",
+   "test": "tests/test_gates.py"
+  },
+  {
+   "prefix": "steps",
+   "file": "steps.py",
+   "test": "tests/test_steps.py"
+  }
+ ],
+ "in": [
+  {
+   "name": "story",
+   "type": "text",
+   "text": "what the family is for, and what it should be named after",
+   "schema": {
+    "type": "string"
+   }
+  }
+ ],
+ "out": {
+  "type": "text",
+  "text": "the chosen name, its reason, and the folder of placeholder font files",
+  "schema": {
+   "type": "string"
+  }
+ },
+ "start": "lists",
+ "rollback": null,
+ "finally": null,
+ "body": [
+  "lists",
+  "topic",
+  "topic-ok",
+  "has-list",
+  "sample",
+  "pick",
+  "picks-ok",
+  "names",
+  "names-ok",
+  "fits",
+  "choose",
+  "free",
+  "write",
+  "written",
+  "report",
+  "done",
+  "no-list",
+  "held",
+  "declined"
+ ],
+ "coverage": {
+  "gates": 8,
+  "tested": 6,
+  "code": 0,
+  "model": 1,
+  "human": 1,
+  "none": 0
+ },
+ "presets": {},
+ "rules": [
+  {
+   "id": "names.lists",
+   "group": "names",
+   "label": "Folder of the name lists, one JSON file for each list",
+   "type": "text",
+   "value": "lists",
+   "default": "lists"
+  },
+  {
+   "id": "names.sample",
+   "group": "names",
+   "label": "Names that code draws at random from the list",
+   "type": "number",
+   "value": 8,
+   "default": 8,
+   "min": 3,
+   "max": 30,
+   "note": "at least the three candidates of pick (with 2, every run is held back at picks-ok); eight gives the model a choice and keeps the prompt short. The smallest list has 13 names"
+  },
+  {
+   "id": "names.seed",
+   "group": "names",
+   "label": "Seed of the draw; 0 makes a new draw for each run",
+   "type": "number",
+   "value": 0,
+   "default": 0,
+   "min": 0,
+   "note": "a fixed seed makes a run repeatable: the regression set uses one"
+  },
+  {
+   "id": "family.styles",
+   "group": "family",
+   "label": "Styles of the placeholder family",
+   "type": "list",
+   "value": [
+    "Regular",
+    "Italic",
+    "Bold",
+    "BoldItalic"
+   ],
+   "default": [
+    "Regular",
+    "Italic",
+    "Bold",
+    "BoldItalic"
+   ]
+  },
+  {
+   "id": "family.formats",
+   "group": "family",
+   "label": "File formats of the placeholders",
+   "type": "list",
+   "value": [
+    ".otf"
+   ],
+   "default": [
+    ".otf"
+   ]
+  },
+  {
+   "id": "family.max_name",
+   "group": "family",
+   "label": "Longest family name, in characters",
+   "type": "number",
+   "value": 28,
+   "default": 28,
+   "min": 3,
+   "max": 63,
+   "note": "name ID 1 has at most 31 characters; 28 leaves room for a short word such as Text"
+  },
+  {
+   "id": "files.out",
+   "group": "files",
+   "label": "Folder for the new families, relative to the tool folder",
+   "type": "text",
+   "value": "out",
+   "default": "out"
+  }
+ ],
+ "flow": [
+  {
+   "id": "lists",
+   "kind": "step",
+   "lane": "code",
+   "name": "Read the lists",
+   "do": "read the name lists: the name of each list, what it holds, and how many names it has",
+   "by": [
+    "steps.lists"
+   ],
+   "reads": [
+    "names.lists"
+   ],
+   "next": "topic"
+  },
+  {
+   "id": "topic",
+   "kind": "step",
+   "lane": "model",
+   "name": "Choose a list",
+   "do": "read the story and pick the one list whose names the story asks for. Give its name exactly as in lists, or none when no list fits",
+   "sees": [
+    "story",
+    "lists"
+   ],
+   "out": "{list: str, why: str}",
+   "schema": {
+    "type": "object",
+    "properties": {
+     "list": {
+      "type": "string"
+     },
+     "why": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "list",
+     "why"
+    ],
+    "additionalProperties": false
+   },
+   "next": "topic-ok"
+  },
+  {
+   "id": "topic-ok",
+   "kind": "hard",
+   "lane": "code",
+   "name": "An answer the tool knows",
+   "check": "the answer names one of the lists, or none",
+   "by": [
+    "gates.topic_ok"
+   ],
+   "retry": 1,
+   "fail": [
+    {
+     "to": "held",
+     "when": "the model named no list of the tool"
+    }
+   ],
+   "next": "has-list",
+   "back": "topic"
+  },
+  {
+   "id": "has-list",
+   "kind": "hard",
+   "lane": "code",
+   "name": "A list fits the story",
+   "check": "the answer is a list, not none",
+   "by": [
+    "gates.has_list"
+   ],
+   "fail": [
+    {
+     "to": "no-list",
+     "when": "no list of the tool fits the story"
+    }
+   ],
+   "next": "sample"
+  },
+  {
+   "id": "sample",
+   "kind": "step",
+   "lane": "code",
+   "name": "Draw names",
+   "do": "draw names at random from the list, each with its note",
+   "by": [
+    "steps.sample"
+   ],
+   "reads": [
+    "names.lists",
+    "names.sample",
+    "names.seed"
+   ],
+   "next": "pick"
+  },
+  {
+   "id": "pick",
+   "kind": "reason",
+   "lane": "model",
+   "name": "Choose names",
+   "mode": "creative",
+   "intent": "choose the names that fit the story best, as a type designer names a family",
+   "intent_spec": {
+    "text": "choose the names that fit the story best, as a type designer names a family",
+    "style": "one sentence of reason for each name: the story, and how the name looks in letters"
+   },
+   "candidates": 3,
+   "do": "from the drawn names, choose the three that fit the story best, best first. Give each name exactly as drawn, and one sentence why it fits",
+   "sees": [
+    "story",
+    "topic",
+    "sample"
+   ],
+   "out": "{name: str, why: str}",
+   "schema": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string"
+     },
+     "why": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "why"
+    ],
+    "additionalProperties": false
+   },
+   "next": "picks-ok"
+  },
+  {
+   "id": "picks-ok",
+   "kind": "hard",
+   "lane": "code",
+   "name": "Names from the draw",
+   "check": "each pick is a drawn name, and no name comes twice",
+   "by": [
+    "gates.picks_ok"
+   ],
+   "retry": 1,
+   "fail": [
+    {
+     "to": "held",
+     "when": "the model chose names that were not drawn"
+    }
+   ],
+   "next": "names",
+   "back": "pick"
+  },
+  {
+   "id": "names",
+   "kind": "step",
+   "lane": "code",
+   "name": "Family names",
+   "do": "make each pick a family name: Latin letters and digits, no spaces; list the families that exist in files.out",
+   "by": [
+    "steps.names"
+   ],
+   "reads": [
+    "family.max_name",
+    "files.out"
+   ],
+   "next": "names-ok"
+  },
+  {
+   "id": "names-ok",
+   "kind": "hard",
+   "lane": "code",
+   "name": "Valid family names",
+   "check": "each family name has only ASCII letters and digits, starts with a letter, has at most {family.max_name} characters, and no two are the same",
+   "by": [
+    "gates.names_ok"
+   ],
+   "reads": [
+    "family.max_name"
+   ],
+   "fail": [
+    {
+     "to": "held",
+     "when": "a name is not a valid family name"
+    }
+   ],
+   "next": "fits"
+  },
+  {
+   "id": "fits",
+   "kind": "model",
+   "lane": "model",
+   "name": "The names fit the story",
+   "check": "pass when each name fits what the story asks for; fail when a name ignores it",
+   "sees": [
+    "story",
+    "pick"
+   ],
+   "fail": [
+    {
+     "to": "held",
+     "when": "the names do not fit the story"
+    }
+   ],
+   "next": "choose"
+  },
+  {
+   "id": "choose",
+   "kind": "human",
+   "lane": "person",
+   "name": "Which name for the family?",
+   "check": "show the person the three names with their reasons. A name can be the name of a font that exists, or a trademark: the tool cannot check that",
+   "by": [
+    "steps.choice"
+   ],
+   "sees": [
+    "names"
+   ],
+   "options": [
+    "1",
+    "2",
+    "3"
+   ],
+   "fail": [
+    {
+     "to": "declined",
+     "when": "the person chose none"
+    }
+   ],
+   "next": "free"
+  },
+  {
+   "id": "free",
+   "kind": "hard",
+   "lane": "code",
+   "name": "The family folder is new",
+   "check": "no folder of the chosen family is in files.out yet",
+   "by": [
+    "gates.free"
+   ],
+   "fail": [
+    {
+     "to": "held",
+     "when": "the folder of that family exists"
+    }
+   ],
+   "next": "write"
+  },
+  {
+   "id": "write",
+   "kind": "step",
+   "lane": "code",
+   "name": "Write the placeholders",
+   "do": "make the folder of the family in files.out, with one empty file for each style and format: Family-Style.otf",
+   "by": [
+    "steps.write"
+   ],
+   "reads": [
+    "family.styles",
+    "family.formats",
+    "files.out"
+   ],
+   "next": "written"
+  },
+  {
+   "id": "written",
+   "kind": "hard",
+   "lane": "code",
+   "name": "Every placeholder is there",
+   "check": "every placeholder file is in the new folder, and nothing else",
+   "by": [
+    "gates.written"
+   ],
+   "fail": [
+    {
+     "to": "held",
+     "when": "a placeholder is missing"
+    }
+   ],
+   "next": "report"
+  },
+  {
+   "id": "report",
+   "kind": "step",
+   "lane": "code",
+   "name": "The result",
+   "do": "give the chosen name, its reason, the seed of the draw, and the folder of the placeholders",
+   "by": [
+    "steps.report"
+   ],
+   "next": "done",
+   "notes": [
+    {
+     "text": "the run shows the value of the step before its end; without this step the run ends after a gate and gives no result"
+    }
+   ]
+  },
+  {
+   "id": "done",
+   "kind": "end",
+   "lane": "end",
+   "name": "Named: run font-names on the new folder"
+  },
+  {
+   "id": "no-list",
+   "kind": "end",
+   "lane": "end",
+   "name": "No list fits the story"
+  },
+  {
+   "id": "held",
+   "kind": "end",
+   "lane": "end",
+   "name": "Held back: nothing written"
+  },
+  {
+   "id": "declined",
+   "kind": "end",
+   "lane": "end",
+   "name": "The person chose none: nothing written"
+  }
+ ],
+ "blocks": [],
+ "intent_spec": {
+  "text": "name a new font family after a figure or a thing that the story asks for: a name drawn at random from a list of the tool, chosen with reasons, and valid as a family name",
+  "audience": "type designers who name a new family",
+  "style": "three names, one sentence of reason for each, no invented names",
+  "never": [
+   {
+    "text": "propose a name that is not in a list of the tool",
+    "gate": "picks-ok"
+   },
+   {
+    "text": "write files without the choice of a person",
+    "gate": "choose"
+   },
+   {
+    "text": "write into a folder that exists",
+    "gate": "free"
+   }
+  ]
+ }
+}

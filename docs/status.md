@@ -1,6 +1,6 @@
 # Status
 
-Branch: `main`. Last change: 2026-11-27 (the pattern example is now `examples/font-names`; `release-tool`, `band-facts` and `bookmarks` were retired to git history. Before that: RIGS v2.1: system and language named RIGS — Reason, Intent, Gate, Steps — where RIGS builds rigs defined in `.rig` files; updated VS Code & Sublime Text syntax grammars + automated `syntax_test_rig.rig` scope checks, externalized viewer & HTTP resources in `skills/rig/resources/`, external `__NAME__.rig` templates, rule ergonomics, JSON rules sidecar, `state["_rig"]` metadata, lean `SKILL.md`, per-chat LM Studio plugin settings, and nested `until` / `choice` fixes). The history of the work is in the commit messages.
+Branch: `main`. Last change: 2026-11-27 (a second example, `examples/family-namer`, level 2, whose output is the input of font-names. Before that: the pattern example is now `examples/font-names`; `release-tool`, `band-facts` and `bookmarks` were retired to git history. Before that: RIGS v2.1: system and language named RIGS — Reason, Intent, Gate, Steps — where RIGS builds rigs defined in `.rig` files; updated VS Code & Sublime Text syntax grammars + automated `syntax_test_rig.rig` scope checks, externalized viewer & HTTP resources in `skills/rig/resources/`, external `__NAME__.rig` templates, rule ergonomics, JSON rules sidecar, `state["_rig"]` metadata, lean `SKILL.md`, per-chat LM Studio plugin settings, and nested `until` / `choice` fixes). The history of the work is in the commit messages.
 
 ## What RIGS is now
 
@@ -22,12 +22,15 @@ The pattern comes from a private production agent. Only the concept and the mach
 | Universal HTTP / MCP / OpenAPI front (`tool.py mcp`, `tool.py serve-http`, `rig.py mcp-config`) | `skills/rig/kit/rigkit.py`, `skills/rig/rig_project.py` | verified via stdio JSON-RPC, Streamable HTTP MCP, OpenAPI 3.1, `/viewer`, `/http.css`, and `/approve/<run>` tests; live external MCP/OpenAPI hosts not yet verified |
 | The graph viewer & external resources: three lanes (`code`, `model`, `person`), `reason` nodes, `rollback`/`finally` boxes, structured `intent`, `ui` rule badges; external `viewer.html`, `viewer.js`, and user-editable `viewer.css` (`--graph-col`, `--graph-gap`, `--graph-lane-pad`) & `http.css` copied into `<tool>/resources/` | `skills/rig/resources/`, `viewer/index.html`, `rig.py serve` | updated for v2; v1 checked in browser (2026-11-25) |
 | The pattern example, level 3 (`font-names`: short font file names for a delivery standard; structured `intent` with `never` mappings, `rules` blocks, a tuple rule, presets, a `reason` block with read-only arena tools and `candidates 2`, a `model` gate, a `human` gate, a permission, an undo log for `rollback`) | `examples/font-names/` | passes `build --check`, `doctor` (7 of 9 gates by tested code, 1 by the model, 1 by a person), 31 unit tests and 11 regression cases; no live model run yet; no plugin |
+| A second example, level 2 (`family-namer`: a name for a new font family from a story; a single-shot `step ... by model`, a `reason` block in `mode creative` with `candidates 3`, randomness by code with the seed rule `names.seed`, a `human` gate with `options 1 \| 2 \| 3` and `by steps.choice`; three name lists from Wikipedia, of which `plants` makes font-names reach its reason block `abbreviate`; its output folder is the input of font-names) | `examples/family-namer/` | passes `build --check`, `doctor` (6 of 8 gates by tested code, 1 by the model, 1 by a person), 23 unit tests and 10 regression cases; no live model run yet; not the pattern |
 
 Verification on 2026-11-27 (RIGS v2.1):
 
 - `python3 editors/build.py --check`: passes (both `rig.tmLanguage.json` and `Rig.sublime-syntax`, with column-level scope assertions in `editors/sublime/syntax_test_rig.rig` verified in `unittest`).
 - `python3 -W default -m unittest discover -s tests` (2026-11-27, Windows, Node 22.23.5): all 142 tests pass with 0 warnings. The suite includes the `test_docs.py` link, removed-word and `tool.py` docstring checks, the grammar scope checks, the loopback HTTP `serve` / `serve-http` tests, and the plugin bridge tests that run `.ts` files in Node (they need a Node that runs TypeScript without a flag).
-- `rig.py build --check`, `rig.py doctor` and `rig.py test` pass on `examples/font-names`.
+- `rig.py build --check`, `rig.py doctor` and `rig.py test` pass on `examples/font-names` and `examples/family-namer`.
+- The chain (2026-11-27, recorded answers): family-namer ended at `done` with `out/Diomedes` (4 empty `.otf` files); font-names on that folder ended at `same` with `--preset mac`, and gave `DMDSBD.otf`, `DMDSBDIT.otf`, `DMDSIT.otf`, `DMDSRG.otf` with `--preset dos` (dry run `ready`; with `permissions.rename=on`, `done`, then `restore`).
+- The chain on the list `plants` (2026-11-27, played answers in family-namer): font-names on `out/MetasequoiaGlyptostroboides` with `--preset mac` waits at `abbreviate` for the weak words `Metasequoia` and `Glyptostroboides`. `abbreviate` and `readable` were not answered. Record: `examples/family-namer/reports/chain-plants-2026-11-27.md`.
 - `rig.py new` at levels 1, 2, and 3 for both `--template flow` and `--template host` all pass their own `rig.py doctor`.
 
 ## Tested with real models
@@ -37,10 +40,12 @@ The full record of earlier v1 live runs is in [history/notes-2026-11.md](history
 - `band-facts` (2026-11-15): Claude Haiku through the compiled skill, and a local Qwen 35B in LM Studio through the plugin.
 - `bookmarks` (2026-11-23, 2026-11-25): local Qwen 35B in LM Studio on synthetic and real exports, including `work.ts`.
 - `examples/font-names` (2026-11-27): a blind Claude subagent answered `abbreviate` and `readable` through the command line, with only the compiled skill and the `waiting` JSON. Both of its tables were fair; it found the argument shape of `try_names` by a failed try. Record and findings: [examples/font-names/reports/blind-run-plants-2026-11-27.md](../examples/font-names/reports/blind-run-plants-2026-11-27.md). A local weaker model has not run it yet.
+- `examples/family-namer`: no live run yet.
 
 ## Not verified
 
 - A run of `reason abbreviate` in `examples/font-names` with a local weaker model (`tool.py work` or the plugin). Claude has run it blind (see Tested with real models).
+- A live model run of `examples/family-namer`: the fast `topic` step (for example, that a model picks `plants` for a tree story), the creative `reason pick` with three candidates, and the `fits` guess. Verified with recorded answers only.
 - Live external MCP/OpenAPI hosts (Claude Desktop, Claude Code, Cursor, LM Studio, Open WebUI, AnythingLLM, Jan) against `tool.py mcp` and `tool.py serve-http`. Verified via automated unit and loopback HTTP tests only.
 - Live `tool.py work` calls against real OpenAI-compatible, Ollama, and Anthropic endpoints (including two-tier routing and read-only `reason` arena loops). Verified via mocked HTTP unit tests only.
 - Live browser check of the updated v2 viewer (`reason` nodes, `rollback` boxes, structured `intent`, `ui` badges) and `/approve/<run>` visual/diff UI.
@@ -53,7 +58,8 @@ The full record of earlier v1 live runs is in [history/notes-2026-11.md](history
 | 1 | Live host tests for v2 fronts | Verify `tool.py serve-http` (Streamable HTTP MCP, OpenAPI 3.1, `/approve/<run>`), `tool.py mcp` with Elicitation, and two-tier `tool.py work` (`openai`, `ollama`, `anthropic`) against live clients and models. |
 | 2 | A guide-only build test | A fresh agent builds a small v2 tool from the skill, cheatsheet and guide, with no other help. |
 | 3 | A live run of the pattern example | Run `examples/font-names` with a real model on the `display` case (`--preset mac`): the arena calls, the two candidates, `abbr-ok`, the `readable` guess. Record it in `examples/font-names/reports/`. |
-| 4 | Not in version 2 | Delay between retries; parallel flow branches; visual block editor in the viewer. |
+| 4 | Findings from `family-namer` | (a) The `options` of a human gate are fixed words: `options 1 \| 2 \| 3` must match `candidates 3` by hand. (b) The range of a rule cannot be tied to `candidates`: `names.sample` must be at least 3 by hand (bug B2 of the example). (c) A run shows `result` only when a step comes right before the end; after a gate it shows none (bug B1 of the example: the step `report` was added). (d) When a human gate with `options` asks again ("not understood"), that problem stays in `problems` after a good answer. |
+| 5 | Not in version 2 | Delay between retries; parallel flow branches; visual block editor in the viewer. |
 
 ## Where the old things are
 
