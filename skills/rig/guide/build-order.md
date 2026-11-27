@@ -2,7 +2,7 @@
 
 For the agent that builds a tool, and for the person who asks for it. Do the stages in order. Each stage has a **done when** line: do not start the next stage before it is true.
 
-`RIG` is the path of `skills/rig/rig.py`. The pattern example is `examples/release-tool`.
+`RIG` is the path of `skills/rig/rig.py`. The pattern example is `examples/font-names`.
 
 | Stage | What | Level |
 |---|---|---|

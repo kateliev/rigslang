@@ -18,9 +18,7 @@ import rig  # noqa: E402
 import rig_project  # noqa: E402
 import rigkit  # noqa: E402
 
-RELEASE = os.path.join(ROOT, 'examples', 'release-tool')
-BAND = os.path.join(ROOT, 'examples', 'band-facts')
-BOOKMARKS = os.path.join(ROOT, 'examples', 'bookmarks')
+FONT_NAMES = os.path.join(ROOT, 'examples', 'font-names')  # the pattern example
 
 FLOW = '''unit demo
   in n int "a number"
@@ -486,11 +484,38 @@ class Pinned(unittest.TestCase):
 			'approval("approve yes")'
 			']));'
 		)
+		folder = os.path.join(self.tmp, 'p')
+		with contextlib.redirect_stdout(io.StringIO()):
+			rig_project.new(folder, 'demo-tool', 1)
+			rig_project.plugin(folder, 'tester')
 		r = subprocess.run(['node', '--no-warnings', '--input-type=module', '-e', code],
-			cwd=os.path.join(RELEASE, 'plugin'), capture_output=True, text=True)
+			cwd=os.path.join(folder, 'plugin'), capture_output=True, text=True)
 		self.assertEqual(r.returncode, 0, r.stderr)
 		got = json.loads(r.stdout.strip())
 		self.assertEqual(got, [['r1', ['yes']], ['r42', ['no', 'wait']], ['20261125-101500-01', ['yes']], ['', ['yes']]])
+
+	@unittest.skipUnless(shutil.which('node'), 'node is not installed')
+	def test_the_python3_store_stub_counts_as_missing(self):
+		# On Windows, python3 can be the Microsoft Store stub: it exists, prints "Python was not found" and exits
+		# with 9009. The bridge must then try "python", as for a missing command.
+		code = (
+			'import { pythonMissing } from "./src/bridge.ts";'
+			'console.log(JSON.stringify(['
+			'pythonMissing(9009, ""),'
+			'pythonMissing(1, "Python was not found; run without arguments to install from the Microsoft Store"),'
+			'pythonMissing(0, ""),'
+			'pythonMissing(1, "Traceback: Python was not found in the list"),'
+			'pythonMissing(null, "")'
+			']));'
+		)
+		folder = os.path.join(self.tmp, 'p')
+		with contextlib.redirect_stdout(io.StringIO()):
+			rig_project.new(folder, 'demo-tool', 1)
+			rig_project.plugin(folder, 'tester')
+		r = subprocess.run(['node', '--no-warnings', '--input-type=module', '-e', code],
+			cwd=os.path.join(folder, 'plugin'), capture_output=True, text=True)
+		self.assertEqual(r.returncode, 0, r.stderr)
+		self.assertEqual(json.loads(r.stdout.strip()), [True, True, False, False, False])
 
 	def test_drop_removes_from_queues_and_refuses_ended(self):
 		k = kit(runs=self.tmp)
@@ -770,7 +795,7 @@ class CommandLine(unittest.TestCase):
 			self.assertIn('refused', res[5]['result'])
 			self.assertEqual((res[6]['id'], res[6]['result']), (6, {'left_for_model': [], 'waits_for_person': []}))
 			# Subprocess test over real stdin/stdout pipes
-			p = subprocess.run([sys.executable, os.path.join(RELEASE, 'tool.py'), 'serve-stdio'],
+			p = subprocess.run([sys.executable, os.path.join(FONT_NAMES, 'tool.py'), 'serve-stdio'],
 				input=json.dumps({'id': 'a', 'argv': ['rules']}) + '\n' + json.dumps({'id': 'b', 'argv': ['flow']}) + '\n',
 				capture_output=True, text=True)
 			self.assertEqual(p.returncode, 0, p.stderr)
@@ -932,15 +957,17 @@ class CommandLine(unittest.TestCase):
 			self.assertEqual(json.loads(msgs[7]['result']['content'][0]['text'])['outcome']['end'], 'dropped')
 			self.assertEqual(json.loads(msgs[8]['result']['content'][0]['text']), {'left_for_model': [], 'waits_for_person': []})
 
-			# Verify release-tool over subprocess pipes: answer_step by default, work_run with --api-url & --model
+			# Verify the pattern example over subprocess pipes: answer_step (its reason block) and arena_call by default,
+			# work_run with --api-url & --model
 			list_req = json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}) + '\n'
-			p_rel = subprocess.run([sys.executable, os.path.join(RELEASE, 'tool.py'), 'mcp'], input=list_req, capture_output=True, text=True, env=env)
+			p_rel = subprocess.run([sys.executable, os.path.join(FONT_NAMES, 'tool.py'), 'mcp'], input=list_req, capture_output=True, text=True, env=env)
 			self.assertEqual(p_rel.returncode, 0, p_rel.stderr)
 			rel_names = [t['name'] for t in json.loads(p_rel.stdout.strip())['result']['tools']]
 			self.assertIn('answer_step', rel_names)
 			self.assertIn('answer_gate', rel_names)
+			self.assertIn('arena_call', rel_names)
 			self.assertNotIn('work_run', rel_names)
-			p_rel_w = subprocess.run([sys.executable, os.path.join(RELEASE, 'tool.py'), 'mcp', '--api-url', 'http://127.0.0.1:1234/v1', '--model', 'qwen'], input=list_req, capture_output=True, text=True, env=env)
+			p_rel_w = subprocess.run([sys.executable, os.path.join(FONT_NAMES, 'tool.py'), 'mcp', '--api-url', 'http://127.0.0.1:1234/v1', '--model', 'qwen'], input=list_req, capture_output=True, text=True, env=env)
 			self.assertEqual(p_rel_w.returncode, 0, p_rel_w.stderr)
 			rel_w_names = [t['name'] for t in json.loads(p_rel_w.stdout.strip())['result']['tools']]
 			self.assertIn('work_run', rel_w_names)
@@ -948,17 +975,17 @@ class CommandLine(unittest.TestCase):
 
 			# rig.py mcp-config DIR (plain and with --api-url / --model)
 			rig_py = os.path.join(ROOT, 'skills', 'rig', 'rig.py')
-			c1 = subprocess.run([sys.executable, rig_py, 'mcp-config', RELEASE], capture_output=True, text=True)
+			c1 = subprocess.run([sys.executable, rig_py, 'mcp-config', FONT_NAMES], capture_output=True, text=True)
 			self.assertEqual(c1.returncode, 0, c1.stderr)
 			cfg1 = json.loads(c1.stdout)
-			srv1 = cfg1['mcpServers']['release']
+			srv1 = cfg1['mcpServers']['font-names']
 			self.assertEqual(srv1['command'], 'python3')
-			self.assertEqual(srv1['args'], [os.path.abspath(os.path.join(RELEASE, 'tool.py')), 'mcp'])
-			self.assertEqual(srv1['cwd'], os.path.abspath(RELEASE))
-			c2 = subprocess.run([sys.executable, rig_py, 'mcp-config', RELEASE, '--api-url', 'http://127.0.0.1:1234/v1', '--model', 'qwen'], capture_output=True, text=True)
+			self.assertEqual(srv1['args'], [os.path.abspath(os.path.join(FONT_NAMES, 'tool.py')), 'mcp'])
+			self.assertEqual(srv1['cwd'], os.path.abspath(FONT_NAMES))
+			c2 = subprocess.run([sys.executable, rig_py, 'mcp-config', FONT_NAMES, '--api-url', 'http://127.0.0.1:1234/v1', '--model', 'qwen'], capture_output=True, text=True)
 			self.assertEqual(c2.returncode, 0, c2.stderr)
-			srv2 = json.loads(c2.stdout)['mcpServers']['release']
-			self.assertEqual(srv2['args'], [os.path.abspath(os.path.join(RELEASE, 'tool.py')), 'mcp', '--api-url', 'http://127.0.0.1:1234/v1', '--model', 'qwen'])
+			srv2 = json.loads(c2.stdout)['mcpServers']['font-names']
+			self.assertEqual(srv2['args'], [os.path.abspath(os.path.join(FONT_NAMES, 'tool.py')), 'mcp', '--api-url', 'http://127.0.0.1:1234/v1', '--model', 'qwen'])
 		finally:
 			shutil.rmtree(tmp)
 
@@ -983,13 +1010,13 @@ class CommandLine(unittest.TestCase):
 
 class Binding(unittest.TestCase):
 	def test_levels_of_bound_code(self):
-		path = os.path.join(RELEASE, 'release.rig')
+		path = os.path.join(FONT_NAMES, 'font-names.rig')
 		with open(path, encoding='utf-8') as f:
 			root = rig.parse(f.read())
 		u = rig.units(root)[0]
-		self.assertEqual(rig.coverage(u, rig.Ctx(root, path))['tested'], 6)
+		self.assertEqual(rig.coverage(u, rig.Ctx(root, path))['tested'], 7)
 		cv = rig.coverage(u)  # without the folder: the code cannot be read
-		self.assertEqual((cv['tested'], cv['code'], cv['model'], cv['human']), (0, 6, 1, 1))
+		self.assertEqual((cv['tested'], cv['code'], cv['model'], cv['human']), (0, 7, 1, 1))
 		self.assertEqual(rig.check(root, path)[0], [])
 
 	def test_a_missing_function_is_an_error(self):
@@ -1183,32 +1210,43 @@ try {
 			shutil.rmtree(tmp)
 
 	def test_a_step_with_out_gets_its_own_tool(self):
-		with open(os.path.join(BOOKMARKS, 'plugin', 'src', 'gen', 'front.json'), encoding='utf-8') as f:
-			front = json.load(f)
-		self.assertEqual([t['name'] for t in front['tools']], ['start_run', 'work_run', 'run_status', 'start_batch', 'queues'])  # no gate for the model
-		self.assertEqual(front['tools'][1]['kind'], 'work')  # the step with "out" is a job for the worker, not for the chat
-		self.assertEqual(front['work'], {'max_calls': 50, 'max_tokens': 4000, 'think': False})  # rig.json of bookmarks sets think; the rest are the defaults
-		with open(os.path.join(RELEASE, 'plugin', 'src', 'gen', 'front.json'), encoding='utf-8') as f:
-			self.assertEqual(json.load(f)['work'], {'max_calls': 50, 'max_tokens': 4000, 'think': False})  # the defaults
-		self.assertIn('do not do the job yourself. Call work_run', front['prompt'])
-		node = [n for n in rigkit.read_json(os.path.join(BOOKMARKS, 'gen', 'bookmarks.json'))['flow'] if n['id'] == 'sort'][0]
-		item = node['schema']['items']  # the worker binds the answer of the model to this schema
-		self.assertEqual(item['required'], ['id', 'topic', 'pick'])  # a (maybe T) field is not required: "folder", "new"
-		self.assertEqual(list(item['properties']), ['id', 'topic', 'pick', 'folder', 'new'])  # in the order of the source: the topic before the pick
-		self.assertNotIn('answer_gate', front['prompt'])
-		self.assertIn('do not call any tool, also no finish tool', front['prompt'])   # a first run: the model took finish_sort for a human gate
-		self.assertIn('"say" word for word', front['prompt'])
+		tmp = tempfile.mkdtemp()
+		try:
+			folder = os.path.join(tmp, 'p')
+			self.quiet(rig_project.new, folder, 'demo-tool', 3)
+			rig_path = os.path.join(folder, 'demo-tool.rig')
+			with open(rig_path, encoding='utf-8') as f:
+				txt = f.read()
+			gate = ('  gate sensible model "Makes sense"\n'
+				'    check "TODO: say what the model must decide; pass if the item makes sense"\n'
+				'    sees item look\n'
+				'    fail -> stop "the model said no"\n')
+			self.assertIn(gate, txt)
+			with open(rig_path, 'w', encoding='utf-8') as f:
+				f.write(txt.replace(gate, '  step sort "Sort" by model\n    do "sort the item"\n    sees item look\n'
+					'    out list[{id: int, topic: str, pick: int, folder?: str, new?: bool}]\n'))
+			self.quiet(rig_project.plugin, folder, 'tester')
+			with open(os.path.join(folder, 'plugin', 'src', 'gen', 'front.json'), encoding='utf-8') as f:
+				front = json.load(f)
+			self.assertEqual([t['name'] for t in front['tools']], ['start_run', 'work_run', 'run_status', 'start_batch', 'queues'])  # no gate for the model
+			self.assertEqual(front['tools'][1]['kind'], 'work')  # the step with "out" is a job for the worker, not for the chat
+			self.assertEqual(front['work'], {'max_calls': 50, 'max_tokens': 4000, 'think': False})  # the defaults
+			self.assertIn('do not do the job yourself. Call work_run', front['prompt'])
+			node = [n for n in rigkit.read_json(os.path.join(folder, 'gen', 'demo-tool.json'))['flow'] if n['id'] == 'sort'][0]
+			item = node['schema']['items']  # the worker binds the answer of the model to this schema
+			self.assertEqual(item['required'], ['id', 'topic', 'pick'])  # an optional field (name?: T) is not required: "folder", "new"
+			self.assertEqual(list(item['properties']), ['id', 'topic', 'pick', 'folder', 'new'])  # in the order of the source: the topic before the pick
+			self.assertNotIn('answer_gate', front['prompt'])
+			self.assertIn('do not call any tool, also no finish tool', front['prompt'])   # a first run: the model took finish_sort for a human gate
+			self.assertIn('"say" word for word', front['prompt'])
+		finally:
+			shutil.rmtree(tmp)
 
 	def test_examples_are_current_and_complete(self):
-		for folder in (RELEASE, BAND, BOOKMARKS):
+		for folder in (FONT_NAMES,):
 			self.assertEqual(self.quiet(rig_project.build, folder, True)[0], 0, 'run: rig.py build ' + folder)
 			code, out = self.quiet(rig_project.doctor, folder)
 			self.assertEqual(code, 0, out)
-
-	def test_the_bookmarks_flow_has_at_most_23_nodes(self):
-		# 19 steps and gates (pure gate sort-ok separated from step keep), 4 ends
-		c = rigkit.read_json(os.path.join(BOOKMARKS, 'gen', 'bookmarks.json'))
-		self.assertLessEqual(len(c['flow']), 23)
 
 	def test_doctor_flags_model_step_without_out_and_front_has_no_finish_step(self):
 		tmp = tempfile.mkdtemp()
@@ -1285,9 +1323,10 @@ try {
 		finally:
 			shutil.rmtree(tmp)
 
-	def test_release_example_from_the_command_line(self):
-		r = subprocess.run([sys.executable, os.path.join(RELEASE, 'tool.py'), 'rules'], capture_output=True, text=True)
-		self.assertIn('"notes.min_words": 50', r.stdout)
+	def test_the_pattern_example_from_the_command_line(self):
+		r = subprocess.run([sys.executable, os.path.join(FONT_NAMES, 'tool.py'), 'rules'], capture_output=True, text=True)
+		self.assertIn('"shorten.abbr_letters": [2, 4]', r.stdout)
+		self.assertIn('"presets": ["dos", "mac"]', r.stdout)
 
 	def test_level_3_permissions_check_requires_default_off_and_hard_gate(self):
 		tmp = tempfile.mkdtemp()
@@ -1318,10 +1357,10 @@ try {
 
 	def test_doctor_json_flag(self):
 		tool = os.path.join(ROOT, 'skills', 'rig', 'rig.py')
-		r = subprocess.run([sys.executable, tool, 'doctor', RELEASE, '--no-tests', '--json'], capture_output=True, text=True)
+		r = subprocess.run([sys.executable, tool, 'doctor', FONT_NAMES, '--no-tests', '--json'], capture_output=True, text=True)
 		self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 		data = json.loads(r.stdout)
-		self.assertEqual((data['name'], data['level'], data['level_name'], data['ok'], data['missing']), ('release', 3, 'production', True, 0))
+		self.assertEqual((data['name'], data['level'], data['level_name'], data['ok'], data['missing']), ('font-names', 3, 'production', True, 0))
 		self.assertTrue(isinstance(data['checks'], list) and all({'level', 'state', 'text'} <= set(c) for c in data['checks']))
 		self.assertIsInstance(data['notes'], list)
 		tmp = tempfile.mkdtemp()
@@ -1520,9 +1559,9 @@ class RigV2Runtime(unittest.TestCase):
 
 		# Also verify mcp-config --http
 		rig_py = os.path.join(ROOT, 'skills', 'rig', 'rig.py')
-		c_http = subprocess.run([sys.executable, rig_py, 'mcp-config', RELEASE, '--http', 'http://127.0.0.1:8780'], capture_output=True, text=True)
+		c_http = subprocess.run([sys.executable, rig_py, 'mcp-config', FONT_NAMES, '--http', 'http://127.0.0.1:8780'], capture_output=True, text=True)
 		self.assertEqual(c_http.returncode, 0, c_http.stderr)
-		cfg = json.loads(c_http.stdout)['mcpServers']['release']
+		cfg = json.loads(c_http.stdout)['mcpServers']['font-names']
 		self.assertEqual(cfg['url'], 'http://127.0.0.1:8780/mcp')
 		self.assertEqual(cfg['openapi'], 'http://127.0.0.1:8780/openapi.json')
 
@@ -1869,9 +1908,9 @@ class RigV2Runtime(unittest.TestCase):
 			self.assertIn('limits.min_length', ui_by_id)
 			self.assertNotIn('note', ui_by_id['limits.min_length'])  # > 80-char historical note stripped from UI
 			self.assertEqual(ui_by_id['mode.strategy']['note'], 'Short hint.')
-			# Link node_modules from examples/bookmarks/plugin if available so @lmstudio/sdk & tsc run directly
-			sdk_nm = os.path.join(BOOKMARKS, 'plugin', 'node_modules')
-			if os.path.isdir(sdk_nm):
+			# Link an installed plugin node_modules (RIG_PLUGIN_NODE_MODULES) if given, so @lmstudio/sdk & tsc run directly
+			sdk_nm = os.environ.get('RIG_PLUGIN_NODE_MODULES', '')
+			if sdk_nm and os.path.isdir(sdk_nm):
 				os.symlink(sdk_nm, os.path.join(pdir, 'node_modules'))
 				tsc_bin = os.path.join(pdir, 'node_modules', '.bin', 'tsc')
 				if os.path.exists(tsc_bin):

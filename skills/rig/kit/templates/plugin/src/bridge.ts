@@ -79,6 +79,13 @@ export function argvFor(tool: FrontTool, p: Record<string, unknown>, overrides?:
   return ["call", tool.unit ?? tool.name, JSON.stringify(p)];
 }
 
+/** True when a Python command is not really there. On Windows, "python3" can be the Microsoft Store
+ *  stub (WindowsApps\python3.exe): it exists, so spawn finds it, but it only prints "Python was not
+ *  found" and exits with 9009. Then the driver must try "python", as when the command is missing. */
+export function pythonMissing(code: number | null, text: string): boolean {
+  return code === 9009 || /^Python was not found/m.test(text);
+}
+
 function start(command: string[], cwd: string, seconds: number): Promise<{ code: number | null; out: string; err: string; missing: boolean }> {
   return new Promise((done) => {
     let out = "", err = "", missing = false;
@@ -87,11 +94,14 @@ function start(command: string[], cwd: string, seconds: number): Promise<{ code:
     child.stdout.on("data", (d) => (out += d));
     child.stderr.on("data", (d) => (err += d));
     child.on("error", (e: NodeJS.ErrnoException) => { missing = e.code === "ENOENT"; err += e.message; });
-    child.on("close", (code) => { clearTimeout(timer); done({ code, out, err, missing }); });
+    child.on("close", (code) => { clearTimeout(timer); done({ code, out, err, missing: missing || (!out.trim() && pythonMissing(code, err + out)) }); });
   });
 }
 
-const quote = (s: string) => (/^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`);
+// A word with only these characters needs no quotes. On Windows a path has "\", which needs none there;
+// in a POSIX shell "\" is an escape, so it does.
+const SAFE_WORD = process.platform === "win32" ? /^[\w@%+=:,./\\-]+$/ : /^[\w@%+=:,./-]+$/;
+const quote = (s: string) => (SAFE_WORD.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`);
 
 /** Decorate a driver response for the plugin front: remove CLI-only waiting.answer,
  *  add a front-specific waiting.next_action, and add waiting.command on human gates. */
@@ -201,7 +211,8 @@ function spawnChild(session: StdioSession): ChildProcessWithoutNullStreams {
   session.child = child;
   session.buf = "";
   child.stdin.on("error", () => {});
-  child.stderr.on("data", () => {});
+  let errText = "";
+  child.stderr.on("data", (chunk: Buffer | string) => { if (errText.length < 2000) errText += chunk.toString(); });
   child.stdout.on("data", (chunk: Buffer | string) => {
     if (session.child !== child) return;
     session.buf += typeof chunk === "string" ? chunk : chunk.toString("utf8");
@@ -239,6 +250,13 @@ function spawnChild(session: StdioSession): ChildProcessWithoutNullStreams {
   });
   child.on("close", (code) => {
     if (session.child !== child) return;
+    if (cmd[0] === "python3" && pythonMissing(code, errText + session.buf)) {
+      session.cmd = ["python", ...front.driver.slice(1)];
+      const err = new Error("STUB_PYTHON3") as Error & { retryPython?: boolean };
+      err.retryPython = true;
+      killSession(session, err);
+      return;
+    }
     killSession(session, new Error(`serve-stdio exited (${code ?? "signal"})`));
   });
   return child;
@@ -285,7 +303,7 @@ function requestStdio(root: string, args: string[]): Promise<string> {
 
 async function driveOneShot(args: string[], root: string): Promise<string> {
   let r = await start([...front.driver, ...args], root, front.timeout_s);
-  // "python3" is "python" on some computers.
+  // "python3" is "python" on some computers, or only a stub (pythonMissing).
   if (r.missing && front.driver[0] === "python3") r = await start(["python", ...front.driver.slice(1), ...args], root, front.timeout_s);
   const lines = r.out.split("\n").map((l) => l.trim()).filter((l) => l.startsWith("{"));
   if (lines.length) return finishLine(lines[lines.length - 1], root);

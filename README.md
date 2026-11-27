@@ -48,11 +48,11 @@ python3 skills/rig/rig.py doctor my-tool
 
 ## See one
 
-[examples/release-tool/](examples/release-tool/) is a complete level 3 tool, small enough to read in ten minutes. Try it:
+[examples/font-names/](examples/font-names/) is a complete level 3 tool and the pattern to copy. It gives the font files of a family short names that fit a delivery standard. Code names the files and decides every gate that code can decide. A `reason` block proposes abbreviations only where the table of code fails, and it tests them with code first. A `model` gate judges whether the names still read well, and a person agrees to the rename. It needs no font: the test cases are empty files with font names. Try it:
 
 ```bash
-cd examples/release-tool
-python3 tool.py run '{"folder": "tests/cases/good"}'
+cd examples/font-names
+python3 tool.py run '{"folder": "tests/cases/display"}' --preset mac
 ```
 
 To serve Streamable HTTP MCP (`/mcp`), OpenAPI 3.1 (`/openapi.json`), rule controls (`/`), the read-only flow graph (`/viewer?serve=1`), and the localhost approval UI (`/approve/<run>`):
@@ -64,7 +64,7 @@ python3 tool.py serve-http --port 8780
 To see its flow as a graph:
 
 ```bash
-python3 ../../skills/rig/rig.py serve release.rig --json gen/release.json
+python3 ../../skills/rig/rig.py serve font-names.rig --json gen/font-names.json
 ```
 
 ## What is in the repository
@@ -79,9 +79,7 @@ python3 ../../skills/rig/rig.py serve release.rig --json gen/release.json
 | [skills/rig/resources/](skills/rig/resources/) | Editable stylesheets (`viewer.css`, `http.css`) and viewer client (`viewer.html`, `viewer.js`), copied into `<tool>/resources/` on `new` and `build`. |
 | [skills/rig/spec.md](skills/rig/spec.md) | The RIGS v2 language specification. |
 | [viewer/index.html](viewer/index.html) | Browser viewer entry point: units, rules (`ui` badges), structured `intent`, and three-lane graph (`code`, `model`, `person`). |
-| [examples/release-tool/](examples/release-tool/) | Level 3 pattern example with structured `intent`, `never` mappings, `ui` rules, tests, and plugin. |
-| [examples/band-facts/](examples/band-facts/) | Level 2 example: Wikipedia band facts with `never` boundary mapping and regression set. |
-| [examples/bookmarks/](examples/bookmarks/) | Level 3 real tool: browser bookmarks cleanup with `for` loops and human choice gates. |
+| [examples/font-names/](examples/font-names/) | The pattern example, level 3: short font file names for a delivery standard. Structured `intent` with `never` mappings, `rules` blocks, a tuple rule, presets, a `reason` block with read-only arena tools and `candidates`, a `model` gate, a `human` gate, a permission, an undo log with `rollback`, and a regression set. |
 | [editors/](editors/) | VS Code and Sublime Text syntax grammars built from one table. |
 | [tests/](tests/) | Unit tests for `rig.py`, `rigkit.py`, project commands, templates, and documentation consistency. |
 | [docs/](docs/) | [status.md](docs/status.md), [logic.md](docs/logic.md), [plan-v2-proposal.md](docs/plan-v2-proposal.md), and [history/](docs/history/). |
@@ -89,33 +87,69 @@ python3 ../../skills/rig/rig.py serve release.rig --json gen/release.json
 ## The source file
 
 ```rig
-unit release
-  intent "publish a release folder only when its notes, its version and its tests are ready, and a person agrees"
-    audience "end users upgrading the product"
-    never "publish without human approval" -> approve
-  in folder path "the release folder"
+unit font-names
+  intent "give every font file of a family a short file name that fits a delivery standard, stays readable and stays unique"
+    never "rename a file without the approval of a person" -> approve
+    never "rename a file when permissions.rename is off" -> allowed
+    never "give two files the same name" -> unique
+  in folder path "the folder of exported font files (.otf, .ttf, .woff, .woff2), named Family-Style"
   code gates gates.py
     test tests/test_gates.py
   code steps steps.py
+    test tests/test_steps.py
 
-  rule notes.min_words 50 "Shortest release notes, in words"
-    range 10 500
-    ui
+  rules target
+    standard sp_server "Delivery standard"
+      options none | sp_online | sp_server | win_path | fs255 | joliet | hfs | iso2 | dos83 | mac533
+      ui select
+  rules shorten
+    abbr_letters (2, 4) 1..6 "Shortest and longest abbreviation that the model may propose, in letters"
+  rules arena
+    tries 6 1..20 "Most test calls in the abbreviation arena"
+  rule permissions.rename off "The tool may rename files"
+    ui toggle
+  preset mac
+    set target.standard hfs
 
-  step collect "Collect" by steps.collect
-  gate notes hard "Notes long enough"
-    check "the notes have at least {notes.min_words} words"
-    by gates.notes_ok
-    fail -> stop "notes too short"
-  gate tone model "Notes speak to users"
-    check "read the notes as a user would; fail if they use internal words"
-    sees collect.notes
-    fail -> stop
-  gate approve human "May this release be published?"
-    sees collect.version collect.notes
-    fail -> stop
-  end done "Published"
-  end stop "Stopped"
+  step plan "Shorten with the table" by steps.plan
+  if plan.weak_words
+    reason abbreviate "Propose abbreviations"
+      do "propose a table of abbreviations for each weak word; test each table with try_names before you answer"
+      candidates 2
+      tools steps.try_names steps.table
+      budget arena.tries
+      sees plan.weak_words plan.rows
+      out dict[str, str]
+    gate abbr-ok hard "Abbreviations are fair" by gates.abbr_ok
+      check "each abbreviation starts with the first letter of its word, keeps the order of its letters and has {shorten.abbr_letters} letters"
+      retry 1
+      fail -> held "no fair abbreviation"
+  step final "Final names" by steps.final
+  gate fits hard "Every name fits the standard" by gates.fits
+    check "every new name fits {target.standard}: its length, its characters and the reserved names"
+    fail -> held "a name does not fit"
+  gate unique hard "No two files share a name" by gates.unique
+    fail -> held "two files would get the same name"
+  gate readable model "The names read well"
+    if final.abbreviations
+    check "pass when the family and the style can still be recognised in each name"
+    sees final.table final.abbreviations
+    fail -> held "the names do not read well"
+  gate approve human "Rename these files?"
+    sees final.table
+    fail -> declined "the person said no"
+  gate allowed hard "The tool may rename" by gates.may_rename
+    reads permissions.rename
+    fail -> ready "dry run"
+  step rename "Rename" by steps.rename
+  end done "Renamed"
+  end ready "Dry run: the table is ready, nothing renamed"
+  end held "Held back: nothing renamed"
+  end declined "The person said no: nothing renamed"
+  ; the whole file has more gates (files-ok, something, verify) and ends: examples/font-names/font-names.rig
+
+  rollback
+    step undo "Put the names back" by steps.undo
 ```
 
 ## Tests

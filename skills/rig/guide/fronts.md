@@ -88,7 +88,7 @@ This adds the folder `plugin/`: an LM Studio plugin. Its code is the same for ev
 
 - **The tools.** `start_run` (with the inputs of the unit), `answer_gate` (only when the flow has a gate for the model), `work_run` (when the flow has a `by model` step or `reason` block), `run_status`, `start_batch`, and `queues`. Presets and rules marked with `ui` are exported in `presets` and `ui_rules` and registered as per-chat plugin settings (`context.withConfigSchematics`), forwarding `--preset` and `--set` overrides on `start_run` and `start_batch`.
 - **The rules text.** Short numbered lines injected before the first message of a chat.
-- **The warm stdio driver.** `src/bridge.ts` keeps one persistent `tool.py serve-stdio` child process per session (with queued requests, timeouts, auto-restart, and fallback to one-shot spawn), avoiding Python startup cost on every tool call.
+- **The warm stdio driver.** `src/bridge.ts` keeps one persistent `tool.py serve-stdio` child process per session (with queued requests, timeouts, auto-restart, and fallback to one-shot spawn), avoiding Python startup cost on every tool call. When the driver is `python3` and that command is missing, or is only the Microsoft Store stub of Windows (it prints "Python was not found" and exits with 9009), the bridge tries `python` (`pythonMissing`).
 - **Self-directing `waiting.next_action`.** The bridge strips CLI-only `waiting.answer` and adds `waiting.next_action` so the model sees the exact next tool call (`work_run`, `answer_gate`, or `NONE` with `show_verbatim` at a human gate).
 - **Chat-scoped active run.** The bridge tracks the last waiting run returned in the session, so `approve yes` resolves cleanly even when older waiting runs exist.
 

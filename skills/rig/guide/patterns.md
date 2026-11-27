@@ -12,7 +12,7 @@ The doctor cannot check most of them. Check them yourself with the list at the e
 - A rule of the group `permissions` guards each change that is hard to undo: write, save, send, publish, delete. Its default is the safe value, so a tool that is set up wrong does nothing.
 - Put the gate that reads the permission **before** the step, and let the step check the rule again. The flow then has an end for the dry run, and the step is safe when it is called alone.
 - Name the copy so that nobody can mix it up with the original (a suffix such as `-TESTCOPY`). Keep copies and run output out of version control.
-- A test must leave its test set as it found it (`examples/release-tool/tool.py`, `clean_cases`).
+- A test must leave its test set as it found it (`examples/font-names/tool.py`, `clean_cases`: it puts back the names that a regression case changed, from the undo logs).
 
 ## 2. A way back for every change
 
@@ -67,7 +67,7 @@ Sort every item that is not done by **who must act**:
 - In the body, a step reads the part of this turn (`state["batch"]`), the model or the person answers it, and code saves the answer as its own file.
 - A part that fails after its retries is left: `fail -> continue`. `tolerate 20%` with a `fail` line on the `for` stops the run when too many parts are left.
 - The state of the run holds counts and paths only. The runner saves the run after each part, so after a restart the run goes on from the next part.
-- The pattern example is `examples/bookmarks`: pages of choices for the person, and sort batches for the model.
+- An earlier example used this pattern: `bookmarks`, with pages of choices for the person and sort batches for the model. It was retired on 2026-11-27; it is in git: `git show fd5da04:examples/bookmarks/bookmarks.rig`.
 
 ## 6. The state survives a restart
 

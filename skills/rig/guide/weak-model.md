@@ -17,7 +17,7 @@ The model is for what code cannot do: a judgment that needs knowledge of the wor
 
 A step of the model is a **job**. Give each job this shape:
 
-1. **Small.** One item, or one batch of short items (the bookmarks tool: 30 bookmarks).
+1. **Small.** One item, or one batch of short items (the pattern example `font-names`: the few words of a family that the table does not know).
 2. **Closed.** The model chooses among candidates that code found: "pick 1 to 5", not "find the best of 227". Code builds the candidates before the loop, one time for all items (a "prefetch").
 3. **Without history.** A new, empty context for each job. Both the plugin worker (`work_run`) and the Python worker (`tool.py work`) do this ([fronts.md](fronts.md), sections 1 and 3). A long chat makes each answer slower and less sure.
 4. **Bound to a form.** Every `by model` step requires an `out` type. The answer must have that form, and the runner refuses another.
@@ -26,7 +26,7 @@ A step of the model is a **job**. Give each job this shape:
 
 ## 3. What a small model does wrong
 
-These come from real runs of the bookmarks tool with a local 35B model with about 3B active parameters (2026-11-25):
+These come from real runs of the bookmarks tool, an earlier example, with a local 35B model with about 3B active parameters (2026-11-23 to 2026-11-25). The tool was retired on 2026-11-27; it is in git: `git show fd5da04:examples/bookmarks/notes/failures-log.md`.
 
 | Do not ask the model to | What happened |
 |---|---|
@@ -35,14 +35,17 @@ These come from real runs of the bookmarks tool with a local 35B model with abou
 | Carry a long chat | Each batch made the chat about 10,000 tokens longer, and each answer slower: about 1.5 minutes for a batch of 30. |
 | Choose when one answer is safe | The present folder was choice 1. Without thinking, the model picked 1 for every bookmark of four batches. |
 | Reason in a field of the answer | A `why` or `topic` field before the pick did not help: the model copied the title into it. |
+| Read a rule from the shape of an example | The answers of a human gate were explained with letters: "G=K keeps only URL K of group G". The model passed them on as `G=1` and `G=1.2`, and left out `yes`. A small model copies the shape of an example, not the meaning of a letter. |
 
-The fixes were all in code: short sequential run ids (`r1`, `r2`, ...), candidates from code, the present folder at its place by score (no safe first place), the jobs out of the chat, and the answer bound to a schema.
+The fixes were all in code: short sequential run ids (`r1`, `r2`, ...), candidates from code, the present folder at its place by score (no safe first place), the answers of the person written by code with the real numbers (`yes 1=3`), the jobs out of the chat, and the answer bound to a schema.
+
+**Why the example was retired.** The fixes made each job smaller, but the main job stayed a search: sort hundreds of bookmarks into the folders of the file, batch by batch. The tool did not reach a full live run on a real export. The pattern example `font-names` gives the model a job of the right shape. Code names every file. The model gets only the words that the table does not know, it can test an answer with code before it gives it (`tools steps.try_names`, with a `budget`), and a hard gate decides whether the answer is fair. When the model cannot do it, the run is held back, not guessed.
 
 ## 4. Thinking: measure, do not assume
 
 A model that thinks first is slower. Do not assume that it is better: measure it on real items.
 
-The bookmarks tool, the same 8 batches of 30, on a real export:
+The bookmarks tool (see section 3), the same 8 batches of 30, on a real export:
 
 | Mode | Time for all batches | Agreement |
 |---|---|---|

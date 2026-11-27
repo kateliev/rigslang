@@ -12,7 +12,7 @@ This guide says how to build a **rig** — an **instrumental agent** where a mod
 | [fronts.md](fronts.md) | You connect the tool to Claude, to a local model, to an MCP host, or to all three. |
 | [rules.md](rules.md) | Always. One page: the rules that have no exception. |
 
-The pattern example is [examples/release-tool](../../../examples/release-tool/). When this guide and the example disagree, the example is right, because its tests run.
+The pattern example is [examples/font-names](../../../examples/font-names/). When this guide and the example disagree, the example is right, because its tests run.
 
 ## 1. The problem
 

@@ -93,7 +93,7 @@ This plan tracks the fixes and upgrades from the 2026-11-26 repository review. E
 
 **Scope:**
 1. **Explicit `failed` flag on gate state:** Set `run['state'][nid] = {'pass': v['pass'], 'failed': not v['pass'], 'why': ...}` in `rigkit.py` so `examples/release-tool/release.rig` uses `if tone.failed` instead of relying on `{'pass': False}` being truthy.
-2. **Pure gates in bookmarks:** Move `by steps.keep` out of `gate sort-ok` into `step keep by steps.keep` right after `gate sort-ok` in [examples/bookmarks/bookmarks.rig](../examples/bookmarks/bookmarks.rig), update regression baselines and node count test (`<= 23`).
+2. **Pure gates in bookmarks:** Move `by steps.keep` out of `gate sort-ok` into `step keep by steps.keep` right after `gate sort-ok` in `examples/bookmarks/bookmarks.rig` (retired 2026-11-27), update regression baselines and node count test (`<= 23`).
 3. **Require `out` on `by model` steps & remove `finish_step`:**
    - Make `rig.py check` warn (and `doctor` level 2 flag) if a `by model` step has no `out <type>`.
    - Remove `finish_step` from `rig_project.front()` and `bridge.ts`; all `by model` steps use `work_run` in the plugin front.

@@ -1,1 +1,0 @@
-This release makes the import of large files much faster and fixes two crashes that users reported last month. To upgrade, install the new version over the old one and then start the program once so that it can convert your settings file. Your old settings stay in a backup file next to the new one. No other step is needed and all projects from the last version open as before.

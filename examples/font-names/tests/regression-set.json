@@ -1,0 +1,399 @@
+[
+ {
+  "name": "no font files",
+  "inputs": {
+   "folder": "tests/cases/empty"
+  },
+  "expect": {
+   "end": "empty",
+   "path": [
+    "read",
+    "files-ok",
+    "empty",
+    "undo"
+   ]
+  }
+ },
+ {
+  "name": "short names already",
+  "inputs": {
+   "folder": "tests/cases/short"
+  },
+  "preset": "mac",
+  "expect": {
+   "end": "same",
+   "path": [
+    "read",
+    "files-ok",
+    "plan",
+    "if:plan.weak_words",
+    "final",
+    "fits",
+    "unique",
+    "something",
+    "same",
+    "undo"
+   ]
+  }
+ },
+ {
+  "name": "the table is enough, dry run",
+  "inputs": {
+   "folder": "tests/cases/standard"
+  },
+  "answers": {
+   "approve": {
+    "person": true,
+    "pass": true
+   }
+  },
+  "preset": "mac",
+  "expect": {
+   "end": "ready",
+   "path": [
+    "read",
+    "files-ok",
+    "plan",
+    "if:plan.weak_words",
+    "final",
+    "fits",
+    "unique",
+    "something",
+    "approve",
+    "allowed",
+    "ready",
+    "undo"
+   ]
+  }
+ },
+ {
+  "name": "the table is enough, the person says no",
+  "inputs": {
+   "folder": "tests/cases/standard"
+  },
+  "answers": {
+   "approve": {
+    "person": true,
+    "pass": false
+   }
+  },
+  "preset": "mac",
+  "expect": {
+   "end": "declined",
+   "path": [
+    "read",
+    "files-ok",
+    "plan",
+    "if:plan.weak_words",
+    "final",
+    "fits",
+    "unique",
+    "something",
+    "approve",
+    "declined"
+   ]
+  }
+ },
+ {
+  "name": "the model gives fair abbreviations, dry run",
+  "inputs": {
+   "folder": "tests/cases/display"
+  },
+  "answers": {
+   "abbreviate": {
+    "result": [
+     {
+      "Specimen": "Spc",
+      "Grotesque": "Grt"
+     },
+     {
+      "Specimen": "Sp",
+      "Grotesque": "Gr"
+     }
+    ]
+   },
+   "approve": {
+    "person": true,
+    "pass": true
+   },
+   "readable": {
+    "pass": true
+   }
+  },
+  "preset": "mac",
+  "expect": {
+   "end": "ready",
+   "path": [
+    "read",
+    "files-ok",
+    "plan",
+    "if:plan.weak_words",
+    "abbreviate",
+    "abbr-ok",
+    "final",
+    "fits",
+    "unique",
+    "readable",
+    "something",
+    "approve",
+    "allowed",
+    "ready",
+    "undo"
+   ]
+  }
+ },
+ {
+  "name": "the model is fair on the retry",
+  "inputs": {
+   "folder": "tests/cases/display"
+  },
+  "answers": {
+   "abbreviate": [
+    {
+     "result": [
+      {
+       "Specimen": "S"
+      },
+      {
+       "Display": "Dspl"
+      }
+     ]
+    },
+    {
+     "result": [
+      {
+       "Specimen": "Spc",
+       "Grotesque": "Grt"
+      },
+      {
+       "Specimen": "Sp",
+       "Grotesque": "Gr"
+      }
+     ]
+    }
+   ],
+   "approve": {
+    "person": true,
+    "pass": true
+   },
+   "readable": {
+    "pass": true
+   }
+  },
+  "preset": "mac",
+  "expect": {
+   "end": "ready",
+   "path": [
+    "read",
+    "files-ok",
+    "plan",
+    "if:plan.weak_words",
+    "abbreviate",
+    "abbr-ok",
+    "abbreviate",
+    "abbr-ok",
+    "final",
+    "fits",
+    "unique",
+    "readable",
+    "something",
+    "approve",
+    "allowed",
+    "ready",
+    "undo"
+   ]
+  }
+ },
+ {
+  "name": "the model is not fair twice",
+  "inputs": {
+   "folder": "tests/cases/display"
+  },
+  "answers": {
+   "abbreviate": [
+    {
+     "result": [
+      {
+       "Specimen": "S"
+      },
+      {
+       "Display": "Dspl"
+      }
+     ]
+    },
+    {
+     "result": [
+      {
+       "Specimen": "S"
+      },
+      {
+       "Display": "Dspl"
+      }
+     ]
+    }
+   ]
+  },
+  "preset": "mac",
+  "expect": {
+   "end": "held",
+   "path": [
+    "read",
+    "files-ok",
+    "plan",
+    "if:plan.weak_words",
+    "abbreviate",
+    "abbr-ok",
+    "abbreviate",
+    "abbr-ok",
+    "held",
+    "undo"
+   ]
+  }
+ },
+ {
+  "name": "the model finds the names hard to read",
+  "inputs": {
+   "folder": "tests/cases/display"
+  },
+  "preset": "mac",
+  "answers": {
+   "abbreviate": {
+    "result": [
+     {
+      "Specimen": "Sp",
+      "Grotesque": "Gr"
+     },
+     {
+      "Specimen": "Sp",
+      "Grotesque": "Gr"
+     }
+    ]
+   },
+   "readable": {
+    "pass": false,
+    "why": "Sp and Gr do not say Specimen Grotesque"
+   }
+  },
+  "expect": {
+   "end": "held",
+   "path": [
+    "read",
+    "files-ok",
+    "plan",
+    "if:plan.weak_words",
+    "abbreviate",
+    "abbr-ok",
+    "final",
+    "fits",
+    "unique",
+    "readable",
+    "held"
+   ]
+  }
+ },
+ {
+  "name": "8.3 with .woff2 files is held",
+  "inputs": {
+   "folder": "tests/cases/display"
+  },
+  "rules": {
+   "target.standard": "dos83",
+   "shorten.ask_model": false
+  },
+  "expect": {
+   "end": "held",
+   "path": [
+    "read",
+    "files-ok",
+    "plan",
+    "if:plan.weak_words",
+    "final",
+    "fits",
+    "held",
+    "undo"
+   ]
+  }
+ },
+ {
+  "name": "8.3 without the model, dry run",
+  "inputs": {
+   "folder": "tests/cases/standard"
+  },
+  "answers": {
+   "approve": {
+    "person": true,
+    "pass": true
+   }
+  },
+  "preset": "dos",
+  "expect": {
+   "end": "ready",
+   "path": [
+    "read",
+    "files-ok",
+    "plan",
+    "if:plan.weak_words",
+    "final",
+    "fits",
+    "unique",
+    "something",
+    "approve",
+    "allowed",
+    "ready",
+    "undo"
+   ]
+  }
+ },
+ {
+  "name": "rename with permission",
+  "inputs": {
+   "folder": "tests/cases/rename"
+  },
+  "rules": {
+   "target.standard": "hfs",
+   "permissions.rename": true
+  },
+  "answers": {
+   "abbreviate": {
+    "result": [
+     {
+      "Specimen": "Spc",
+      "Grotesque": "Grt"
+     },
+     {
+      "Specimen": "Sp",
+      "Grotesque": "Gr"
+     }
+    ]
+   },
+   "approve": {
+    "person": true,
+    "pass": true
+   },
+   "readable": {
+    "pass": true
+   }
+  },
+  "expect": {
+   "end": "done",
+   "path": [
+    "read",
+    "files-ok",
+    "plan",
+    "if:plan.weak_words",
+    "abbreviate",
+    "abbr-ok",
+    "final",
+    "fits",
+    "unique",
+    "readable",
+    "something",
+    "approve",
+    "allowed",
+    "rename",
+    "verify",
+    "done"
+   ]
+  }
+ }
+]

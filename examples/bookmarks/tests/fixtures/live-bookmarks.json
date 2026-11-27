@@ -1,8 +1,0 @@
-{
-   "checksum": "00000000000000000000000000000000",
-   "roots": {
-      "bookmark_bar": {"children": [], "name": "Favorites bar", "type": "folder"},
-      "other": {"children": [], "name": "Other favorites", "type": "folder"}
-   },
-   "version": 1
-}

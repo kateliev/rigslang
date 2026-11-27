@@ -1,0 +1,16 @@
+{
+ "rig": 2,
+ "name": "font-names",
+ "level": 3,
+ "source": "font-names.rig",
+ "unit": "font-names",
+ "driver": "python3 tool.py",
+ "build": {
+  "gen": "gen",
+  "skill": "skill/SKILL.md"
+ },
+ "kit": "rigkit.py",
+ "resources": "resources",
+ "tests": "python3 -m unittest discover -s tests",
+ "regression": "tests/regression-set.json"
+}

@@ -99,7 +99,7 @@ class Removed(unittest.TestCase):
 			self.assertTrue(any('unit x' in t for _, t in err), (scope, err))
 		err = errors('unit x\n  code tools.py\n  step a by code.a\n  end e\n')
 		self.assertTrue(any('code <prefix> <path>' in t for _, t in err), err)
-		r = subprocess.run([sys.executable, TOOL, 'compile', 'tool', RELEASE], capture_output=True, text=True)
+		r = subprocess.run([sys.executable, TOOL, 'compile', 'tool', PATTERN], capture_output=True, text=True)
 		self.assertNotEqual(r.returncode, 0)
 		self.assertIn('version 2', r.stderr + r.stdout)
 
@@ -321,36 +321,40 @@ class RulesAndPresets(unittest.TestCase):
 		self.assertFalse(any('not read' in t for _, t in w))
 
 
-RELEASE = os.path.join(ROOT, 'examples', 'release-tool', 'release.rig')
+PATTERN = os.path.join(ROOT, 'examples', 'font-names', 'font-names.rig')  # the pattern example
 
 
 class Compile(unittest.TestCase):
 	def unit(self):
-		return rig.units(load(RELEASE))[0]
+		return rig.units(load(PATTERN))[0]
 
 	def test_skill_writes_values_in(self):
 		text = rig.skill(self.unit())
-		self.assertIn('at least 50 words', text)
-		self.assertNotIn('{notes.min_words}', text)
-		self.assertIn('Next: `notes`', text)  # the agent walks the flow itself: each node says the next one
+		self.assertIn('every new name fits sp_server', text)
+		self.assertNotIn('{target.standard}', text)
+		self.assertIn('Next: `files-ok`', text)  # the agent walks the flow itself: each node says the next one
 
 	def test_skill_can_refer_to_the_catalogue(self):
-		text = rig.skill(self.unit(), 'release.json')
-		self.assertIn('`release.json`', text)
-		self.assertIn('at least `{notes.min_words}` words', text)
+		text = rig.skill(self.unit(), 'font-names.json')
+		self.assertIn('`font-names.json`', text)
+		self.assertIn('every new name fits `{target.standard}`', text)
 
 	def test_skill_with_a_runner(self):
 		text = rig.skill(self.unit(), None, None, 'python3 tool.py')
 		self.assertIn('python3 tool.py run', text)
 		self.assertIn('python3 tool.py flow', text)
 		self.assertIn('## Flow (summary)', text)
-		self.assertIn('| `rewrite` | model step |', text)
-		self.assertIn('| `tone` | model gate |', text)
+		self.assertIn('| `abbreviate` | reason (careful) |', text)
+		self.assertIn('| `readable` | model gate |', text)
 		self.assertIn('| `approve` | human gate |', text)
 		self.assertIn('Ends: `done`', text)
 		self.assertNotIn('Next: ', text)
-		self.assertNotIn('### `collect`', text)
-		self.assertNotIn('### `notes`', text)
+		self.assertNotIn('### `read`', text)
+		self.assertNotIn('### `files-ok`', text)
+
+	def test_skill_with_a_runner_lists_a_model_step(self):
+		text = rig.skill(rig.units(rig.parse(unit('  step draft "Draft" by model\n    do "write a draft"\n    out text\n  end done\n')))[0], None, None, 'python3 tool.py')
+		self.assertIn('| `draft` | model step |', text)
 
 	def test_skill_shows_the_blocks(self):
 		text = rig.skill(rig.units(rig.parse(FLOW))[0])
@@ -359,17 +363,17 @@ class Compile(unittest.TestCase):
 			self.assertIn(part, text)
 
 	def test_preset_changes_value_not_default(self):
-		c = rig.catalog(self.unit(), 'hotfix')
-		r = [x for x in c['rules'] if x['id'] == 'notes.min_words'][0]
-		self.assertEqual((r['value'], r['default']), (10, 50))
-		self.assertIn('at least 10 words', rig.skill(self.unit(), None, 'hotfix'))
+		c = rig.catalog(self.unit(), 'mac')
+		r = [x for x in c['rules'] if x['id'] == 'target.standard'][0]
+		self.assertEqual((r['value'], r['default']), ('hfs', 'sp_server'))
+		self.assertIn('every new name fits hfs', rig.skill(self.unit(), None, 'mac'))
 
 	def test_command_line(self):
-		out = subprocess.check_output([sys.executable, TOOL, 'compile', 'json', RELEASE, '--preset', 'hotfix']).decode('utf-8')
+		out = subprocess.check_output([sys.executable, TOOL, 'compile', 'json', PATTERN, '--preset', 'mac']).decode('utf-8')
 		c = json.loads(out)
-		self.assertEqual((c['unit'], c['preset'], c['rig']), ('release', 'hotfix', 2))
-		out = subprocess.check_output([sys.executable, TOOL, 'compile', 'skill', RELEASE]).decode('utf-8')
-		self.assertTrue(out.replace('\r\n', '\n').startswith('---\nname: release\n'))
+		self.assertEqual((c['unit'], c['preset'], c['rig']), ('font-names', 'mac', 2))
+		out = subprocess.check_output([sys.executable, TOOL, 'compile', 'skill', PATTERN]).decode('utf-8')
+		self.assertTrue(out.replace('\r\n', '\n').startswith('---\nname: font-names\n'))
 		r = subprocess.run([sys.executable, TOOL, 'check', MISTAKES], capture_output=True, text=True)
 		self.assertEqual(r.returncode, 1)
 
@@ -391,8 +395,8 @@ class Levels(unittest.TestCase):
 		self.assertEqual(rig.coverage(rig.units(root)[0])['none'], 1)
 
 	def test_levels_of_the_example(self):
-		cv = rig.coverage(rig.units(load(RELEASE))[0], rig.Ctx(load(RELEASE), RELEASE))
-		self.assertEqual((cv['gates'], cv['tested'], cv['model'], cv['human']), (8, 6, 1, 1))
+		cv = rig.coverage(rig.units(load(PATTERN))[0], rig.Ctx(load(PATTERN), PATTERN))
+		self.assertEqual((cv['gates'], cv['tested'], cv['model'], cv['human']), (9, 7, 1, 1))
 
 	def test_ast_bound_level_ignores_comments_and_strings(self):
 		folder = tempfile.mkdtemp(prefix='rig-test-')
@@ -802,9 +806,9 @@ class Types(unittest.TestCase):
 
 class Report(unittest.TestCase):
 	def test_skill_asks_for_a_guessed_line(self):
-		text = rig.skill(rig.units(load(RELEASE))[0])
+		text = rig.skill(rig.units(load(PATTERN))[0])
 		self.assertIn('## Report', text)
-		self.assertIn('Guessed: tone', text)
+		self.assertIn('Guessed: readable', text)
 
 	def test_no_report_without_guesses(self):
 		text = rig.skill(rig.units(rig.parse(unit('  gate g hard by code.g\n    fail -> e\n  end e\n')))[0])
@@ -836,18 +840,20 @@ class Viewer(unittest.TestCase):
 		self.assertTrue(os.path.isfile(os.path.join(res_dir, 'http.css')))
 
 	def test_bundle_gives_what_the_viewer_draws(self):
-		with open(RELEASE, encoding='utf-8') as f:
+		with open(PATTERN, encoding='utf-8') as f:
 			text = f.read()
-		b = rig.bundle(text, RELEASE)
+		b = rig.bundle(text, PATTERN)
 		self.assertEqual(b['errors'], [])
 		u = b['units'][0]
 		root = rig.parse(text)
-		self.assertEqual(u['catalogue'], rig.catalog(rig.units(root)[0], None, rig.Ctx(root, RELEASE)))
-		s = u['rules_src']['notes.min_words']
-		line = text.split('\n')[s['line'] - 1]
-		self.assertEqual(line[s['a']:s['b']], s['text'])
+		self.assertEqual(u['catalogue'], rig.catalog(rig.units(root)[0], None, rig.Ctx(root, PATTERN)))
+		for rid in ('target.standard', 'shorten.abbr_letters', 'permissions.rename'):  # a row of a rules block, a tuple, a rule line
+			s = u['rules_src'][rid]
+			line = text.split('\n')[s['line'] - 1]
+			self.assertEqual(line[s['a']:s['b']], s['text'], rid)
 		self.assertEqual(u['levels']['approve'], 'human')
-		self.assertEqual(text.split('\n')[u['lines']['tone'] - 1].strip()[:9], 'gate tone')
+		self.assertEqual(u['levels']['readable'], 'model')
+		self.assertEqual(text.split('\n')[u['lines']['readable'] - 1].strip()[:13], 'gate readable')
 		self.assertTrue(rig.bundle('unit x\n  in "a', None)['errors'])
 
 

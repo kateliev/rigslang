@@ -190,7 +190,7 @@ function render() {
   else page.append(el("main", {}, S.tab === "skill" ? skillView() : S.tab === "json" ? jsonView() : unitsView()));
 }
 function emptyView() {
-  const examples = ["release-tool/gen/release.json", "band-facts/gen/band-facts.json", "bookmarks/gen/bookmarks.json"];
+  const examples = ["font-names/gen/font-names.json"];
   const http = location.protocol.startsWith("http");
   return el("div", { class: "empty" },
     el("p", {}, "Run ", el("code", {}, "python3 skills/rig/rig.py serve FILE.rig"), " to see a file and change its rule values."),

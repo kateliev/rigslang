@@ -1,0 +1,548 @@
+{
+ "rig": 2,
+ "unit": "font-names",
+ "preset": null,
+ "intent": "give every font file of a family a short file name that fits a delivery standard, stays readable and stays unique",
+ "notes": [],
+ "code": [
+  {
+   "prefix": "gates",
+   "file": "gates.py",
+   "test": "tests/test_gates.py"
+  },
+  {
+   "prefix": "steps",
+   "file": "steps.py",
+   "test": "tests/test_steps.py"
+  }
+ ],
+ "in": [
+  {
+   "name": "folder",
+   "type": "path",
+   "text": "the folder of exported font files (.otf, .ttf, .woff, .woff2), named Family-Style",
+   "schema": {
+    "type": "string"
+   }
+  }
+ ],
+ "out": {
+  "type": "text",
+  "text": "the table of old and new names, and the path of the undo log",
+  "schema": {
+   "type": "string"
+  }
+ },
+ "start": "read",
+ "rollback": "undo",
+ "finally": null,
+ "body": [
+  "read",
+  "files-ok",
+  "plan",
+  "if:plan.weak_words",
+  "final",
+  "fits",
+  "unique",
+  "readable",
+  "something",
+  "approve",
+  "allowed",
+  "rename",
+  "verify",
+  "done",
+  "ready",
+  "same",
+  "held",
+  "declined",
+  "empty",
+  "rollback"
+ ],
+ "coverage": {
+  "gates": 9,
+  "tested": 7,
+  "code": 0,
+  "model": 1,
+  "human": 1,
+  "none": 0
+ },
+ "presets": {
+  "mac": {
+   "target.standard": "hfs"
+  },
+  "dos": {
+   "target.standard": "dos83",
+   "shorten.ask_model": false
+  }
+ },
+ "rules": [
+  {
+   "id": "target.standard",
+   "group": "target",
+   "label": "Delivery standard",
+   "type": "choice",
+   "value": "sp_server",
+   "default": "sp_server",
+   "options": [
+    "none",
+    "sp_online",
+    "sp_server",
+    "win_path",
+    "fs255",
+    "joliet",
+    "hfs",
+    "iso2",
+    "dos83",
+    "mac533"
+   ],
+   "ui": "select"
+  },
+  {
+   "id": "target.folder",
+   "group": "target",
+   "label": "Destination folder or URL; its length counts against the path limit",
+   "type": "text",
+   "value": "",
+   "default": "",
+   "ui": "input"
+  },
+  {
+   "id": "shorten.method",
+   "group": "shorten",
+   "label": "Shortening method (auto: the method of the standard)",
+   "type": "choice",
+   "value": "auto",
+   "default": "auto",
+   "options": [
+    "auto",
+    "abbr",
+    "vowels",
+    "m533",
+    "cut"
+   ],
+   "ui": "select"
+  },
+  {
+   "id": "shorten.consistent",
+   "group": "shorten",
+   "label": "Shorten every style of the family to the same level",
+   "type": "switch",
+   "value": true,
+   "default": true
+  },
+  {
+   "id": "shorten.ask_model",
+   "group": "shorten",
+   "label": "Ask the model for abbreviations when the table is not enough",
+   "type": "switch",
+   "value": true,
+   "default": true,
+   "ui": "toggle",
+   "note": "off: take the names of code, also cut ones; the person still agrees. For dos83 no table is fair"
+  },
+  {
+   "id": "shorten.abbr_letters",
+   "group": "shorten",
+   "label": "Shortest and longest abbreviation that the model may propose, in letters",
+   "type": "tuple",
+   "value": [
+    2,
+    4
+   ],
+   "default": [
+    2,
+    4
+   ],
+   "length": 2,
+   "min": 1,
+   "max": 6,
+   "note": "5088 abbreviations have two or three letters; four leaves room for family words. One letter is an initial, not an abbreviation"
+  },
+  {
+   "id": "arena.tries",
+   "group": "arena",
+   "label": "Most test calls in the abbreviation arena",
+   "type": "number",
+   "value": 6,
+   "default": 6,
+   "min": 1,
+   "max": 20
+  },
+  {
+   "id": "files.undo",
+   "group": "files",
+   "label": "Folder of the undo logs, relative to the tool folder",
+   "type": "text",
+   "value": "undo",
+   "default": "undo"
+  },
+  {
+   "id": "permissions.rename",
+   "group": "permissions",
+   "label": "The tool may rename files",
+   "type": "switch",
+   "value": false,
+   "default": false,
+   "ui": "toggle",
+   "note": "off: a dry run. The run ends at ready and renames nothing."
+  }
+ ],
+ "flow": [
+  {
+   "id": "read",
+   "kind": "step",
+   "lane": "code",
+   "name": "Read the folder",
+   "do": "list the font files; split each name into family words and style words",
+   "by": [
+    "steps.read"
+   ],
+   "next": "files-ok"
+  },
+  {
+   "id": "files-ok",
+   "kind": "hard",
+   "lane": "code",
+   "name": "Font files to name",
+   "check": "the folder has at least one font file, and every name has a family before the hyphen",
+   "by": [
+    "gates.files_ok"
+   ],
+   "fail": [
+    {
+     "to": "empty",
+     "when": "no font files"
+    }
+   ],
+   "next": "plan"
+  },
+  {
+   "id": "plan",
+   "kind": "step",
+   "lane": "code",
+   "name": "Shorten with the table",
+   "do": "build the short names with the built-in table; when shorten.ask_model is on, list the words that the table does not know in the names that needed dropped vowels, initials or a cut",
+   "by": [
+    "steps.plan"
+   ],
+   "reads": [
+    "target.standard",
+    "target.folder",
+    "shorten.method",
+    "shorten.consistent",
+    "shorten.ask_model",
+    "shorten.abbr_letters"
+   ],
+   "next": "if:plan.weak_words"
+  },
+  {
+   "id": "abbreviate",
+   "kind": "reason",
+   "lane": "model",
+   "name": "Propose abbreviations",
+   "mode": "careful",
+   "intent": "propose short abbreviations for the family and style words that the table does not know",
+   "tools": [
+    "steps.try_names",
+    "steps.table"
+   ],
+   "budget": "arena.tries",
+   "candidates": 2,
+   "do": "propose a table of abbreviations, one for each weak word, as type designers write them (Grotesque: Grt): the first letter of the word, then letters of the word in their order, {shorten.abbr_letters} letters (shortest, longest). Test each table with try_names before you answer; table shows the built-in words",
+   "reads": [
+    "shorten.abbr_letters",
+    "arena.tries"
+   ],
+   "sees": [
+    "plan.weak_words",
+    "plan.rows"
+   ],
+   "out": "dict[str, str]",
+   "schema": {
+    "type": "object",
+    "additionalProperties": {
+     "type": "string"
+    }
+   },
+   "next": "abbr-ok",
+   "block": "if:plan.weak_words"
+  },
+  {
+   "id": "abbr-ok",
+   "kind": "hard",
+   "lane": "code",
+   "name": "Abbreviations are fair",
+   "check": "each abbreviation is a word of the family, starts with its first letter, keeps the order of its letters, has {shorten.abbr_letters} letters (shortest, longest), and no name needs dropped vowels, initials or a cut",
+   "by": [
+    "gates.abbr_ok"
+   ],
+   "reads": [
+    "shorten.abbr_letters"
+   ],
+   "retry": 1,
+   "fail": [
+    {
+     "to": "held",
+     "when": "no fair abbreviation"
+    }
+   ],
+   "next": "final",
+   "back": "abbreviate",
+   "block": "if:plan.weak_words"
+  },
+  {
+   "id": "final",
+   "kind": "step",
+   "lane": "code",
+   "name": "Final names",
+   "do": "build the names again with the built-in table and the best fair table of the model",
+   "by": [
+    "steps.final"
+   ],
+   "reads": [
+    "target.standard",
+    "target.folder",
+    "shorten.method",
+    "shorten.consistent",
+    "shorten.abbr_letters"
+   ],
+   "next": "fits"
+  },
+  {
+   "id": "fits",
+   "kind": "hard",
+   "lane": "code",
+   "name": "Every name fits the standard",
+   "check": "every new name fits {target.standard}: its length, its characters and the reserved names",
+   "by": [
+    "gates.fits"
+   ],
+   "reads": [
+    "target.standard"
+   ],
+   "fail": [
+    {
+     "to": "held",
+     "when": "a name does not fit"
+    }
+   ],
+   "next": "unique"
+  },
+  {
+   "id": "unique",
+   "kind": "hard",
+   "lane": "code",
+   "name": "No two files share a name",
+   "check": "no two new names are equal when case is ignored, and no new name is the name of another file",
+   "by": [
+    "gates.unique"
+   ],
+   "fail": [
+    {
+     "to": "held",
+     "when": "two files would get the same name"
+    }
+   ],
+   "next": "readable"
+  },
+  {
+   "id": "readable",
+   "kind": "model",
+   "lane": "model",
+   "name": "The names read well",
+   "check": "read the new names as a type designer would: pass when the family and the style can still be recognised in each name",
+   "sees": [
+    "final.table",
+    "final.abbreviations"
+   ],
+   "if": "final.abbreviations",
+   "fail": [
+    {
+     "to": "held",
+     "when": "the names do not read well"
+    }
+   ],
+   "next": "something"
+  },
+  {
+   "id": "something",
+   "kind": "hard",
+   "lane": "code",
+   "name": "A file gets a new name",
+   "check": "at least one file gets a new name",
+   "by": [
+    "gates.something"
+   ],
+   "fail": [
+    {
+     "to": "same",
+     "when": "every file has its short name already"
+    }
+   ],
+   "next": "approve"
+  },
+  {
+   "id": "approve",
+   "kind": "human",
+   "lane": "person",
+   "name": "Rename these files?",
+   "check": "show the person the table of old and new names",
+   "sees": [
+    "final.table",
+    "final.abbreviations"
+   ],
+   "fail": [
+    {
+     "to": "declined",
+     "when": "the person said no"
+    }
+   ],
+   "next": "allowed"
+  },
+  {
+   "id": "allowed",
+   "kind": "hard",
+   "lane": "code",
+   "name": "The tool may rename",
+   "check": "the rule permissions.rename is on",
+   "by": [
+    "gates.may_rename"
+   ],
+   "reads": [
+    "permissions.rename"
+   ],
+   "fail": [
+    {
+     "to": "ready",
+     "when": "dry run"
+    }
+   ],
+   "next": "rename"
+  },
+  {
+   "id": "rename",
+   "kind": "step",
+   "lane": "code",
+   "name": "Rename",
+   "do": "write the undo log, then rename each file in two phases",
+   "by": [
+    "steps.rename"
+   ],
+   "reads": [
+    "permissions.rename",
+    "files.undo"
+   ],
+   "next": "verify"
+  },
+  {
+   "id": "verify",
+   "kind": "hard",
+   "lane": "code",
+   "name": "Every file renamed",
+   "check": "every new name is there, no old or temporary name is left, and the count of font files did not change",
+   "by": [
+    "gates.verify"
+   ],
+   "fail": [
+    {
+     "to": "held",
+     "when": "a rename failed"
+    }
+   ],
+   "next": "done"
+  },
+  {
+   "id": "done",
+   "kind": "end",
+   "lane": "end",
+   "name": "Renamed"
+  },
+  {
+   "id": "ready",
+   "kind": "end",
+   "lane": "end",
+   "name": "Dry run: the table is ready, nothing renamed"
+  },
+  {
+   "id": "same",
+   "kind": "end",
+   "lane": "end",
+   "name": "Nothing to rename"
+  },
+  {
+   "id": "held",
+   "kind": "end",
+   "lane": "end",
+   "name": "Held back: nothing renamed"
+  },
+  {
+   "id": "declined",
+   "kind": "end",
+   "lane": "end",
+   "name": "The person said no: nothing renamed"
+  },
+  {
+   "id": "empty",
+   "kind": "end",
+   "lane": "end",
+   "name": "No font files"
+  },
+  {
+   "id": "undo",
+   "kind": "step",
+   "lane": "code",
+   "name": "Put the names back",
+   "do": "rename every file of this run back, from its undo log",
+   "by": [
+    "steps.undo"
+   ],
+   "reads": [
+    "files.undo"
+   ],
+   "next": null,
+   "block": "rollback"
+  }
+ ],
+ "blocks": [
+  {
+   "id": "if:plan.weak_words",
+   "kind": "if",
+   "path": "plan.weak_words",
+   "body": [
+    "abbreviate",
+    "abbr-ok"
+   ],
+   "first": "abbreviate",
+   "next": "final",
+   "else": "final"
+  },
+  {
+   "id": "rollback",
+   "kind": "rollback",
+   "body": [
+    "undo"
+   ],
+   "first": "undo",
+   "next": null
+  }
+ ],
+ "intent_spec": {
+  "text": "give every font file of a family a short file name that fits a delivery standard, stays readable and stays unique",
+  "audience": "type designers and font distributors",
+  "style": "names a type designer can read: table abbreviations, no dropped vowels, no cut words",
+  "never": [
+   {
+    "text": "rename a file without the approval of a person",
+    "gate": "approve"
+   },
+   {
+    "text": "rename a file when permissions.rename is off",
+    "gate": "allowed"
+   },
+   {
+    "text": "give two files the same name",
+    "gate": "unique"
+   }
+  ]
+ }
+}

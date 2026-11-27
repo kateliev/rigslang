@@ -1,0 +1,112 @@
+; font-names: give the font files of a family short names that fit a delivery standard.
+; Code builds the names (engine.py: patterns, the Adobe 5088 table, vowels, cut) and decides
+; every gate that code can decide. The model proposes abbreviations only for the words that the
+; table does not know, and it can test them with code first (try_names); then it judges whether
+; the names still read well (a guess). A person agrees to the rename.
+; Build: python3 ../../skills/rig/rig.py build .    Run: python3 tool.py run '{"folder": "tests/cases/display"}'
+
+unit font-names
+  intent "give every font file of a family a short file name that fits a delivery standard, stays readable and stays unique"
+    audience "type designers and font distributors"
+    style "names a type designer can read: table abbreviations, no dropped vowels, no cut words"
+    never "rename a file without the approval of a person" -> approve
+    never "rename a file when permissions.rename is off" -> allowed
+    never "give two files the same name" -> unique
+  in folder path "the folder of exported font files (.otf, .ttf, .woff, .woff2), named Family-Style"
+  out text "the table of old and new names, and the path of the undo log"
+  code gates gates.py
+    test tests/test_gates.py
+  code steps steps.py
+    test tests/test_steps.py
+
+  rules target
+    standard sp_server "Delivery standard"
+      options none | sp_online | sp_server | win_path | fs255 | joliet | hfs | iso2 | dos83 | mac533
+      ui select
+    folder "" "Destination folder or URL; its length counts against the path limit"
+      ui input
+  rules shorten
+    method auto "Shortening method (auto: the method of the standard)"
+      options auto | abbr | vowels | m533 | cut
+      ui select
+    consistent on "Shorten every style of the family to the same level"
+    ask_model on "Ask the model for abbreviations when the table is not enough"
+      ui toggle
+      note "off: take the names of code, also cut ones; the person still agrees. For dos83 no table is fair"
+    abbr_letters (2, 4) 1..6 "Shortest and longest abbreviation that the model may propose, in letters"
+      note "5088 abbreviations have two or three letters; four leaves room for family words. One letter is an initial, not an abbreviation"
+  rules arena
+    tries 6 1..20 "Most test calls in the abbreviation arena"
+  rule files.undo "undo" "Folder of the undo logs, relative to the tool folder"
+  rule permissions.rename off "The tool may rename files"
+    ui toggle
+    note "off: a dry run. The run ends at ready and renames nothing."
+  preset mac
+    set target.standard hfs
+  preset dos
+    set target.standard dos83
+    set shorten.ask_model off
+
+  ; The lines run in order. A gate that passes goes on to the next line; a fail goes to an end.
+  step read "Read the folder" by steps.read
+    do "list the font files; split each name into family words and style words"
+  gate files-ok hard "Font files to name" by gates.files_ok
+    check "the folder has at least one font file, and every name has a family before the hyphen"
+    fail -> empty "no font files"
+  step plan "Shorten with the table" by steps.plan
+    do "build the short names with the built-in table; when shorten.ask_model is on, list the words that the table does not know in the names that needed dropped vowels, initials or a cut"
+    reads target.* shorten.method shorten.consistent shorten.ask_model
+  if plan.weak_words
+    reason abbreviate "Propose abbreviations"
+      intent "propose short abbreviations for the family and style words that the table does not know"
+      do "propose a table of abbreviations, one for each weak word, as type designers write them (Grotesque: Grt): the first letter of the word, then letters of the word in their order, {shorten.abbr_letters} letters (shortest, longest). Test each table with try_names before you answer; table shows the built-in words"
+      mode careful
+      candidates 2
+      tools steps.try_names steps.table
+      budget arena.tries
+      sees plan.weak_words plan.rows
+      out dict[str, str]
+    gate abbr-ok hard "Abbreviations are fair" by gates.abbr_ok
+      check "each abbreviation is a word of the family, starts with its first letter, keeps the order of its letters, has {shorten.abbr_letters} letters (shortest, longest), and no name needs dropped vowels, initials or a cut"
+      retry 1
+      fail -> held "no fair abbreviation"
+  step final "Final names" by steps.final
+    do "build the names again with the built-in table and the best fair table of the model"
+    reads target.* shorten.method shorten.consistent
+  gate fits hard "Every name fits the standard" by gates.fits
+    check "every new name fits {target.standard}: its length, its characters and the reserved names"
+    fail -> held "a name does not fit"
+  gate unique hard "No two files share a name" by gates.unique
+    check "no two new names are equal when case is ignored, and no new name is the name of another file"
+    fail -> held "two files would get the same name"
+  gate readable model "The names read well"
+    if final.abbreviations
+    check "read the new names as a type designer would: pass when the family and the style can still be recognised in each name"
+    sees final.table final.abbreviations
+    fail -> held "the names do not read well"
+  gate something hard "A file gets a new name" by gates.something
+    check "at least one file gets a new name"
+    fail -> same "every file has its short name already"
+  gate approve human "Rename these files?"
+    check "show the person the table of old and new names"
+    sees final.table final.abbreviations
+    fail -> declined "the person said no"
+  gate allowed hard "The tool may rename" by gates.may_rename
+    reads permissions.rename
+    check "the rule permissions.rename is on"
+    fail -> ready "dry run"
+  step rename "Rename" by steps.rename
+    do "write the undo log, then rename each file in two phases"
+  gate verify hard "Every file renamed" by gates.verify
+    check "every new name is there, no old or temporary name is left, and the count of font files did not change"
+    fail -> held "a rename failed"
+  end done "Renamed"
+  end ready "Dry run: the table is ready, nothing renamed"
+  end same "Nothing to rename"
+  end held "Held back: nothing renamed"
+  end declined "The person said no: nothing renamed"
+  end empty "No font files"
+
+  rollback
+    step undo "Put the names back" by steps.undo
+      do "rename every file of this run back, from its undo log"
