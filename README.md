@@ -54,7 +54,7 @@ cd examples/release-tool
 python3 tool.py run '{"folder": "tests/cases/good"}'
 ```
 
-To serve Streamable HTTP MCP (`/mcp`), OpenAPI 3.1 (`/openapi.json`), rule controls (`/`), and the localhost approval UI (`/approve/<run>`):
+To serve Streamable HTTP MCP (`/mcp`), OpenAPI 3.1 (`/openapi.json`), rule controls (`/`), the read-only flow graph (`/viewer?serve=1`), and the localhost approval UI (`/approve/<run>`):
 
 ```bash
 python3 tool.py serve-http --port 8780
@@ -74,9 +74,10 @@ python3 ../../skills/rig/rig.py serve release.rig --json gen/release.json
 | [skills/rig/SKILL.md](skills/rig/SKILL.md) | Portable Agent Skill and 1-page [cheatsheet](skills/rig/cheatsheet.md). Copy `skills/rig/` into any coding agent's skills folder. |
 | [skills/rig/rig.py](skills/rig/rig.py) | The language tool (stdlib only): `new`, `build`, `doctor`, `test`, `plugin`, `mcp-config`, `check`, `serve`, `compile`. |
 | [skills/rig/kit/rigkit.py](skills/rig/kit/rigkit.py) | The runtime (stdlib only): rules, `ui` controls, `reason` arenas, `brief` artifacts, `rollback`/`restore`, `queue` + chunked unattended `next-batch` (lock + circuit breaker), two-tier worker (`openai`, `ollama`, `anthropic`), stdio & Streamable HTTP MCP, OpenAPI 3.1, approval UI, `eval`, and adapter helpers (`step`, `rpc_call`, `http_json`, `WorkerPool`). |
-| [skills/rig/kit/templates/](skills/rig/kit/templates/) | Project templates (`flow`, `flow2`, `flow3`, `host`, `plugin`). |
+| [skills/rig/kit/templates/](skills/rig/kit/templates/) | Project templates (`flow`, `flow2`, `flow3`, `host`, `plugin`), including external `__NAME__.rig` starters. |
+| [skills/rig/resources/](skills/rig/resources/) | Editable stylesheets (`viewer.css`, `http.css`) and viewer client (`viewer.html`, `viewer.js`), copied into `<tool>/resources/` on `new` and `build`. |
 | [skills/rig/spec.md](skills/rig/spec.md) | The Rig v2 language specification. |
-| [viewer/index.html](viewer/index.html) | Browser viewer: units, rules (`ui` badges), structured `intent`, and three-lane graph (`code`, `model`, `person`). |
+| [viewer/index.html](viewer/index.html) | Browser viewer entry point: units, rules (`ui` badges), structured `intent`, and three-lane graph (`code`, `model`, `person`). |
 | [examples/release-tool/](examples/release-tool/) | Level 3 pattern example with structured `intent`, `never` mappings, `ui` rules, tests, and plugin. |
 | [examples/band-facts/](examples/band-facts/) | Level 2 example: Wikipedia band facts with `never` boundary mapping and regression set. |
 | [examples/bookmarks/](examples/bookmarks/) | Level 3 real tool: browser bookmarks cleanup with `for` loops and human choice gates. |
@@ -124,7 +125,7 @@ python3 -m unittest discover -s tests
 
 ## Status
 
-Language version 2, updated 2026-11-26. [docs/status.md](docs/status.md) says what is verified and what is open.
+Language version 2, updated 2026-11-27. [docs/status.md](docs/status.md) says what is verified and what is open.
 
 ## License and privacy
 

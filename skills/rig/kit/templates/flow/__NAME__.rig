@@ -1,0 +1,46 @@
+; __NAME__: made by rig.py new, level __LEVEL__ (__LEVEL_NAME__). Replace each TODO, then: rig.py build . && rig.py doctor .
+
+unit __NAME__
+  intent "TODO: say what the tool must do, in one sentence"
+  in item str "the item to work on"
+  out text "the end of the run, with the problems"
+  code gates gates.py
+    test tests/test_gates.py
+  code steps steps.py
+    test tests/test_steps.py
+
+  rule limits.min_length 3 "Shortest item, in characters"
+    range 1 1000
+    note "TODO: say where this value comes from"
+  ; >>> level 3
+  rule permissions.write off "The tool may write"
+    note "off: a dry run. The run ends at ready and changes nothing."
+  ; <<< level 3
+
+  ; The lines run in order. A gate that passes goes on to the next line.
+  step look "Look" by steps.look
+    do "read the item and measure it"
+  gate long-enough hard "Long enough"
+    check "the item has at least {limits.min_length} characters"
+    by gates.long_enough
+    fail -> stop "too short"
+  gate sensible model "Makes sense"
+    check "TODO: say what the model must decide; pass if the item makes sense"
+    sees item look
+    fail -> stop "the model said no"
+  ; >>> level 3
+  gate approve human "May the tool write?"
+    check "TODO: say what the person must see before the answer"
+    sees item look
+    fail -> stop "the person said no"
+  gate allowed hard "The tool may write"
+    reads permissions.write
+    check "the rule permissions.write is on"
+    by gates.may_write
+    fail -> ready "dry run"
+  ; <<< level 3
+  end done "Done"
+  ; >>> level 3
+  end ready "Ready, nothing written"
+  ; <<< level 3
+  end stop "Stopped"

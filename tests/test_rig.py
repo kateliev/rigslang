@@ -813,10 +813,27 @@ class Report(unittest.TestCase):
 
 class Viewer(unittest.TestCase):
 	def test_the_viewer_has_no_parser(self):
-		with open(os.path.join(ROOT, 'viewer', 'index.html'), encoding='utf-8') as f:
-			page = f.read()
-		for name in ('function parse(', 'function tokenize(', 'function check(', 'function catalog('):
-			self.assertNotIn(name, page)
+		res_dir = os.path.join(ROOT, 'skills', 'rig', 'resources')
+		for path in (
+			os.path.join(ROOT, 'viewer', 'index.html'),
+			os.path.join(res_dir, 'viewer.html'),
+			os.path.join(res_dir, 'viewer.js'),
+		):
+			with open(path, encoding='utf-8') as f:
+				content = f.read()
+			for name in ('function parse(', 'function tokenize(', 'function check(', 'function catalog('):
+				self.assertNotIn(name, content, path)
+		for html_path in (os.path.join(ROOT, 'viewer', 'index.html'), os.path.join(res_dir, 'viewer.html')):
+			with open(html_path, encoding='utf-8') as f:
+				html_text = f.read()
+			self.assertNotIn('<style', html_text, html_path)
+			self.assertIn('viewer.css', html_text, html_path)
+			self.assertIn('viewer.js', html_text, html_path)
+		with open(os.path.join(res_dir, 'viewer.css'), encoding='utf-8') as f:
+			css = f.read()
+		for tok in ('--graph-col', '--graph-gap', '--graph-lane-pad'):
+			self.assertIn(tok, css)
+		self.assertTrue(os.path.isfile(os.path.join(res_dir, 'http.css')))
 
 	def test_bundle_gives_what_the_viewer_draws(self):
 		with open(RELEASE, encoding='utf-8') as f:

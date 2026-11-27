@@ -1573,11 +1573,28 @@ class RigV2Runtime(unittest.TestCase):
 				rid = start_data['run']
 				self.assertEqual(start_data['waiting']['approve_url'], '{}/approve/{}'.format(base, rid))
 				self.assertEqual(start_data['waiting']['elicitation']['method'], 'elicitation/create')
-				# 3. Dashboard renders UI rule control and pending human gate link
+				# 3. Dashboard links external /http.css, Flow Graph (/viewer), UI rule control, and pending human gate link
 				with urllib.request.urlopen(base + '/', timeout=3) as r:
 					dash = r.read().decode('utf-8')
+				self.assertIn('href="/http.css"', dash)
+				self.assertNotIn('<style>', dash)
+				self.assertIn('href="/viewer?serve=1"', dash)
 				self.assertIn('data-rule="mode.fast"', dash)
 				self.assertIn('/approve/' + rid, dash)
+				with urllib.request.urlopen(base + '/http.css', timeout=3) as r:
+					self.assertIn('text/css', r.headers.get('Content-Type', ''))
+					self.assertIn('.card', r.read().decode('utf-8'))
+				with urllib.request.urlopen(base + '/viewer?serve=1', timeout=3) as r:
+					self.assertIn('viewer.css', r.read().decode('utf-8'))
+				with urllib.request.urlopen(base + '/viewer.css', timeout=3) as r:
+					self.assertIn('--graph-col', r.read().decode('utf-8'))
+				with urllib.request.urlopen(base + '/bundle', timeout=3) as r:
+					vb = json.loads(r.read().decode('utf-8'))
+				self.assertTrue(vb['readonly'])
+				self.assertEqual(vb['units'][0]['name'], 'webdemo')
+				with urllib.request.urlopen(base + '/runs', timeout=3) as r:
+					vruns = json.loads(r.read().decode('utf-8'))
+				self.assertEqual(vruns[0]['id'], rid)
 				# 4. GET & POST /approve/<run> completes human sign-off
 				with urllib.request.urlopen('{}/approve/{}'.format(base, rid), timeout=3) as r:
 					app_html = r.read().decode('utf-8')
@@ -1952,6 +1969,108 @@ class RigV2Runtime(unittest.TestCase):
 			finally:
 				srv.terminate()
 				srv.wait(timeout=5)
+		finally:
+			shutil.rmtree(tmp)
+
+	def test_external_resources_and_rig_templates_survive_build_and_doctor(self):
+		import socket
+		import threading
+		import urllib.request
+		tmp = tempfile.mkdtemp()
+		with socket.socket() as sock:
+			sock.bind(('127.0.0.1', 0))
+			port = sock.getsockname()[1]
+		try:
+			# 1. External __NAME__.rig templates render cleanly with zero leftover level markers
+			for tpl in ('flow', 'host'):
+				for lv in (1, 2, 3):
+					rendered = rig_project.rig_source('sample-tool', lv, tpl)
+					self.assertIn('unit sample-tool', rendered)
+					self.assertNotIn('>>> level', rendered)
+					self.assertNotIn('<<< level', rendered)
+					if lv >= 3:
+						self.assertIn('permissions.write', rendered)
+					else:
+						self.assertNotIn('permissions.write', rendered)
+			# 2. rig.py new copies viewer.html, viewer.js, viewer.css, and http.css into resources/
+			folder = os.path.join(tmp, 'styled')
+			buf = io.StringIO()
+			with contextlib.redirect_stdout(buf):
+				rig_project.new(folder, 'styled-tool', 1)
+			res_dir = os.path.join(folder, 'resources')
+			for fname in ('viewer.html', 'viewer.js', 'viewer.css', 'http.css'):
+				self.assertTrue(os.path.isfile(os.path.join(res_dir, fname)), fname)
+			# 3. User edits to viewer.css and http.css survive build, build --check, and doctor
+			vcss_path = os.path.join(res_dir, 'viewer.css')
+			hcss_path = os.path.join(res_dir, 'http.css')
+			with open(vcss_path, 'a', encoding='utf-8') as f:
+				f.write('\n/* custom-graph-theme */\n:root { --graph-col: 360; }\n')
+			with open(hcss_path, 'a', encoding='utf-8') as f:
+				f.write('\n/* custom-http-theme */\n')
+			with contextlib.redirect_stdout(buf):
+				self.assertEqual(rig_project.build(folder), 0)
+				self.assertEqual(rig_project.build(folder, check=True), 0)
+			doc_buf = io.StringIO()
+			with contextlib.redirect_stdout(doc_buf):
+				self.assertEqual(rig_project.doctor(folder, False, True), 0)
+			with open(vcss_path, encoding='utf-8') as f:
+				self.assertIn('custom-graph-theme', f.read())
+			with open(hcss_path, encoding='utf-8') as f:
+				self.assertIn('custom-http-theme', f.read())
+			# 4. rig.py serve serves the tool's customized resources/viewer.css live
+			srv = subprocess.Popen(
+				[sys.executable, os.path.join(ROOT, 'skills', 'rig', 'rig.py'), 'serve', 'styled-tool.rig', '--port', str(port)],
+				cwd=folder, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+			)
+			try:
+				base = 'http://127.0.0.1:{}'.format(port)
+				for _ in range(50):
+					try:
+						with urllib.request.urlopen(base + '/viewer.css', timeout=2) as r:
+							served_vcss = r.read().decode('utf-8')
+							break
+					except OSError:
+						time.sleep(0.1)
+				else:
+					self.fail('serve did not start')
+				self.assertIn('custom-graph-theme', served_vcss)
+				with urllib.request.urlopen(base + '/viewer?serve=1', timeout=2) as r:
+					self.assertIn('viewer.css', r.read().decode('utf-8'))
+				with urllib.request.urlopen(base + '/viewer.js', timeout=2) as r:
+					self.assertIn('cssNum("--graph-col"', r.read().decode('utf-8'))
+			finally:
+				srv.terminate()
+				srv.wait(timeout=5)
+			# 5. Kit.make_http_server serves the tool's customized resources/http.css and resources/viewer.css
+			with open(os.path.join(folder, 'gen', 'styled-tool.json'), encoding='utf-8') as f:
+				cat_json = json.load(f)
+			k = rigkit.Kit(cat_json, runs=os.path.join(folder, 'runs'))
+			hsrv = k.make_http_server(host='127.0.0.1', port=0)
+			ht = threading.Thread(target=hsrv.serve_forever, daemon=True)
+			ht.start()
+			try:
+				hbase = 'http://127.0.0.1:{}'.format(hsrv.server_port)
+				with urllib.request.urlopen(hbase + '/http.css', timeout=2) as r:
+					self.assertIn('custom-http-theme', r.read().decode('utf-8'))
+				with urllib.request.urlopen(hbase + '/viewer.css', timeout=2) as r:
+					self.assertIn('custom-graph-theme', r.read().decode('utf-8'))
+			finally:
+				hsrv.shutdown()
+				hsrv.server_close()
+			# 6. Deleting viewer.css is caught by doctor, restored by build without touching http.css, and reset by --reset-css
+			os.remove(vcss_path)
+			doc_buf2 = io.StringIO()
+			with contextlib.redirect_stdout(doc_buf2):
+				self.assertEqual(rig_project.doctor(folder, False, True), 1)
+			with contextlib.redirect_stdout(buf):
+				self.assertEqual(rig_project.build(folder), 0)
+			self.assertTrue(os.path.isfile(vcss_path))
+			with open(hcss_path, encoding='utf-8') as f:
+				self.assertIn('custom-http-theme', f.read())
+			with contextlib.redirect_stdout(buf):
+				self.assertEqual(rig_project.build(folder, reset_css=True), 0)
+			with open(hcss_path, encoding='utf-8') as f:
+				self.assertNotIn('custom-http-theme', f.read())
 		finally:
 			shutil.rmtree(tmp)
 

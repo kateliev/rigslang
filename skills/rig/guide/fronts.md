@@ -38,7 +38,7 @@ Every tool has `tool.py`. It is the only door to the tool. Runs get short sequen
 | `tool.py artifact RUN NAME [--path KEY] [--offset N] [--limit N]` | Read-only inspection of a full payload saved by a step or reason block that declares `brief`. |
 | `tool.py work RUN [--api-url URL] [--model NAME] [--provider openai\|ollama\|anthropic]` | Two-tier Python worker (stdlib only): routes `step ... by model` to the worker model and `reason` blocks to the reasoning tier (`--reason-api-url`, `--reason-model`, `--reason-api-key`, `--reason-provider`; env `RIG_*` / `RIG_REASON_*`). Supports `openai`, `ollama`, and `anthropic` APIs. |
 | `tool.py mcp [--api-url URL] [--model NAME] [--approve-url URL]` | Zero-dependency JSON-RPC 2.0 stdio MCP server (with MCP Elicitation when advertised by the client). |
-| `tool.py serve-http [--host 127.0.0.1] [--port 8780] [--reports DIR]` | Stdlib HTTP server exposing Streamable HTTP MCP (`POST /mcp`), OpenAPI 3.1 (`/openapi.json`), REST endpoints (`/api/*`), rule-bound UI controls (`/`), visual/diff human approval pages (`/approve/<run>`), and reports (`/reports`). |
+| `tool.py serve-http [--host 127.0.0.1] [--port 8780] [--reports DIR]` | Stdlib HTTP server exposing Streamable HTTP MCP (`POST /mcp`), OpenAPI 3.1 (`/openapi.json`), REST endpoints (`/api/*`), rule-bound UI controls (`/`), the flow graph (`/viewer?serve=1`), visual/diff human approval pages (`/approve/<run>`), and reports (`/reports`). |
 | `tool.py serve-stdio` | Warm JSON-lines loop over stdin/stdout keeping Python and loaded modules warm (used by the plugin bridge). |
 | `tool.py drop RUN [REASON]` | Mark a waiting run ended with outcome `dropped` so abandoned runs leave `queues`. |
 | `tool.py list [--limit N]` | List runs, newest first (default 50). |
@@ -184,7 +184,8 @@ python3 tool.py serve-http --port 8780
 ## 5. The front for a person
 
 - The command line (`approve`, `restore`, `next-batch`, `eval`) or the built-in localhost web UI (`tool.py serve-http`).
-- The graph viewer: `python3 RIG serve NAME.rig --json gen/NAME.json` shows the source as tables and as a three-lane graph (`code`, `model`, `person`), with `reason` nodes, `rollback`/`finally` blocks, structured `intent`, and `ui` rule badges.
+- The graph viewer: `python3 RIG serve NAME.rig --json gen/NAME.json` (or `/viewer?serve=1` on `tool.py serve-http`) shows the source as tables and as a three-lane graph (`code`, `model`, `person`), with `reason` nodes, `rollback`/`finally` blocks, structured `intent`, and `ui` rule badges.
+- Editable stylesheets in `resources/`: `rig.py new` and `rig.py build` copy `viewer.html` and `viewer.js` (managed by the build) plus `viewer.css` and `http.css` into `<tool>/resources/`. Edit `resources/viewer.css` (colors, typography, `--graph-col`, `--graph-gap`, `--graph-lane-pad`) or `resources/http.css` freely per project; `rig.py build` keeps your changes, `rig.py build DIR --reset-css` restores the defaults, and both `rig.py serve` and `tool.py serve-http` serve your local CSS live.
 
 ## 6. A tool inside a host application
 

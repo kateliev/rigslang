@@ -11,6 +11,7 @@ A project is a folder with one rig.json file:
       "driver": "python3 tool.py",     the command line of the runner
       "build": {"gen": "gen", "skill": "skill/SKILL.md"},
       "kit": "rigkit.py",              the tool's own copy of kit/rigkit.py
+      "resources": "resources",        viewer & HTTP assets; *.css stays editable
       "tests": "python3 -m unittest discover -s tests",
       "regression": "tests/regression-set.json",
       "plugin": {"folder": "plugin", "owner": "local", "timeout_s": 120}   made by: rig.py plugin DIR;
@@ -31,8 +32,14 @@ import rig
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 KIT = os.path.join(HERE, 'kit', 'rigkit.py')
+RESOURCES = os.path.join(HERE, 'resources')
 TEMPLATES = os.path.join(HERE, 'kit', 'templates')
 LEVELS = {1: 'checked', 2: 'flow', 3: 'production'}
+
+
+def resources_dir(m):
+	res = m.get('resources', 'resources')
+	return res if res else None
 
 
 def read(path):
@@ -95,6 +102,10 @@ def outputs(folder, m):
 		out[skill_path] = rig.skill(main, ref, None, m.get('driver'))
 	if m.get('kit'):
 		out[m['kit']] = read(KIT)
+	res_dir = resources_dir(m)
+	if res_dir:
+		for name in ('viewer.html', 'viewer.js'):
+			out[os.path.join(res_dir, name)] = read(os.path.join(RESOURCES, name))
 	if m.get('plugin'):
 		sub = m['plugin'].get('folder', 'plugin')
 		out[os.path.join(sub, 'src', 'gen', 'front.json')] = json.dumps(front(m, files, main), ensure_ascii=False, indent=1) + '\n'
@@ -212,7 +223,7 @@ def plugin(folder, owner):
 	return 0
 
 
-def build(folder, check=False):
+def build(folder, check=False, reset_css=False):
 	m = manifest(folder)
 	stale = []
 	for rel, text in sorted(outputs(folder, m).items()):
@@ -225,6 +236,18 @@ def build(folder, check=False):
 			os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
 			rig.write(path, text)
 			print('wrote ' + rel)
+	res_dir = resources_dir(m)
+	if not check and res_dir:
+		for name in ('viewer.css', 'http.css'):
+			rel = os.path.join(res_dir, name)
+			path = os.path.join(folder, rel)
+			src_text = read(os.path.join(RESOURCES, name)).replace('\r\n', '\n')
+			if reset_css or not os.path.exists(path):
+				if not os.path.exists(path) or read(path).replace('\r\n', '\n') != src_text:
+					os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+					rig.write(path, src_text)
+					stale.append(rel)
+					print('wrote ' + rel)
 	if check:
 		for rel in stale:
 			print('stale: ' + rel)
@@ -305,6 +328,10 @@ def doctor(folder, run_tests=True, as_json=False):
 		add(1, not stale and not errs, 'the compiled files are current (rig.py build)', ', '.join(sorted(stale)) or 'fix the errors first')
 	except SystemExit as e:
 		add(1, False, 'the compiled files are current (rig.py build)', str(e))
+	res_dir = resources_dir(m)
+	if res_dir:
+		missing_css = [os.path.join(res_dir, n) for n in ('viewer.css', 'http.css') if not os.path.exists(os.path.join(folder, res_dir, n))]
+		add(1, not missing_css, 'the editable stylesheets exist in {} (rig.py build)'.format(res_dir), ', '.join(missing_css))
 	numbers = [w for w in warns if 'a number in the text' in w]
 	add(1, not numbers, 'no number in the text of a node: every number is a rule', '; '.join(numbers[:3]))
 	add(1, bool(m.get('driver')), 'rig.json names the driver: the runner command')
@@ -433,106 +460,13 @@ def doctor(folder, run_tests=True, as_json=False):
 
 # - new ------------------------------------------------
 def rig_source(name, level, template='flow'):
-	L = ['; {}: made by rig.py new, level {} ({}). Replace each TODO, then: rig.py build . && rig.py doctor .'.format(name, level, LEVELS[level]), '']
-	if template == 'host':
-		L += ['unit {}'.format(name),
-			'  intent "TODO: operate the host application safely through a thin adapter and pure-Python engine"',
-			'  in item str "the target item id in the host application"',
-			'  out text "the end of the run, with the problems"',
-			'  code gates gates.py',
-			'    test tests/test_gates.py',
-			'  code steps steps.py',
-			'    test tests/test_steps.py',
-			'',
-			'  rule limits.min_length 3 "Shortest item id, in characters"',
-			'    range 1 1000',
-			'    ui',
-			'    note "TODO: say where this value comes from"',
-			'  rule batch.size 10 "Items per unattended chunk"',
-			'    range 1 100',
-			'    ui',
-			'    note "default chunk size for next-batch"']
-		if level >= 3:
-			L += ['  rule permissions.write off "The tool may write to the host application"',
-				'    ui',
-				'    note "off: a dry run. The run ends at ready and changes nothing."']
-		L += ['',
-			'  queue by steps.pending',
-			'  step snapshot "Snapshot" by steps.snapshot',
-			'    do "read the current item state from the host adapter"',
-			'    reads batch.size',
-			'  gate long-enough hard "Long enough"',
-			'    check "the item has at least {limits.min_length} characters"',
-			'    by gates.long_enough',
-			'    fail -> stop "too short"',
-			'  step compute "Compute" by steps.compute',
-			'    do "compute the proposed change in pure Python (engine.py)"',
-			'  gate sensible model "Makes sense"',
-			'    check "TODO: say what the model must decide; pass if the proposed change makes sense"',
-			'    sees item snapshot compute',
-			'    fail -> stop "the model said no"']
-		if level >= 3:
-			L += ['  gate approve human "Apply this change in the host application?"',
-				'    check "TODO: show the person the diff from compute"',
-				'    sees item compute',
-				'    fail -> stop "the person said no"',
-				'  gate allowed hard "The tool may write"',
-				'    reads permissions.write',
-				'    check "the rule permissions.write is on"',
-				'    by gates.may_write',
-				'    fail -> ready "dry run"']
-		L += ['  step apply "Apply" by steps.apply',
-			'    do "apply the computed change through the host adapter"',
-			'  end done "Done"']
-		if level >= 3:
-			L += ['  end ready "Ready, nothing written"']
-		L += ['  end stop "Stopped"',
-			'  rollback',
-			'    step undo "Restore" by steps.restore',
-			'      do "restore the snapshot in the host application"']
-		return '\n'.join(L) + '\n'
-	L += ['unit {}'.format(name),
-		'  intent "TODO: say what the tool must do, in one sentence"',
-		'  in item str "the item to work on"',
-		'  out text "the end of the run, with the problems"',
-		'  code gates gates.py',
-		'    test tests/test_gates.py',
-		'  code steps steps.py',
-		'    test tests/test_steps.py',
-		'',
-		'  rule limits.min_length 3 "Shortest item, in characters"',
-		'    range 1 1000',
-		'    note "TODO: say where this value comes from"']
-	if level >= 3:
-		L += ['  rule permissions.write off "The tool may write"',
-			'    note "off: a dry run. The run ends at ready and changes nothing."']
-	L += ['',
-		'  ; The lines run in order. A gate that passes goes on to the next line.',
-		'  step look "Look" by steps.look',
-		'    do "read the item and measure it"',
-		'  gate long-enough hard "Long enough"',
-		'    check "the item has at least {limits.min_length} characters"',
-		'    by gates.long_enough',
-		'    fail -> stop "too short"',
-		'  gate sensible model "Makes sense"',
-		'    check "TODO: say what the model must decide; pass if the item makes sense"',
-		'    sees item look',
-		'    fail -> stop "the model said no"']
-	if level >= 3:
-		L += ['  gate approve human "May the tool write?"',
-			'    check "TODO: say what the person must see before the answer"',
-			'    sees item look',
-			'    fail -> stop "the person said no"',
-			'  gate allowed hard "The tool may write"',
-			'    reads permissions.write',
-			'    check "the rule permissions.write is on"',
-			'    by gates.may_write',
-			'    fail -> ready "dry run"']
-	L += ['  end done "Done"']
-	if level >= 3:
-		L += ['  end ready "Ready, nothing written"']
-	L += ['  end stop "Stopped"']
-	return '\n'.join(L) + '\n'
+	src = os.path.join(TEMPLATES, 'host' if template == 'host' else 'flow', '__NAME__.rig')
+	words = {'__NAME__': name, '__FN__': name.replace('-', '_'), '__LEVEL__': str(level), '__LEVEL_NAME__': LEVELS[level]}
+	text = read(src)
+	for k, v in words.items():
+		text = text.replace(k, v)
+	text = level_blocks(text, level)
+	return text if text.endswith('\n') else text + '\n'
 
 
 def template_files(level, template='flow'):
@@ -549,10 +483,10 @@ def template_files(level, template='flow'):
 
 
 def level_blocks(text, level):
-	'''Keep the lines between "# >>> level N" and "# <<< level N" only from level N up.'''
+	'''Keep the lines between "#/;" >>> level N and <<< level N only from level N up.'''
 	out, keep = [], True
 	for line in text.split('\n'):
-		m = re.match(r'^\s*# (>>>|<<<) level (\d)\s*$', line)
+		m = re.match(r'^\s*[#;] (>>>|<<<) level (\d)\s*$', line)
 		if m:
 			keep = m.group(1) == '<<<' or level >= int(m.group(2))
 			continue
@@ -574,11 +508,11 @@ def new(folder, name, level=1, template='flow'):
 	m = {'rig': 2, 'name': name, 'level': level, 'source': name + '.rig', 'unit': name, 'driver': 'python3 tool.py'}
 	m['build'] = {'gen': 'gen', 'skill': 'skill/SKILL.md'} if level >= 2 else {'gen': 'gen'}
 	m['kit'] = 'rigkit.py'
+	m['resources'] = 'resources'
 	m['tests'] = 'python3 -m unittest discover -s tests'
 	if level >= 2:
 		m['regression'] = 'tests/regression-set.json'
 	rig.write(os.path.join(folder, 'rig.json'), json.dumps(m, ensure_ascii=False, indent=1) + '\n')
-	rig.write(os.path.join(folder, name + '.rig'), rig_source(name, level, template))
 	words = {'__NAME__': name, '__FN__': name.replace('-', '_'), '__LEVEL__': str(level), '__LEVEL_NAME__': LEVELS[level]}
 	for src, rel in template_files(level, template):
 		text = read(src)
@@ -586,6 +520,8 @@ def new(folder, name, level=1, template='flow'):
 			text = text.replace(k, v)
 			rel = rel.replace(k, v)
 		text = level_blocks(text, level)
+		if not text.endswith('\n'):
+			text += '\n'
 		if rel.endswith('.tmpl'):
 			rel = os.path.join(os.path.dirname(rel), '.' + os.path.basename(rel)[:-5])  # gitignore.tmpl -> .gitignore
 		path = os.path.join(folder, rel)
@@ -668,7 +604,7 @@ def main(cmd, rest):
 	if cmd == 'test':
 		return test(folder, replay)
 	if cmd == 'build':
-		return build(folder, '--check' in rest)
+		return build(folder, '--check' in rest, '--reset-css' in rest)
 	if cmd == 'doctor':
 		return doctor(folder, '--no-tests' not in rest, '--json' in rest)
 	raise SystemExit('new, build, doctor, test, plugin or mcp-config')

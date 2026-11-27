@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rig viewer</title>
+<!-- Sends requests only to the server of the page: rig.py serve (/bundle, /compile, /runs, /file),
+     tool.py serve-http (/bundle, /runs), or the static server of compiled examples next to it.
+     It has no parser: rig.py compiles the file, and viewer.js draws what rig.py gives.
+     All colors, typography, and graph spacing live in viewer.css. -->
+<link rel="stylesheet" href="viewer.css">
+</head>
+<body class="anim">
+<header>
+  <div class="bar">
+    <span class="brand">Rig</span>
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="units">Units</button>
+      <button role="tab" data-tab="graph">Graph</button>
+      <button role="tab" data-tab="skill">Skill</button>
+      <button role="tab" data-tab="json">JSON</button>
+    </div>
+    <select id="unit" aria-label="Unit" hidden></select>
+    <span id="fname"></span><span id="dirty"></span>
+    <span class="spacer"></span>
+    <span id="msg" role="status"></span>
+    <select id="preset" aria-label="Apply a preset" hidden><option value="">preset…</option></select>
+    <button id="open">Open…</button>
+    <button id="save" class="primary" disabled>Save</button>
+    <button id="close" disabled>Close</button>
+    <input type="file" id="file" accept=".json,application/json" hidden>
+  </div>
+  <div class="bar sub" id="gbar" hidden>
+    <span class="pill" id="cov"></span>
+    <select id="run" hidden title="Show the path of one run on the graph"><option value="">run…</option></select>
+    <span class="spacer"></span>
+    <label><input type="checkbox" id="t-param" checked> rule wires</label>
+    <label><input type="checkbox" id="t-fail" checked> fail paths</label>
+    <label><input type="checkbox" id="t-anim" checked> flow</label>
+    <button id="fit" title="Fit the graph (F)">Fit</button>
+    <button id="relayout" title="Forget dragged positions">Auto layout</button>
+  </div>
+</header>
+<div id="page"></div>
+<div id="graph">
+  <div id="view" tabindex="0" aria-label="Flow graph"><div id="world"><svg id="wires"></svg></div></div>
+  <aside id="insp"></aside>
+</div>
+<script src="viewer.js"></script>
+</body>
+</html>

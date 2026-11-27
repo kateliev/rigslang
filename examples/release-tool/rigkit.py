@@ -2634,32 +2634,43 @@ class Kit(object):
 				blocks.append('<div class="sees-block"><h4>{}</h4><pre>{}</pre></div>'.format(ekey, _html.escape(json.dumps(val, ensure_ascii=False, indent=2, default=str))))
 		return ''.join(blocks)
 
+	_FALLBACK_HTTP_CSS = (
+		'body{font-family:system-ui,-apple-system,sans-serif;max-width:960px;margin:24px auto;padding:0 16px;color:#1d1d1b;background:#f7f6f2}'
+		'a{color:#2b5c8a}.card{background:#fff;border:1px solid #e2dfd6;border-radius:10px;padding:16px 20px;margin:16px 0}'
+		'.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;background:#e6eef7;color:#2b5c8a;margin-right:6px}'
+		'.badge.never{background:#fbe9e4;color:#a2381f}.muted{color:#6b6a65;font-size:14px}'
+		'pre{background:#f3f1ea;padding:12px;border-radius:8px;overflow:auto;font-size:13px}'
+		'.rule-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #e2dfd6;gap:12px}'
+		'.approve-form{margin-top:16px}.approve-note{width:100%;padding:8px;box-sizing:border-box}'
+		'.btn{display:inline-block;padding:10px 18px;border-radius:8px;border:1px solid #e2dfd6;background:#fff;cursor:pointer;font-size:14px;margin-right:8px}'
+		'.btn-ok{background:#2f6f48;color:#fff;border-color:#2f6f48}.btn-no{background:#a2381f;color:#fff;border-color:#a2381f}'
+		'.gallery,.diff-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}img{max-width:100%;border:1px solid #e2dfd6;border-radius:6px}\n'
+	)
+
 	def _http_page(self, title, body):
-		css = (
-			'body{font-family:system-ui,-apple-system,sans-serif;max-width:960px;margin:24px auto;padding:0 16px;color:#111;background:#fafafa}'
-			'a{color:#0b57d0} .card{background:#fff;border:1px solid #e0e0e0;border-radius:10px;padding:16px 20px;margin:16px 0}'
-			'.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;background:#eef2ff;color:#1e3a8a;margin-right:6px}'
-			'.never{background:#fef2f2;color:#991b1b} .muted{color:#666;font-size:14px}'
-			'pre{background:#f5f5f5;padding:12px;border-radius:8px;overflow:auto;font-size:13px}'
-			'.rule-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #eee;gap:12px}'
-			'.btn{display:inline-block;padding:10px 18px;border-radius:8px;border:1px solid #ccc;background:#fff;cursor:pointer;font-size:14px;margin-right:8px}'
-			'.btn-ok{background:#0b57d0;color:#fff;border-color:#0b57d0} .btn-no{background:#b91c1c;color:#fff;border-color:#b91c1c}'
-			'.gallery,.diff-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px} img{max-width:100%;border:1px solid #ddd;border-radius:6px}'
-		)
-		return '<!doctype html><html><head><meta charset="utf-8"><title>{}</title><style>{}</style></head><body>{}</body></html>'.format(
-			_html.escape(title), css, body)
+		return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{}</title><link rel="stylesheet" href="/http.css"></head><body>{}</body></html>'.format(
+			_html.escape(title), body)
 
 	def make_http_server(self, host='127.0.0.1', port=8780, reports_dir=None, worker_cfg=None):
 		'''Create a threaded stdlib HTTP server serving Streamable HTTP MCP (/mcp), OpenAPI 3.1 (/openapi.json),
-		REST API (/api/*), rule-bound UI controls (/), approval UI (/approve/<run>), and reports (/reports).'''
+		REST API (/api/*), rule-bound UI controls (/), approval UI (/approve/<run>), viewer (/viewer), and reports (/reports).'''
 		kit = self
 		wcfg = dict(worker_cfg or {})
 		base_dir = os.path.dirname(os.path.abspath(self.runs)) if self.runs else os.getcwd()
+		here_kit = os.path.dirname(os.path.abspath(__file__))
+		res_dirs = [
+			os.path.join(base_dir, 'resources'),
+			os.path.join(here_kit, 'resources'),
+			os.path.join(here_kit, '..', 'resources'),
+		]
 		rep_dir = os.path.abspath(reports_dir) if reports_dir else os.path.join(base_dir, 'reports')
 		has_worker = bool((wcfg.get('api_url') and wcfg.get('model')) or (wcfg.get('reason_api_url') and wcfg.get('reason_model')))
 		tools = self._mcp_tools(has_worker)
 		exposed = set(t['name'] for t in tools)
 		sessions = {}
+
+		def find_res(name):
+			return next((os.path.join(d, name) for d in res_dirs if os.path.isfile(os.path.join(d, name))), None)
 
 		class Handler(http.server.BaseHTTPRequestHandler):
 			def send_body(self, code, data, ctype='application/json; charset=utf-8', extra_headers=None):
@@ -2698,6 +2709,55 @@ class Kit(object):
 				p = parsed.path
 				qs = urllib.parse.parse_qs(parsed.query)
 				try:
+					if p == '/http.css':
+						css_path = find_res('http.css')
+						if css_path:
+							with open(css_path, encoding='utf-8') as fh:
+								return self.send_body(200, fh.read(), 'text/css; charset=utf-8')
+						return self.send_body(200, kit._FALLBACK_HTTP_CSS, 'text/css; charset=utf-8')
+					if p in ('/viewer.css', '/viewer/viewer.css') and find_res('viewer.css'):
+						with open(find_res('viewer.css'), encoding='utf-8') as fh:
+							return self.send_body(200, fh.read(), 'text/css; charset=utf-8')
+					if p in ('/viewer.js', '/viewer/viewer.js') and find_res('viewer.js'):
+						with open(find_res('viewer.js'), encoding='utf-8') as fh:
+							return self.send_body(200, fh.read(), 'application/javascript; charset=utf-8')
+					if p in ('/viewer', '/viewer/', '/viewer/index.html') and find_res('viewer.html'):
+						with open(find_res('viewer.html'), encoding='utf-8') as fh:
+							return self.send_body(200, fh.read(), 'text/html; charset=utf-8')
+					if p == '/bundle':
+						c = kit.catalogue
+						uname = c.get('unit') or 'rig'
+						b = {
+							'rig': c.get('rig', 2),
+							'file': uname + '.json',
+							'text': None,
+							'readonly': True,
+							'errors': [],
+							'warnings': [],
+							'units': [{
+								'name': uname,
+								'status': [],
+								'flow': bool(c.get('flow')),
+								'catalogue': c,
+								'skill': None,
+								'skill_ref': None,
+								'tool': None,
+								'levels': {},
+								'rules_src': {},
+								'presets_src': {},
+							}],
+						}
+						return self.send_body(200, json.dumps(b, ensure_ascii=False, default=str))
+					if p == '/runs':
+						rows = []
+						for r in sorted(kit.all_runs(), key=lambda r: (r.get('started') or '', run_sort_key(r.get('id'))), reverse=True)[:200]:
+							o = r.get('outcome')
+							state = 'ended at {}'.format(o.get('end') or o.get('label') or 'a stop') if o else 'waits at ' + str(r.get('at'))
+							rows.append({'id': r['id'], 'state': state})
+						return self.send_body(200, json.dumps(rows, ensure_ascii=False, default=str))
+					m_vrun = re.match(r'^/runs/([\w.-]+)$', p)
+					if m_vrun:
+						return self.send_body(200, json.dumps(kit.load(m_vrun.group(1)), ensure_ascii=False, default=str))
 					if p == '/openapi.json':
 						return self.send_body(200, json.dumps(kit.openapi_spec(self.server_base_url()), ensure_ascii=False, indent=2))
 					if p == '/api/runs':
@@ -2749,8 +2809,8 @@ class Kit(object):
 							'<div class="card"><h1>{unit} — Approve {rid}</h1>'
 							'<p><strong>{q}</strong></p><p class="muted">{chk}</p>'
 							'{sees}'
-							'<form method="post" action="/approve/{rid}" style="margin-top:16px">'
-							'<p><input type="text" name="note" placeholder="Optional note or custom reply" style="width:100%;padding:8px;box-sizing:border-box"></p>'
+							'<form class="approve-form" method="post" action="/approve/{rid}">'
+							'<p><input class="approve-note" type="text" name="note" placeholder="Optional note or custom reply"></p>'
 							'<div>{btns}</div></form></div>'
 						).format(unit=_html.escape(unit), rid=_html.escape(rid), q=_html.escape(w.get('name') or w['node']), chk=_html.escape(w.get('check') or ''), sees=sees_html, btns=btns)
 						return self.send_body(200, kit._http_page('Approve ' + rid, body), 'text/html; charset=utf-8')
@@ -2782,7 +2842,7 @@ class Kit(object):
 							badges += '<span class="badge never">Never: {}</span>'.format(_html.escape(nv['text']))
 						body = (
 							'<div class="card"><h1>{unit}</h1><p>{intent}</p><div>{badges}</div>'
-							'<p class="muted"><a href="/openapi.json">OpenAPI 3.1</a> · <a href="/reports">Reports</a> · MCP endpoint: <code>POST /mcp</code></p></div>'
+							'<p class="muted"><a href="/viewer?serve=1">Flow Graph</a> · <a href="/openapi.json">OpenAPI 3.1</a> · <a href="/reports">Reports</a> · MCP endpoint: <code>POST /mcp</code></p></div>'
 							'{ui_rules}'
 							'<div class="card"><h2>Waiting for Human Approval</h2><ul>{h}</ul></div>'
 							'<div class="card"><h2>Waiting for Model</h2><ul>{m}</ul></div>'

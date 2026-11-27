@@ -2864,10 +2864,18 @@ def serve(path, port, runs=None, **outs):
 	runs = runs or os.path.join(os.path.dirname(os.path.abspath(path)), 'runs')
 	import http.server
 	here = os.path.dirname(os.path.abspath(__file__))
-	pages = [os.path.join(here, 'viewer.html'), os.path.join(here, '..', '..', 'viewer', 'index.html')]
-	page = next((p for p in pages if os.path.exists(p)), None)
-	if not page:
-		raise SystemExit('the viewer is not found: copy viewer/index.html next to rig.py as viewer.html')
+	res_dirs = [
+		os.path.join(os.path.dirname(os.path.abspath(path)), 'resources'),
+		os.path.join(here, 'resources'),
+		here,
+	]
+	fallback_page = os.path.join(here, '..', '..', 'viewer', 'index.html')
+
+	def find_asset(name):
+		return next((os.path.join(d, name) for d in res_dirs if os.path.isfile(os.path.join(d, name))), None)
+
+	if not (find_asset('viewer.html') or os.path.isfile(fallback_page)):
+		raise SystemExit('the viewer is not found: expected resources/viewer.html next to rig.py')
 	print('wrote: ' + ', '.join(outputs(path, **outs) or ['nothing (add --json or --skill)']))
 
 	class Handler(http.server.BaseHTTPRequestHandler):
@@ -2882,20 +2890,28 @@ def serve(path, port, runs=None, **outs):
 			self.wfile.write(data)
 
 		def do_GET(self):
-			if self.path in ('/', '/index.html'):
+			req = self.path.split('?', 1)[0]
+			if req in ('/', '/index.html'):
 				self.send_response(302)
 				self.send_header('Location', '/viewer?serve=1')
 				self.end_headers()
-			elif self.path.startswith('/viewer'):
+			elif req in ('/viewer.css', '/viewer/viewer.css') and find_asset('viewer.css'):
+				with open(find_asset('viewer.css'), encoding='utf-8') as f:
+					self.reply(200, f.read(), 'text/css; charset=utf-8')
+			elif req in ('/viewer.js', '/viewer/viewer.js') and find_asset('viewer.js'):
+				with open(find_asset('viewer.js'), encoding='utf-8') as f:
+					self.reply(200, f.read(), 'application/javascript; charset=utf-8')
+			elif req in ('/viewer', '/viewer/', '/viewer/index.html'):
+				page = find_asset('viewer.html') or fallback_page
 				with open(page, encoding='utf-8') as f:
 					self.reply(200, f.read(), 'text/html; charset=utf-8')
-			elif self.path == '/bundle':
+			elif req == '/bundle':
 				with open(path, encoding='utf-8', newline='') as f:
 					self.reply(200, json.dumps(bundle(f.read(), path), ensure_ascii=False))
-			elif self.path == '/runs':
+			elif req == '/runs':
 				self.reply(200, json.dumps(run_list(runs)))
-			elif self.path.startswith('/runs/') and run_file(runs, self.path[6:]):
-				with open(run_file(runs, self.path[6:]), encoding='utf-8') as f:
+			elif req.startswith('/runs/') and run_file(runs, req[6:]):
+				with open(run_file(runs, req[6:]), encoding='utf-8') as f:
 					self.reply(200, f.read())
 			else:
 				self.reply(404, json.dumps({'error': 'not found'}))

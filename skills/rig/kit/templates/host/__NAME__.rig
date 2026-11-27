@@ -1,0 +1,60 @@
+; __NAME__: made by rig.py new, level __LEVEL__ (__LEVEL_NAME__). Replace each TODO, then: rig.py build . && rig.py doctor .
+
+unit __NAME__
+  intent "TODO: operate the host application safely through a thin adapter and pure-Python engine"
+  in item str "the target item id in the host application"
+  out text "the end of the run, with the problems"
+  code gates gates.py
+    test tests/test_gates.py
+  code steps steps.py
+    test tests/test_steps.py
+
+  rule limits.min_length 3 "Shortest item id, in characters"
+    range 1 1000
+    ui
+    note "TODO: say where this value comes from"
+  rule batch.size 10 "Items per unattended chunk"
+    range 1 100
+    ui
+    note "default chunk size for next-batch"
+  ; >>> level 3
+  rule permissions.write off "The tool may write to the host application"
+    ui
+    note "off: a dry run. The run ends at ready and changes nothing."
+  ; <<< level 3
+
+  queue by steps.pending
+  step snapshot "Snapshot" by steps.snapshot
+    do "read the current item state from the host adapter"
+    reads batch.size
+  gate long-enough hard "Long enough"
+    check "the item has at least {limits.min_length} characters"
+    by gates.long_enough
+    fail -> stop "too short"
+  step compute "Compute" by steps.compute
+    do "compute the proposed change in pure Python (engine.py)"
+  gate sensible model "Makes sense"
+    check "TODO: say what the model must decide; pass if the proposed change makes sense"
+    sees item snapshot compute
+    fail -> stop "the model said no"
+  ; >>> level 3
+  gate approve human "Apply this change in the host application?"
+    check "TODO: show the person the diff from compute"
+    sees item compute
+    fail -> stop "the person said no"
+  gate allowed hard "The tool may write"
+    reads permissions.write
+    check "the rule permissions.write is on"
+    by gates.may_write
+    fail -> ready "dry run"
+  ; <<< level 3
+  step apply "Apply" by steps.apply
+    do "apply the computed change through the host adapter"
+  end done "Done"
+  ; >>> level 3
+  end ready "Ready, nothing written"
+  ; <<< level 3
+  end stop "Stopped"
+  rollback
+    step undo "Restore" by steps.restore
+      do "restore the snapshot in the host application"
