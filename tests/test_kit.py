@@ -1453,6 +1453,46 @@ class RigV2Runtime(unittest.TestCase):
 		self.assertEqual(r2['waiting']['intent']['audience'], 'maintainers')
 		self.assertEqual(k.load(r['run'])['state']['x'], 10)
 
+	def test_arena_tools_say_what_they_take_and_every_call_is_kept(self):
+		src = '''unit arena
+  in x int "value"
+  code s steps.py
+  reason think "Deliberate"
+    do "find options"
+    tools s.look s.bare
+    budget 3
+    sees x
+    out str
+  end done
+'''
+		k = rigkit.Kit(catalogue(src), runs=None)
+
+		def look(state, R, args):
+			"""Look up a word. Takes {"q": "<word>"}."""
+			return {'found': args.get('q')}
+
+		k.bind('s', {'look': look, 'bare': lambda s, R: {'ok': True}})
+		r = k.run({'x': 1})
+		w = r['waiting']
+		self.assertEqual(w['tool_help'], {'s.look': 'Look up a word. Takes {"q": "<word>"}.', 's.bare': 'no description: the tool has no docstring'})
+		k.arena_call(r['run'], 's.look', {'q': 'oak'})
+		k.arena_call(r['run'], 's.bare')
+		r = k.answer(r['run'], {'result': 'two options'})
+		self.assertEqual(r['outcome']['end'], 'done')
+		log = [(a['node'], a['tool'], a['args'], a['result']) for a in r['arena']]  # kept after the answer, also in the report
+		self.assertEqual(log, [('think', 's.look', {'q': 'oak'}, '{"found": "oak"}'), ('think', 's.bare', {}, '{"ok": true}')])
+		self.assertEqual(k.load(r['run'])['arena_used'], 0)  # the budget starts again for the next reason block
+		# The worker tells the model what each tool takes
+		r = k.run({'x': 2})
+		sent = []
+
+		def fake_req(url, headers, payload, timeout_s):
+			sent.append('\n'.join(m['content'] for m in payload['messages']))
+			return {'choices': [{'message': {'content': json.dumps({'result': 'done'})}, 'finish_reason': 'stop'}]}
+
+		k.work(r['run'], api_url='http://worker', model='m', request_fn=fake_req)
+		self.assertIn('What each tool does and takes:\n- s.look: Look up a word. Takes {"q": "<word>"}.', sent[0])
+
 	def test_rollback_queue_next_batch_brief_artifact_eval_and_adapters(self):
 		src = '''unit ops
   intent "test operational primitives"

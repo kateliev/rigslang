@@ -65,16 +65,19 @@ def plan(state, R):
 
 
 def try_names(state, R, args):
-	'''Arena tool (read only): the names that a table of abbreviations gives, and what the gate
-	abbr-ok will say about it. args: {"table": {"Word": "Abbr", ...}}.'''
+	'''Test a table of abbreviations before you answer. Takes {"table": {"Word": "Abbr", ...}}.
+	Gives the new names, and whether the gate abbr-ok will find the table fair, with its problems.'''
 	table = (args or {}).get('table')
+	if not isinstance(table, dict):
+		got = json.dumps(args, ensure_ascii=False)
+		return {'fair': False, 'names': [], 'problems': ['give the table inside "table": {"table": {"Metasequoia": "Meta", ...}}; got ' + got]}
 	rd = state['read']
 	s = engine.score(rd['instances'], settings(state, R), table, R('shorten.abbr_letters'))
 	return {'fair': s['fair'], 'problems': s['problems'], 'names': [{'short': r['short'], 'steps': r['steps']} for r in s['rows']]}
 
 
 def table(state, R, args):
-	'''Arena tool (read only): the built-in table of abbreviations, after Adobe Tech Note 5088.'''
+	'''Show the built-in table of abbreviations (after Adobe Tech Note 5088) and the letter limits. Takes no arguments ({}).'''
 	return {'table': dict(engine.ABBREVIATIONS), 'letters': R('shorten.abbr_letters')}
 
 

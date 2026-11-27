@@ -152,7 +152,7 @@ Children of `step`, `reason` and `gate`:
 | `by model` | step | Single-shot structured model call (`sees` -> `out`, no tools, thinking off by default). Requires `out <type>`. Hardening candidate (`by model` -> `by steps.fn`). |
 | `intent "text"` | reason | Local intent for this reasoning block (may carry `audience`, `style`, `never`). Combined with unit intent automatically at runtime. |
 | `mode careful\|creative` | reason | `careful` (default, thinking-enabled synthesis or diagnosis) or `creative` (divergent exploration). |
-| `tools <prefix.fn>*` | reason | Read-only helper functions available inside the reasoning arena. Run on a deep copy of `state` so they can never mutate run state. |
+| `tools <prefix.fn>*` | reason | Read-only helper functions available inside the reasoning arena. Run on a deep copy of `state` so they can never mutate run state. The docstring of each function is shown to the model as `waiting.tool_help`: it must say what the tool does and which JSON arguments it takes. |
 | `budget <n>` | reason | Hard maximum number of read-only tool calls per attempt (`n` >= 1 or a number rule id). |
 | `candidates <n>` | reason | Generate `n` distinct options (`n` >= 2 or a number rule id) matching `out`, returned as a list for a `hard` gate to filter and a `model` or `human` gate to pick. |
 | `out <type>` | step, reason | The type of what the model step or reason block gives. Required on every `by model` step and `reason` block; enforced at runtime by schema validation. |
@@ -277,7 +277,7 @@ The **runner** is `rigkit.py` (`kit/`). It reads the compiled catalogue (`"rig":
 - **Read-only run metadata (`state["_rig"]`):** refreshed before every step, gate, arena tool, `rollback`, and `finally` call with `{"run_id", "unattended", "in_rollback", "in_finally", "rolled_back", "end"}`. `unattended` is `True` during `next-batch` execution and `False` during interactive `run`, `answer`, or `rerun`.
 - **Runtime input validation** against compiled `in` schemas.
 - **Automatic `intent` injection** into `waiting.intent` for every `reason` block and `model` gate.
-- **Read-only arena tools** (`tool.py arena RUN TOOL [JSON]`) run on a deep copy of `state` under a hard `budget`.
+- **Read-only arena tools** (`tool.py arena RUN TOOL [JSON]`) run on a deep copy of `state` under a hard `budget`. `waiting.tool_help` gives the docstring of each tool. The run keeps every call (the node, the tool, the arguments and the result, cut at 2000 characters) in `arena_log`, and the report of the run shows it as `arena`.
 - **Brief artifacts** saved to `runs/<run>/artifacts/<step>.json` and inspected read-only via `tool.py artifact RUN NAME`.
 - **Transactional rollback** runs on hard fail, error, unattended deferral (`next-batch`), or explicit `tool.py restore RUN`.
 - **Chunked unattended batches (`next-batch`)** discover items from `queue` (or an input list), serialize execution via `runs/.batch.lock`, trip a consecutive-error/timeout circuit breaker, roll back & defer waiting items, write a Markdown report, and return a compact one-line `summary`.

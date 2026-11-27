@@ -102,8 +102,10 @@ def read(state, R):
 def pending(state, R):
     return [{'item': 'a'}, {'item': 'b'}][:int(R('batch.size'))]
 
-# Read-only reason arena tool (steps.py): receives a deep copy of state
+# Read-only reason arena tool (steps.py): receives a deep copy of state.
+# The model sees the docstring (waiting.tool_help): say what it does and what JSON it takes.
 def inspect(state, R, args):
+    '''Show the summary of the file. Takes {"q": "<word>"} to search it.'''
     return {'preview': state['read']['summary'], 'q': args.get('q')}
 
 # Gate (gates.py): pure function; returns bool or verdict dict

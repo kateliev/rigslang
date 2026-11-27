@@ -32,7 +32,7 @@ Every tool has `tool.py`. It is the only door to the tool. Runs get short sequen
 | `tool.py next-batch [ITEMS] [--size N] [--report PATH]` | Run one chunk unattended (from `ITEMS` or the unit's `queue` step) under `runs/.batch.lock` and a consecutive-error/timeout circuit breaker. Rolls back and defers waiting items and prints one compact `summary` line. |
 | `tool.py queues` | Open runs split into `left_for_model` and `waits_for_person` (via `runs/.waiting.json`), plus external `pending` items when `queue` is declared. |
 | `tool.py answer RUN '<JSON>' [--node ID] [--meta '<JSON>']` | The model answers the node that the run waits at: `{"pass": true, "why": "..."}` for a gate, `{"result": ...}` for a step or reason block. `--node` refuses a stale call; `--meta` records metrics (`model`, `seconds`, `tokens`, `error`). |
-| `tool.py arena RUN TOOL [JSON]` | Call a read-only tool declared on a waiting `reason` block, running on a deep copy of `state` under its hard `budget`. |
+| `tool.py arena RUN TOOL [JSON]` | Call a read-only tool declared on a waiting `reason` block, running on a deep copy of `state` under its hard `budget`. `waiting.tool_help` shows the docstring of each tool (what it does and what JSON it takes); every call is kept in the run (`arena` in `status`). |
 | `tool.py approve RUN [WORDS]` | A person answers a human gate: `yes` or `no`, or at a gate with `options`, the words of the answer (`yes` or nothing: the first option). |
 | `tool.py restore RUN` | Run the unit's `rollback` block explicitly to restore state for `RUN`. |
 | `tool.py artifact RUN NAME [--path KEY] [--offset N] [--limit N]` | Read-only inspection of a full payload saved by a step or reason block that declares `brief`. |

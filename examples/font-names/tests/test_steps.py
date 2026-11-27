@@ -45,14 +45,18 @@ class Steps(unittest.TestCase):
 
 	def test_the_arena_tests_a_table_and_keeps_its_budget(self):
 		r = self.kit.run({'folder': self.folder}, rules=HFS)
+		self.assertIn('Takes {"table": {"Word": "Abbr", ...}}', r['waiting']['tool_help']['steps.try_names'])
+		a = self.kit.arena_call(r['run'], 'steps.try_names', GOOD[0])  # the table without "table": the answer says how
+		self.assertFalse(a['result']['fair'])
+		self.assertIn('give the table inside "table"', a['result']['problems'][0])
 		a = self.kit.arena_call(r['run'], 'steps.try_names', {'table': GOOD[0]})
 		self.assertTrue(a['result']['fair'], a['result']['problems'])
-		self.assertEqual(a['budget_remaining'], 5)
+		self.assertEqual(a['budget_remaining'], 4)
 		a = self.kit.arena_call(r['run'], 'steps.table', {})
 		self.assertEqual(a['result']['table']['bold'], 'Bd')
 		with self.assertRaises(rigkit.Refused):
 			self.kit.arena_call(r['run'], 'steps.rename', {})
-		for _ in range(4):
+		for _ in range(3):
 			self.kit.arena_call(r['run'], 'steps.table', {})
 		with self.assertRaises(rigkit.Refused):
 			self.kit.arena_call(r['run'], 'steps.table', {})

@@ -38,7 +38,7 @@ Code walks this flow. Start a run and answer only what waits. Run every command 
    - `outcome`: the run ended. Report it, with `problems` first (and `result` if present). `error` means code failed.
    - `waiting` (`kind: model`): decide `check` from `sees` (respecting `intent`). Run `python3 tool.py answer <run> '{"pass": true, "why": "..."}'` (or `false`).
    - `waiting` (`kind: step`): do `do` from `sees`. Run `python3 tool.py answer <run> '{"result": ...}'` matching `schema` if present.
-   - `waiting` (`kind: reason`): deliberate (`mode`: `careful` or `creative`) respecting `intent`, `never` boundaries, and any `candidates` count; use `python3 tool.py arena <run> <tool>` for read-only tools up to `budget`. Run `python3 tool.py answer <run> '{"result": ...}'`.
+   - `waiting` (`kind: reason`): deliberate (`mode`: `careful` or `creative`) respecting `intent`, `never` boundaries, and any `candidates` count; use `python3 tool.py arena <run> <tool> '<JSON args>'` for read-only tools up to `budget` (`waiting.tool_help` says what each tool does and takes). Run `python3 tool.py answer <run> '{"result": ...}'`.
    - `waiting` (`kind: human`): show the person `name`, `check`, `sees`, and `say` word for word; wait, then run `python3 tool.py approve <run> yes` (or `no` / their words). Never answer for a person.
    - `waiting.problems`: fix those problems in the new answer. `refused`: final — run `python3 tool.py status <run>`.
 3. Repeat step 2 until `outcome`. Never decide a hard or soft gate yourself.

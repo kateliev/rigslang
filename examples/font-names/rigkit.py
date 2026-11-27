@@ -57,6 +57,8 @@ except ImportError:
 
 PLACE = re.compile(r'\{([A-Za-z_][\w-]*(?:\.[\w-]+)+)\}')
 GATES = ('hard', 'soft', 'model', 'human')
+ARENA_LOG_CHARS = 2000  # the longest result of one arena call that a run keeps, in characters
+
 WORK_RULES = '\n'.join([
 	'You do one job of a tool. Code did the rest of the work and checks your answer.',
 	'Read the job and the data. Decide each item on its own, in the order of the data.',
@@ -746,6 +748,13 @@ class Kit(object):
 	def fn_of(self, name):
 		return self.code.get(name) or self.code.get(name.replace('-', '_')) or self.code.get(name.rsplit('.', 1)[0] + '.' + name.rsplit('.', 1)[-1].replace('-', '_'))
 
+	def tool_help(self, name):
+		'''The docstring of an arena tool, in one line: the model reads it to know what the tool does
+		and what JSON arguments it takes. A tool without a docstring says so.'''
+		fn = self.fn_of(name)
+		doc = ' '.join(((fn.__doc__ if fn else '') or '').split())
+		return doc or 'no description: the tool has no docstring'
+
 	def node_code(self, node):
 		fns = [self.fn_of(b) for b in node.get('by', [])]
 		return fns if fns and all(fns) else None
@@ -1405,6 +1414,7 @@ class Kit(object):
 			w['mode'] = node.get('mode', 'careful')
 			if node.get('tools'):
 				w['tools'] = list(node['tools'])
+				w['tool_help'] = dict((t, self.tool_help(t)) for t in node['tools'])  # what each tool does and takes
 			if node.get('budget') is not None:
 				b = self.count_of(node['budget'], R)
 				w['budget'] = b
@@ -1491,6 +1501,10 @@ class Kit(object):
 		nparams = len(inspect.signature(fn).parameters)
 		res = fn(state_copy, R, args or {}) if nparams >= 3 else fn(state_copy, R)
 		run['arena_used'] = used + 1
+		# Keep every arena call in the run, so that the run shows what the model tested before it answered.
+		shown = json.dumps(res, ensure_ascii=False, default=str)
+		run.setdefault('arena_log', []).append({'node': cur['id'], 'tool': tool_name, 'args': args or {}, 'time': now(),
+			'result': shown if len(shown) <= ARENA_LOG_CHARS else shown[:ARENA_LOG_CHARS] + '…'})
 		run['waiting'] = self.waiting(cur, R, run)
 		self.save(run)
 		out = {'run': run_id, 'node': cur['id'], 'tool': tool_name, 'result': res, 'used': run['arena_used']}
@@ -1667,6 +1681,9 @@ class Kit(object):
 			if arena_tools:
 				job_text += '\n\nRead-only tools available (budget {}): {}. To call one, reply with {{"tool": "<name>", "args": {{...}}}}. When ready, reply with {{"result": ...}}.'.format(
 					w.get('budget_remaining', w.get('budget', 1)), ', '.join(arena_tools))
+				helps = w.get('tool_help') or {}
+				if helps:
+					job_text += '\nWhat each tool does and takes:\n- ' + '\n- '.join('{}: {}'.format(t, helps.get(t, '')) for t in arena_tools)
 			messages = [{'role': 'user', 'content': job_text}]
 			t0 = time.monotonic()
 			parsed_result = None
@@ -1864,6 +1881,8 @@ class Kit(object):
 			out['rolled_back'] = True
 		if run.get('artifacts'):
 			out['artifacts'] = dict(run['artifacts'])
+		if run.get('arena_log'):
+			out['arena'] = [dict(a) for a in run['arena_log']]
 		if run['outcome'] is None:
 			pinned = self.view_of(run).c
 			if pinned and pinned != self.catalogue:
@@ -2327,7 +2346,7 @@ class Kit(object):
 			if any(n.get('kind') == 'reason' and n.get('tools') for n in flow_nodes):
 				tools.append({
 					'name': 'arena_call',
-					'description': 'Call a read-only tool listed in "waiting.tools" during a waiting "reason" block, within its hard budget.',
+					'description': 'Call a read-only tool listed in "waiting.tools" during a waiting "reason" block, within its hard budget. "waiting.tool_help" says what each tool does and which JSON arguments it takes.',
 					'inputSchema': {
 						'type': 'object',
 						'properties': {

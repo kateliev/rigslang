@@ -2492,7 +2492,7 @@ def skill(u, rules_path=None, preset=None, driver=None):
 			'   - `outcome`: the run ended. Report it, with `problems` first (and `result` if present). `error` means code failed.',
 			'   - `waiting` (`kind: model`): decide `check` from `sees` (respecting `intent`). Run `{} answer <run> \'{{"pass": true, "why": "..."}}\'` (or `false`).'.format(driver),
 			'   - `waiting` (`kind: step`): do `do` from `sees`. Run `{} answer <run> \'{{"result": ...}}\'` matching `schema` if present.'.format(driver),
-			'   - `waiting` (`kind: reason`): deliberate (`mode`: `careful` or `creative`) respecting `intent`, `never` boundaries, and any `candidates` count; use `{} arena <run> <tool>` for read-only tools up to `budget`. Run `{} answer <run> \'{{"result": ...}}\'`.'.format(driver, driver),
+			'   - `waiting` (`kind: reason`): deliberate (`mode`: `careful` or `creative`) respecting `intent`, `never` boundaries, and any `candidates` count; use `{} arena <run> <tool> \'<JSON args>\'` for read-only tools up to `budget` (`waiting.tool_help` says what each tool does and takes). Run `{} answer <run> \'{{"result": ...}}\'`.'.format(driver, driver),
 			'   - `waiting` (`kind: human`): show the person `name`, `check`, `sees`, and `say` word for word; wait, then run `{} approve <run> yes` (or `no` / their words). Never answer for a person.'.format(driver),
 			'   - `waiting.problems`: fix those problems in the new answer. `refused`: final — run `{} status <run>`.'.format(driver),
 			'3. Repeat step 2 until `outcome`. Never decide a hard or soft gate yourself.', '',
