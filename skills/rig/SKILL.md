@@ -26,7 +26,7 @@ RIGS makes rigs: one `.rig` file is the source of one rig — its rules (inline 
 
 Always read [guide/rules.md](guide/rules.md): one page, the rules that have no exception.
 
-The pattern to copy is `examples/font-names`. When a text and the example disagree, the example is right: its tests run.
+The pattern to copy is `examples/font-names`; `examples/README.md` says what each example shows and the order to read its files. When a text and the example disagree, the example is right: its tests run.
 
 ## The commands
 

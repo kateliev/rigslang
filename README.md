@@ -48,7 +48,7 @@ python3 skills/rig/rig.py doctor my-tool
 
 ## See one
 
-[examples/font-names/](examples/font-names/) is a complete level 3 tool and the pattern to copy. It gives the font files of a family short names that fit a delivery standard. Code names the files and decides every gate that code can decide. A `reason` block proposes abbreviations only where the table of code fails, and it tests them with code first. A `model` gate judges whether the names still read well, and a person agrees to the rename. It needs no font: the test cases are empty files with font names. [examples/family-namer/](examples/family-namer/) (level 2) makes such a folder: it names a new family from a story, and its output is the input of font-names. Try font-names:
+[examples/font-names/](examples/font-names/) is a complete level 3 tool and the pattern to copy. It gives the font files of a family short names that fit a delivery standard. Code names the files and decides every gate that code can decide. A `reason` block proposes abbreviations only where the table of code fails, and it tests them with code first. A `model` gate judges whether the names still read well, and a person agrees to the rename. It needs no font: the test cases are empty files with font names. [examples/family-namer/](examples/family-namer/) (level 2) makes such a folder: it names a new family from a story, and its output is the input of font-names. [examples/README.md](examples/README.md) says what each example shows, the order to read its files, and what is verified and what is not. Try font-names:
 
 ```bash
 cd examples/font-names
@@ -81,10 +81,11 @@ Then open http://127.0.0.1:8765. [examples/font-names/README.md](examples/font-n
 | [skills/rig/resources/](skills/rig/resources/) | Editable stylesheets (`viewer.css`, `http.css`) and viewer client (`viewer.html`, `viewer.js`), copied into `<tool>/resources/` on `new` and `build`. |
 | [skills/rig/spec.md](skills/rig/spec.md) | The RIGS v2 language specification. |
 | [viewer/index.html](viewer/index.html) | Browser viewer entry point: units, rules (`ui` badges), structured `intent`, and three-lane graph (`code`, `model`, `person`). |
+| [examples/README.md](examples/README.md) | How to read the examples, what each one shows, and what is verified. |
 | [examples/font-names/](examples/font-names/) | The pattern example, level 3: short font file names for a delivery standard. Structured `intent` with `never` mappings, `rules` blocks, a tuple rule, presets, a `reason` block with read-only arena tools and `candidates`, a `model` gate, a `human` gate, a permission, an undo log with `rollback`, and a regression set. |
 | [examples/family-namer/](examples/family-namer/) | Level 2: a name for a new font family, drawn at random by code from lists of names, chosen by the model with reasons, and chosen by a person; then a folder of placeholder files, which is the input of font-names. A single-shot `step ... by model`, a `reason` block in `mode creative` with `candidates 3`, a seed rule, and a `human` gate with `options` and a `by` function. |
 | [editors/](editors/) | VS Code and Sublime Text syntax grammars built from one table. |
-| [tests/](tests/) | Unit tests for `rig.py`, `rigkit.py`, project commands, templates, and documentation consistency. |
+| [tests/](tests/) | Unit tests for `rig.py`, `rigkit.py`, project commands, templates, documentation consistency, and the two examples together (`test_examples.py`). |
 | [docs/](docs/) | [status.md](docs/status.md), [logic.md](docs/logic.md), [plan-v2-proposal.md](docs/plan-v2-proposal.md), and [history/](docs/history/). |
 
 ## The source file
