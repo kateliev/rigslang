@@ -12,6 +12,21 @@
         "8765"
       ],
       "port": 8765
+    },
+    {
+      "name": "viewer-font-names-windows",
+      "runtimeExecutable": "py",
+      "runtimeArgs": [
+        "-3",
+        "skills/rig/rig.py",
+        "serve",
+        "examples/font-names/font-names.rig",
+        "--json",
+        "examples/font-names/gen/font-names.json",
+        "--port",
+        "8766"
+      ],
+      "port": 8766
     }
   ]
 }

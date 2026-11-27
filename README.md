@@ -67,6 +67,8 @@ To see its flow as a graph:
 python3 ../../skills/rig/rig.py serve font-names.rig --json gen/font-names.json
 ```
 
+Then open http://127.0.0.1:8765. [examples/font-names/README.md](examples/font-names/README.md) says what the tabs show and how to read the path of a run on the graph.
+
 ## What is in the repository
 
 | Path | What it is |

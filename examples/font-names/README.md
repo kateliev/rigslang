@@ -26,7 +26,7 @@ The test cases need no font: the tool reads and renames files only, so the fixtu
 | `rig.json` | The project file: the level, the source, the compiled files, the tests command. |
 | `runs/`, `undo/` | The runs, and the undo log of each rename. Not in version control. |
 
-`RIG` is the path of `skills/rig/rig.py` in the RIGS repository.
+Run the commands in this folder. They use `python3`. On Windows, `python3` can be a stub of the Microsoft Store that only prints "Python was not found": then write `py -3` (or `python`) in its place.
 
 ## Run
 
@@ -49,20 +49,44 @@ The run ends at `ready`: `SpecimenGrotesqueDisplay-ExtraBoldCondensedItalic.woff
 
 Or let a model do its part: `python3 tool.py work r1 --api-url URL --model NAME`.
 
+## See the flow as a graph
+
+Start the viewer on the source file:
+
+```bash
+python3 ../../skills/rig/rig.py serve font-names.rig --json gen/font-names.json
+```
+
+Open http://127.0.0.1:8765 in a browser (`--port N` sets another port). Stop the viewer with Ctrl+C.
+
+The page has four tabs:
+
+| Tab | What it shows |
+|---|---|
+| Units | The intent, the inputs and the output, and a table of every node: what it does, where it goes, and the rules it reads. |
+| Graph | The flow. The top band is code, the middle band is the model, the bottom band is the person. The columns are the order of the lines; the ends stand at the right. |
+| Skill | The Agent Skill that `build` compiles from the source. |
+| JSON | The compiled catalogue. |
+
+In the graph:
+
+- Turn the mouse wheel to zoom, drag the background to move, and drag a node by its header. `F` (or **Fit**) shows the whole flow again. The first view shows the whole flow, so zoom in to read the nodes.
+- Click a node to read it in the panel at the right. The panel also explains the lines, the lanes and the kinds of node.
+- **run…** shows the path of a run of `runs/`. Make a run first (see Run): then choose `r1`. The nodes get the numbers of the path, and the panel shows the end, the problems, and the gates that the model guessed.
+- **preset…** shows the values of a preset (`mac`, `dos`).
+- The check boxes show or hide the rule wires, the fail paths and the flow lines.
+- Change a value in a rule box, then click **Save**: the viewer writes the value into `font-names.rig` and compiles `gen/font-names.json` again. Then run `build` (see Change), so that the skill and the other compiled files follow.
+
+`python3 tool.py serve-http` also serves the graph, read only, at http://127.0.0.1:8780/viewer?serve=1.
+
 ## Change
 
 Change a value or the flow in `font-names.rig`, and the code in `engine.py`, `gates.py` and `steps.py`. Then:
 
 ```bash
-python3 RIG build .
+python3 ../../skills/rig/rig.py build .
 ```
 
 ```bash
-python3 RIG doctor .
-```
-
-To see the flow as a graph and change values on a page:
-
-```bash
-python3 RIG serve font-names.rig --json gen/font-names.json
+python3 ../../skills/rig/rig.py doctor .
 ```

@@ -152,6 +152,8 @@ Look at the flow as a graph with the person. A person sees a missing path in a g
 python3 RIG serve NAME.rig --json gen/NAME.json
 ```
 
+Open http://127.0.0.1:8765 and choose the tab **Graph**. Zoom in with the mouse wheel; click a node to read it. After a run, choose it in **run…** to see its path. The README of the pattern example (`examples/font-names`) explains the page.
+
 Then write the regression set: one case for each end, and one for each fail line that matters. Write the baseline after you looked at the paths.
 
 **Done when:** the person looked at the graph and agreed, and the doctor lines of level 3 are ok.
