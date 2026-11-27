@@ -1,4 +1,4 @@
-# release: the reference example of the Rig kit
+# release: the reference example of the RIGS kit
 
 A small tool with every part of a level 4 tool. It checks a release folder and publishes it: it writes `published.json` into the folder.
 

@@ -1,6 +1,6 @@
 # Design for the weaker model
 
-A Rig tool has two kinds of driver. Claude builds the tool: it runs it first, finds where it breaks, and makes the path smooth. Then a local model drives the tool through the plugin, many times. The two fronts read the same source and stay in step. **Design every job of the model for the weaker of the two.** What a small local model does well, Claude does well too. The other way round is not true.
+A rig built with RIGS has two kinds of driver. Claude builds the tool: it runs it first, finds where it breaks, and makes the path smooth. Then a local model drives the tool through the plugin, many times. The two fronts read the same source and stay in step. **Design every job of the model for the weaker of the two.** What a small local model does well, Claude does well too. The other way round is not true.
 
 ## 1. Who does what
 

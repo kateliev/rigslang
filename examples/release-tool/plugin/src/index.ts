@@ -1,4 +1,4 @@
-// The LM Studio plugin of a Rig tool. The same file for every tool.
+// The LM Studio plugin of a RIGS tool. The same file for every tool.
 //   tools:  from gen/front.json; each call goes to the driver of the tool (bridge.ts); work_run gives
 //           the jobs of a run to the loaded model, one by one, without the chat (worker.ts)
 //   prompt: the short rules of gen/front.json, before the first user message of a chat

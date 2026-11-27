@@ -1,4 +1,4 @@
-// The bridge between a model and the Rig tool. The same file for every tool: do not edit it
+// The bridge between a model and the RIGS tool. The same file for every tool: do not edit it
 // for one tool. Everything about the tool comes from gen/front.json (rig.py build).
 //
 // No LM Studio objects here, so that a test can call the same code (try.ts).

@@ -1,6 +1,6 @@
-# The Rig method
+# The RIGS method
 
-This guide says how to build an **instrumental agent**: a model that operates tools to do a defined job. Read this page first. Then read the page of your task.
+This guide says how to build a **rig** — an **instrumental agent** where a model operates tools to do a defined job. **RIGS** stands for **Reason, Intent, Gate, Steps**; each `.rig` file defines one rig. Read this page first. Then read the page of your task.
 
 | Page | Read it when |
 |---|---|

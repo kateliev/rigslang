@@ -163,7 +163,7 @@ Test with the model that will do the work. A text that a large model reads right
 
 ## 4. Universal MCP (Stdio + Streamable HTTP) & OpenAPI 3.1
 
-Any MCP host (Claude Desktop, Claude Code, Cursor, LM Studio, Windsurf) or HTTP/OpenAPI client (Open WebUI, AnythingLLM, Jan, workflow engines) can run any Rig tool with zero extra dependencies:
+Any MCP host (Claude Desktop, Claude Code, Cursor, LM Studio, Windsurf) or HTTP/OpenAPI client (Open WebUI, AnythingLLM, Jan, workflow engines) can run any rig built with RIGS with zero extra dependencies:
 
 ```bash
 python3 RIG mcp-config DIR [--api-url URL] [--model NAME] [--provider openai|ollama|anthropic]

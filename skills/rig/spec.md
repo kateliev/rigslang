@@ -1,18 +1,19 @@
-# Rig language specification, version 2
+# RIGS language specification, version 2
 
-Rig stands for **Reason, Intent, Gate**. Every letter is a runtime-enforced construct:
+RIGS stands for **Reason, Intent, Gate, Steps** — the language for making **rigs**. Every letter is a runtime-enforced construct:
 
-- **Reason:** `reason` blocks hold genuine deliberative or creative cognition (`mode careful | creative`, optional read-only `tools` + `budget`, optional `candidates`, typed `out`). Lightweight single-shot fill-ins stay on `step ... by model`.
+- **Reason:** `reason` blocks hold genuine deliberative or creative cognition (`mode careful | creative`, optional read-only `tools` + `budget`, optional `candidates`, typed `out`).
 - **Intent:** unit-level and `reason`-level `intent` carries `audience`, `style`, and `never` invariants, injected automatically into every `reason` call and `model` gate.
 - **Gate:** code decides `hard` and `soft` gates, the model decides `model` gates (marked **guessed**), and a person decides `human` gates.
+- **Steps:** `step ... by <prefix.fn>` runs deterministic code (the only place that touches the world, via thin adapters), while `step ... by model` runs lightweight single-shot schema-bound fill-ins.
 
-Rig separates **the Idea** (`.rig` + pure-Python engine and gates + `rigkit.py`) from **the World** (thin target adapters) and **the Caller** (Agent Skill, stdio and Streamable HTTP MCP, OpenAPI 3.1, localhost approval UI, local plugin).
+RIGS separates **the Idea** (`.rig` + pure-Python engine and gates + `rigkit.py`) from **the World** (thin target adapters) and **the Caller** (Agent Skill, stdio and Streamable HTTP MCP, OpenAPI 3.1, localhost approval UI, local plugin).
 
-Rig files use the extension `.rig`. They are UTF-8 text. This page is the one definition of the language.
+One `.rig` file defines a **rig** (one or more orchestrated `unit`s). RIGS files use the extension `.rig`. They are UTF-8 text. This page is the one definition of the language.
 
 Two limits hold:
 
-1. **Rig is not a general programming language.** It has no variables, no assignments and no expressions. The language says the order of the work and who decides. Code (the `by` functions) computes everything.
+1. **RIGS is not a general programming language.** It has no variables, no assignments and no expressions. The language says the order of the work and who decides. Code (the `by` functions) computes everything.
 2. **The language stays small.** One word has one meaning. No host-application quirk enters `.rig`.
 
 ## 1. Syntax

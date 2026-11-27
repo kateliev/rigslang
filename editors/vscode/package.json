@@ -1,13 +1,13 @@
 {
 	"name": "rig-language",
-	"displayName": "Rig",
-	"description": "Syntax highlighting for Rig v2 (.rig) files: reason, intent, rules, flows and gates.",
+	"displayName": "RIGS",
+	"description": "Syntax highlighting for RIGS v2 (.rig) files: reason, intent, gates, steps, rules, and flows.",
 	"version": "2.1.0",
-	"publisher": "riglang",
+	"publisher": "rigslang",
 	"license": "Apache-2.0",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/kateliev/riglang"
+		"url": "https://github.com/kateliev/rigslang"
 	},
 	"engines": {
 		"vscode": "^1.75.0"
@@ -20,6 +20,7 @@
 			{
 				"id": "rig",
 				"aliases": [
+					"RIGS",
 					"Rig",
 					"rig"
 				],

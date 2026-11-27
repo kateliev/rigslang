@@ -1,6 +1,6 @@
-# How Rig works, and why
+# How RIGS works, and why
 
-This page explains the ideas of the language and of the kit. The exact rules are in [the specification](../skills/rig/spec.md). The method for building a tool is in [the guide](../skills/rig/guide/README.md). [status.md](status.md) has the state of the work.
+This page explains the ideas of the language and of the kit. The exact rules are in [the specification](../skills/rig/spec.md). The method for building a rig is in [the guide](../skills/rig/guide/README.md). [status.md](status.md) has the state of the work.
 
 ## 1. The problem
 
@@ -10,13 +10,16 @@ A model that does a job with tools goes wrong in three ways:
 2. **Nobody knows what was guessed.** The answer does not show which parts a test checked and which parts the model decided by judgment.
 3. **The numbers drift.** A value is copied into a prompt, a script and a README, and the copies stop agreeing.
 
-## 2. Three words
+## 2. Four words: R–I–G–S
+
+RIGS builds **rigs** (one `.rig` file per rig). Its name is the four constructs of every flow:
 
 | Word | Question | Who owns it |
 |---|---|---|
-| **reason** | What needs judgment? | The model: the steps that need language, and the `model` gates. Its results are marked as guesses. |
-| **intent** | What must the tool do? | The person, or the model, in plain words. An intent must never be falsified: when it describes existing code, it says what the code does. |
+| **reason** | What needs deliberation or creativity? | The model (`reason` blocks, with optional read-only `tools`, `budget`, and `candidates`). Gates guard the exit. |
+| **intent** | What must the rig do, and never do? | The person, or the model, in plain words (`audience`, `style`, `never` invariants). An intent must never be falsified: when it describes existing code, it says what the code does. |
 | **gate** | How do we know it did? | Code where code can decide (`hard`, `soft`). Else the model (`model`, a guess). Else a person (`human`). |
+| **step** | What does the work? | Deterministic code (`by steps.fn`, via thin target adapters) or a fast single-shot schema-bound model fill-in (`by model`). |
 
 ## 3. One source, one core, thin fronts
 
@@ -42,7 +45,7 @@ What a flow still needs, a few blocks say:
 
 A correction is `retry <n>` on the gate that checks: on fail, the run goes back to the step before the gate. These are the only ways back, so every loop has a limit that the source states.
 
-**Paths, never expressions.** `if sort.new_folders` tests one value of the state: is it there, and not empty, and not false? Rig has no variables, no assignments and no expressions. When a decision needs a computation, the computation is code, and the source names it with `by`.
+**Paths, never expressions.** `if sort.new_folders` tests one value of the state: is it there, and not empty, and not false? RIGS has no variables, no assignments and no expressions. When a decision needs a computation, the computation is code, and the source names it with `by`.
 
 ## 5. Who decides: the lanes
 
@@ -67,9 +70,9 @@ Each run gets a short sequential id (`r1`, `r2`, ...) and its own folder. A `.wa
 
 Two limits hold:
 
-1. **Rig is not a general programming language.** It says the order of the work and who decides. Code computes everything.
+1. **RIGS is not a general programming language.** It says the order of the work and who decides. Code computes everything.
 2. **One word has one meaning, and a word comes in only when it removes nodes from real flows.** Version 1 has about as many words as version 0 (33), but it says more. `rig.py check` refuses each word that went out, and names what replaces it.
 
-## 8. Where Rig came from
+## 8. Where RIGS came from
 
-Rig began as a language for single functions: a unit held its code inside the `.rig` file as a **cast**, proved against its examples and pinned by hashes. That idea worked for small pure functions, but a tool needs normal code files, tests and a runner. Since the kit (2026-11-15), the code lives in files and the tests prove it. Version 1 (2026-11-25) removed the snippet scale from the language. Its examples and its task file are only in git (`git show 5337e26:docs/history/`). The first memos are in [history/](history/).
+RIGS (first called Rig) began as a language for single functions: a unit held its code inside the `.rig` file as a **cast**, proved against its examples and pinned by hashes. That idea worked for small pure functions, but a tool needs normal code files, tests and a runner. Since the kit (2026-11-15), the code lives in files and the tests prove it. Version 1 (2026-11-25) removed the snippet scale from the language. Its examples and its task file are only in git (`git show 5337e26:docs/history/`). The first memos are in [history/](history/).

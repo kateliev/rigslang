@@ -1,7 +1,7 @@
 {
   "name": "lms-plugin-band-facts",
   "version": "0.1.0",
-  "description": "The LM Studio front of the Rig tool band-facts.",
+  "description": "The LM Studio front of the RIGS tool band-facts.",
   "private": true,
   "scripts": {
     "dev": "lms dev",

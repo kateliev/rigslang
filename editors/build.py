@@ -1,4 +1,4 @@
-'''Build the Rig syntax grammars for VS Code and Sublime Text from one table.
+'''Build the RIGS (.rig) syntax grammars for VS Code and Sublime Text from one table.
 
   python editors/build.py           write both grammar files
   python editors/build.py --check   exit 1 if a grammar file is not current

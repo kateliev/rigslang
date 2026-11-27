@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""rigkit: the runtime of a Rig project (language version 2). Standard library only. Python 3.
+"""rigkit: the runtime of a RIGS project (language version 2). Standard library only. Python 3.
 
 A tool keeps its own copy of this file (rig.py new copies it), so the tool installs alone.
 

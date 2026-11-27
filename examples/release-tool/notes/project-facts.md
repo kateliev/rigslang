@@ -4,7 +4,7 @@ What is true about this project. An agent reads this file before it works, on an
 
 ## What the tool does
 
-It checks a release folder (`NOTES.md`, `VERSION`, `tests.json`) and writes `published.json` into it. It is the reference example of the Rig kit: small, but with every part of a level 4 tool.
+It checks a release folder (`NOTES.md`, `VERSION`, `tests.json`) and writes `published.json` into it. It is the reference example of the RIGS kit: small, but with every part of a level 4 tool.
 
 ## Decisions of the owner
 

@@ -1,6 +1,6 @@
-# Rig
+# RIGS
 
-**Rig** (version 2) is a kit and a method for building **timeless, domain-agnostic instrumental agents**: a model that operates tools to do a defined job. You describe the procedure once in `.rig`, and Rig enforces a strict three-layer split:
+**RIGS** (version 2) is a language, a kit, and a method for building **rigs** — **timeless, domain-agnostic instrumental agents** where a model operates tools to do a defined job. **RIGS** makes rigs: you describe one rig once in a `.rig` file, and RIGS enforces a strict three-layer split:
 
 ```text
   THE CALLER (Fronts — swappable as AI interfaces evolve)
@@ -15,15 +15,16 @@
   Local files | Web APIs | Subprocesses | Host-app JSON-RPC | Databases | Worker pools
 ```
 
-Every letter of **R–I–G** is a runtime-enforced construct:
+Every letter of **R–I–G–S** is a runtime-enforced construct:
 
 - **Reason:** first-class `reason` blocks (`mode careful | creative`, read-only `tools` + `budget`, `candidates N`, typed `out`) stay distinct from lightweight single-shot `step ... by model` fill-ins and enable automatic two-tier model routing (`openai`, `ollama`, `anthropic`).
 - **Intent:** structured `intent` (`audience`, `style`, `never` invariants) is injected automatically into every `reason` call and `model` gate, and `rig.py doctor` tracks `never` clauses against `hard`, `model`, and `human` gates.
 - **Gate:** code decides `hard` and `soft` gates, the model decides `model` gates (marked **guessed**), and a person decides `human` gates (via CLI, MCP Elicitation, or the built-in `/approve/<run>` localhost page).
+- **Steps:** deterministic `step ... by <fn>` functions do the work and touch the world through thin adapters, while `step ... by model` handles fast, schema-bound single-shot fill-ins.
 
-## Build a tool
+## Build a rig
 
-Tell any skill-capable coding agent (Claude Code, Codex, Cursor, Gemini CLI, Antigravity, OpenCode): *"Build a tool that ..., with the Rig skill."* By hand:
+Tell any skill-capable coding agent (Claude Code, Codex, Cursor, Gemini CLI, Antigravity, OpenCode): *"Build a rig that ..., with the RIGS skill."* By hand:
 
 ```bash
 python3 skills/rig/rig.py new my-tool my-tool --level 1
@@ -76,7 +77,7 @@ python3 ../../skills/rig/rig.py serve release.rig --json gen/release.json
 | [skills/rig/kit/rigkit.py](skills/rig/kit/rigkit.py) | The runtime (stdlib only): rules, `ui` controls, `reason` arenas, `brief` artifacts, `rollback`/`restore`, `queue` + chunked unattended `next-batch` (lock + circuit breaker), two-tier worker (`openai`, `ollama`, `anthropic`), stdio & Streamable HTTP MCP, OpenAPI 3.1, approval UI, `eval`, and adapter helpers (`step`, `rpc_call`, `http_json`, `WorkerPool`). |
 | [skills/rig/kit/templates/](skills/rig/kit/templates/) | Project templates (`flow`, `flow2`, `flow3`, `host`, `plugin`), including external `__NAME__.rig` starters. |
 | [skills/rig/resources/](skills/rig/resources/) | Editable stylesheets (`viewer.css`, `http.css`) and viewer client (`viewer.html`, `viewer.js`), copied into `<tool>/resources/` on `new` and `build`. |
-| [skills/rig/spec.md](skills/rig/spec.md) | The Rig v2 language specification. |
+| [skills/rig/spec.md](skills/rig/spec.md) | The RIGS v2 language specification. |
 | [viewer/index.html](viewer/index.html) | Browser viewer entry point: units, rules (`ui` badges), structured `intent`, and three-lane graph (`code`, `model`, `person`). |
 | [examples/release-tool/](examples/release-tool/) | Level 3 pattern example with structured `intent`, `never` mappings, `ui` rules, tests, and plugin. |
 | [examples/band-facts/](examples/band-facts/) | Level 2 example: Wikipedia band facts with `never` boundary mapping and regression set. |

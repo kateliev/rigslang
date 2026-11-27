@@ -1,7 +1,7 @@
 // Run the Sublime-format syntax test against the VS Code grammar.
 // Setup, once: cd editors && npm install --no-save vscode-textmate vscode-oniguruma
 // Run: node editors/test-vscode.js
-// Embedded languages are stubs: the test checks only the Rig scopes.
+// Embedded languages are stubs: the test checks only the .rig scopes.
 const fs = require('fs'), path = require('path');
 const vsctm = require('vscode-textmate'), onig = require('vscode-oniguruma');
 const grammarPath = path.join(__dirname, 'vscode/syntaxes/rig.tmLanguage.json');

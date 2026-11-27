@@ -1,7 +1,7 @@
 {
   "name": "lms-plugin-bookmarks",
   "version": "0.1.0",
-  "description": "The LM Studio front of the Rig tool bookmarks.",
+  "description": "The LM Studio front of the RIGS tool bookmarks.",
   "private": true,
   "scripts": {
     "dev": "lms dev",

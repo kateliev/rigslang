@@ -1,6 +1,6 @@
 # Editor support
 
-Syntax highlighting for Rig v2 `.rig` files in VS Code and Sublime Text.
+Syntax highlighting for RIGS v2 `.rig` files in VS Code and Sublime Text.
 
 Both grammars are built from one table in [build.py](build.py). Do not edit the generated grammar files directly. Change `build.py`, then run:
 
@@ -37,7 +37,7 @@ The extension sets 2-space indentation, bracket pairs (`()`, `[]`, `{}`), `;` li
 1. Select **Preferences > Browse Packages…**.
 2. Copy `editors/sublime` into that folder and name it `Rig`.
 
-The package sets 2-space indentation, `;` line comments (`Ctrl+/`), block indentation rules, and word separators that keep dotted and hyphenated Rig names (`notes.min_words`, `long-enough`) as one word.
+The package sets 2-space indentation, `;` line comments (`Ctrl+/`), block indentation rules, and word separators that keep dotted and hyphenated `.rig` names (`notes.min_words`, `long-enough`) as one word.
 
 ## Tests
 

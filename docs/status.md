@@ -1,10 +1,10 @@
 # Status
 
-Branch: `main`. Last change: 2026-11-27 (Rig v2.1: updated VS Code & Sublime Text syntax grammars + automated `syntax_test_rig.rig` scope checks, externalized viewer & HTTP resources in `skills/rig/resources/`, external `__NAME__.rig` templates, rule ergonomics, JSON rules sidecar, `state["_rig"]` metadata, lean `SKILL.md`, per-chat LM Studio plugin settings, and nested `until` / `choice` fixes). The history of the work is in the commit messages.
+Branch: `main`. Last change: 2026-11-27 (RIGS v2.1: system and language named RIGS — Reason, Intent, Gate, Steps — where RIGS builds rigs defined in `.rig` files; updated VS Code & Sublime Text syntax grammars + automated `syntax_test_rig.rig` scope checks, externalized viewer & HTTP resources in `skills/rig/resources/`, external `__NAME__.rig` templates, rule ergonomics, JSON rules sidecar, `state["_rig"]` metadata, lean `SKILL.md`, per-chat LM Studio plugin settings, and nested `until` / `choice` fixes). The history of the work is in the commit messages.
 
-## What Rig is now
+## What RIGS is now
 
-A kit and a guide for building **timeless, domain-agnostic instrumental agents**: a model that operates tools to do a defined job, with a strict three-layer split between **the Idea** (`.rig`, pure-Python engine & gates, `rigkit.py`), **the World** (thin target adapters), and **the Caller** (Agent Skill, stdio & Streamable HTTP MCP, OpenAPI 3.1, localhost approval UI, local plugin).
+A language, a kit, and a guide for building **rigs** — **timeless, domain-agnostic instrumental agents** where a model operates tools to do a defined job, with a strict three-layer split between **the Idea** (`.rig`, pure-Python engine & gates, `rigkit.py`), **the World** (thin target adapters), and **the Caller** (Agent Skill, stdio & Streamable HTTP MCP, OpenAPI 3.1, localhost approval UI, local plugin).
 
 The pattern comes from a private production agent. Only the concept and the machinery are here; no material of that project.
 
@@ -25,7 +25,7 @@ The pattern comes from a private production agent. Only the concept and the mach
 | Second example, level 2 (`band-facts`, `never` mapping) | `examples/band-facts/` | passes `build --check`, `doctor`, and 18 unit tests |
 | Real tool, level 3 (`bookmarks`, `never` mappings) | `examples/bookmarks/` | passes `build --check`, `doctor`, and 30 unit tests |
 
-Verification on 2026-11-27 (Rig v2.1):
+Verification on 2026-11-27 (RIGS v2.1):
 
 - `python3 editors/build.py --check`: passes (both `rig.tmLanguage.json` and `Rig.sublime-syntax`, with column-level scope assertions in `editors/sublime/syntax_test_rig.rig` verified in `unittest`).
 - `python3 -W default -m unittest discover -s tests`: all 141 tests pass with 0 warnings (including `test_docs.py` link, removed-word, and `tool.py` docstring checks, `syntax_test_rig.rig` grammar scope checks, external viewer/HTTP resource preservation tests, `@lmstudio/sdk` config schematics, and loopback HTTP `serve` / `serve-http` tests).

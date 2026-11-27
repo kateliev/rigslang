@@ -1,6 +1,6 @@
-# Rig v2 builder cheatsheet
+# RIGS v2 builder cheatsheet
 
-One-page reference for building and maintaining Rig v2 tools. Full language rules: [spec.md](spec.md). Method: [guide/README.md](guide/README.md).
+One-page reference for building and maintaining rigs (instrumental agent tools) with RIGS v2. Full language rules: [spec.md](spec.md). Method: [guide/README.md](guide/README.md).
 
 ## 1. Canonical `.rig` grammar
 

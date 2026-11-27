@@ -22,7 +22,7 @@ The tool never touches the files of the browser. Sync is the reason: a changed l
 - 2026-11-23: Similar URLs on one site: the person chooses, a page at a time. The default is the shortest URL. Big sites with many separate pages are never grouped, and the list is a rule that the owner can change.
 - 2026-11-23: Code makes the decisions and does the checks. The model only sorts.
 - 2026-11-23: Dead links: later. They will go to a "Dead links" folder, never be deleted.
-- 2026-11-23: The tool lives in `examples/bookmarks` of the Rig repository. The real bookmarks file never goes into version control.
+- 2026-11-23: The tool lives in `examples/bookmarks` of the RIGS repository. The real bookmarks file never goes into version control.
 
 ## Decisions of the builder, for the owner to confirm
 

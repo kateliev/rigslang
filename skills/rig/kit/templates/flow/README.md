@@ -1,6 +1,6 @@
 # __NAME__
 
-A Rig tool, level __LEVEL__ (__LEVEL_NAME__). TODO: say what it does.
+A rig built with RIGS, level __LEVEL__ (__LEVEL_NAME__). TODO: say what it does.
 
 | File | What it is |
 |---|---|
@@ -11,11 +11,11 @@ A Rig tool, level __LEVEL__ (__LEVEL_NAME__). TODO: say what it does.
 | `tests/` | The tests of the gates and the steps; from level 2, the regression set. |
 | `gen/` | Compiled from the source: the catalogue. Do not edit. |
 | `skill/SKILL.md` | Compiled from the source: Agent Skill for Claude Code, Codex, Cursor, Gemini CLI, Antigravity, or OpenCode. Do not edit. |
-| `rigkit.py` | The tool's own copy of the Rig runtime. `rig.py build` keeps it current. |
+| `rigkit.py` | The tool's own copy of the RIGS runtime. `rig.py build` keeps it current. |
 | `rig.json` | The project file: the level, the source, the compiled files, the tests command. |
 | `runs/` | One folder for each run: the run, a pinned copy of the flow and the rules, the answers, and the state before each line. Not in version control. |
 
-`RIG` is the path of `skills/rig/rig.py` in the Rig repository.
+`RIG` is the path of `skills/rig/rig.py` in the RIGS repository.
 
 ## Run
 

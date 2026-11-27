@@ -2,7 +2,7 @@
 
 The tool reads a bookmarks HTML file that Microsoft Edge exported. It removes exact duplicates, folds similar URLs as the person chooses, and sorts loose bookmarks into folders. Then it writes a **new** HTML file to import into Edge.
 
-It is a Rig tool, level 4 (production), made with `rig.py new`. Code does the work and every check. A local model in LM Studio does only the sorting. A person decides the similar URLs, the new folders, and whether to write the file.
+It is a rig built with RIGS, level 4 (production), made with `rig.py new`. Code does the work and every check. A local model in LM Studio does only the sorting. A person decides the similar URLs, the new folders, and whether to write the file.
 
 The tool never changes the export, and never reads or writes the live `Bookmarks` file of the browser.
 

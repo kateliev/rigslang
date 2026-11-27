@@ -1,6 +1,6 @@
 # Rules that have no exception
 
-For every agent that builds or changes a Rig tool. Read this page before each piece of work.
+For every agent that builds or changes a rig with RIGS. Read this page before each piece of work.
 
 ## The source
 

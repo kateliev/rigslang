@@ -1,13 +1,13 @@
 ---
 name: rig
-description: Build and maintain instrumental agents with Rig v2 — domain-agnostic orchestrated flows where code does deterministic steps and hard/soft gates, reason blocks handle deliberative or creative cognition, and a person decides human gates. Works across Claude Code, Codex, Cursor, Gemini CLI, Antigravity, OpenCode, MCP (stdio & HTTP), OpenAPI 3.1, and local models.
+description: Build and maintain rigs (instrumental agents) with RIGS v2 — domain-agnostic orchestrated flows of Reason, Intent, Gate, and Steps where code does deterministic steps and hard/soft gates, reason blocks handle deliberative or creative cognition, and a person decides human gates. Works across Claude Code, Codex, Cursor, Gemini CLI, Antigravity, OpenCode, MCP (stdio & HTTP), OpenAPI 3.1, and local models.
 ---
 
-# Rig
+# RIGS
 
-Rig is a kit and a method for building **instrumental agents**: a model that operates tools to do a defined job. Its name is the three parts of the work: **R**eason (`reason` blocks and `step ... by model`), **I**ntent (structured `intent` with `audience`, `style`, and `never` invariants), **G**ate (`hard`, `soft`, `model`, `human`).
+RIGS is a language, a kit, and a method for building **rigs** — **instrumental agents** where a model operates tools to do a defined job. Its name is the four parts of a unit: **R**eason (`reason` blocks), **I**ntent (structured `intent` with `audience`, `style`, and `never` invariants), **G**ate (`hard`, `soft`, `model`, `human`), and **S**teps (`step ... by <fn>` in code and single-shot `step ... by model`).
 
-One `.rig` file is the source of a tool: its rules (inline `rule`, compact `rules <group>` tables, or external `rules "rules.json"` sidecars), queue, steps, reason blocks, gates, ends, rollback, and finally. It enforces a three-layer split: **the Idea** (`.rig`, pure-Python engine & gates, `rigkit.py`), **the World** (thin target adapters), and **the Caller** (Agent Skill, stdio & Streamable HTTP MCP, OpenAPI 3.1, localhost approval UI, local plugin).
+RIGS makes rigs: one `.rig` file is the source of one rig — its rules (inline `rule`, compact `rules <group>` tables, or external `rules "rules.json"` sidecars), queue, steps, reason blocks, gates, ends, rollback, and finally. It enforces a three-layer split: **the Idea** (`.rig`, pure-Python engine & gates, `rigkit.py`), **the World** (thin target adapters), and **the Caller** (Agent Skill, stdio & Streamable HTTP MCP, OpenAPI 3.1, localhost approval UI, local plugin).
 
 `RIG` below means `python3 <this folder>/rig.py` (Python 3, standard library only).
 

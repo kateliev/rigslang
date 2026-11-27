@@ -1,5 +1,5 @@
 "use strict";
-// Rig flow & unit viewer client.
+// RIGS flow & unit viewer client.
 // The viewer has no parser. `rig.py serve` (or `tool.py serve-http`) gives it a bundle,
 // and all visual styling and graph spacing tokens live in viewer.css.
 
@@ -114,7 +114,7 @@ async function recompile() {  // rig.py compiles the changed text; nothing is wr
   render();
 }
 
-// - Edits: rule values are written into the Rig text (or sidecar JSON) ---
+// - Edits: rule values are written into the .rig text (or sidecar JSON) ---
 function editRuleSrc(s, id, tokText) {
   if (s.json_file) {
     (S.sidecars[s.json_file] ||= {})[id] = tokText;

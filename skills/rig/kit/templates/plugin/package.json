@@ -1,7 +1,7 @@
 {
   "name": "lms-plugin-__NAME__",
   "version": "0.1.0",
-  "description": "The LM Studio front of the Rig tool __NAME__.",
+  "description": "The LM Studio front of the RIGS tool __NAME__.",
   "private": true,
   "scripts": {
     "dev": "lms dev",

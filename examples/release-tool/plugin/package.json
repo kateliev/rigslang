@@ -1,7 +1,7 @@
 {
   "name": "lms-plugin-release",
   "version": "0.1.0",
-  "description": "The LM Studio front of the Rig tool release.",
+  "description": "The LM Studio front of the RIGS tool release.",
   "private": true,
   "scripts": {
     "dev": "lms dev",

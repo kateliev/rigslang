@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""rig.py: the tool of Rig, language version 2. Standard library only.
+"""rig.py: the tool of RIGS, language version 2. Standard library only.
 
     python rig.py check FILE...               validate; show the status of every unit
     python rig.py json FILE                   the parsed tree as JSON
