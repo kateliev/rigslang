@@ -63,7 +63,7 @@
 			}
 		},
 		{
-			"match": "^\\s*(rule)(?=[\\s;]|$)(?:\\s+([^\\s()\\[\\]{},:?\";][^\\s()\\[\\]{},:?;]*))?",
+			"match": "^\\s*(rule|rules)(?=[\\s;]|$)(?:\\s+([^\\s()\\[\\]{},:?\";][^\\s()\\[\\]{},:?;]*))?",
 			"captures": {
 				"1": {
 					"name": "storage.type.rule.rig"
@@ -271,6 +271,24 @@
 			"match": "(?<![^\\s(\\[{,:])\\d+[smhd](?=[\\s()\\[\\]{},:?;]|$)",
 			"name": "constant.numeric.rig"
 		},
+		"range-span": {
+			"match": "(?<![^\\s(\\[{,:])(_|[-+]?\\d+(?:\\.\\d+)?)(\\.\\.)(_|[-+]?\\d+(?:\\.\\d+)?)(?=[\\s()\\[\\]{},:?;]|$)",
+			"captures": {
+				"1": {
+					"name": "constant.numeric.rig"
+				},
+				"2": {
+					"name": "keyword.operator.range.rig"
+				},
+				"3": {
+					"name": "constant.numeric.rig"
+				}
+			}
+		},
+		"open-bound": {
+			"match": "(?<![^\\s(\\[{,:])_(?=[\\s()\\[\\]{},:?;]|$)",
+			"name": "constant.language.rig"
+		},
 		"bar": {
 			"match": "\\|",
 			"name": "punctuation.separator.rig"
@@ -345,6 +363,12 @@
 				},
 				{
 					"include": "#time"
+				},
+				{
+					"include": "#range-span"
+				},
+				{
+					"include": "#open-bound"
 				},
 				{
 					"include": "#bar"

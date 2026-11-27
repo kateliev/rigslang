@@ -17,7 +17,34 @@ export type FrontTool = {
   description: string;
   parameters: { type: string; properties: Record<string, unknown>; required: string[] };
 };
-export type Front = { name: string; prompt: string; driver: string[]; timeout_s: number; work?: { max_calls?: number; max_tokens?: number; think?: boolean }; tools: FrontTool[] };
+export type UiRule = {
+  id: string;
+  group: string;
+  label: string;
+  type: string;
+  ui: string;
+  value: unknown;
+  default: unknown;
+  min?: number;
+  max?: number;
+  length?: number;
+  options?: string[];
+  note?: string;
+};
+export type RunOverrides = {
+  preset?: string;
+  set?: Record<string, string>;
+};
+export type Front = {
+  name: string;
+  prompt: string;
+  driver: string[];
+  timeout_s: number;
+  work?: { max_calls?: number; max_tokens?: number; think?: boolean };
+  presets?: string[];
+  ui_rules?: UiRule[];
+  tools: FrontTool[];
+};
 
 export const front = frontJson as Front;
 
@@ -32,13 +59,23 @@ export function toolRoot(setting?: string): string | null {
 }
 
 /** The arguments of the driver for one tool call. */
-export function argvFor(tool: FrontTool, p: Record<string, unknown>): string[] {
+export function argvFor(tool: FrontTool, p: Record<string, unknown>, overrides?: RunOverrides): string[] {
   const run = String(p.run ?? "");
-  if (tool.kind === "run") return ["run", JSON.stringify(p)];
+  const extra = (): string[] => {
+    const out: string[] = [];
+    if (overrides?.preset) out.push("--preset", overrides.preset);
+    if (overrides?.set) {
+      for (const [rid, val] of Object.entries(overrides.set)) {
+        out.push("--set", `${rid}=${val}`);
+      }
+    }
+    return out;
+  };
+  if (tool.kind === "run") return ["run", JSON.stringify(p), ...extra()];
   if (tool.kind === "answer_gate") return ["answer", run, JSON.stringify(p.why ? { pass: p.pass === true, why: String(p.why) } : { pass: p.pass === true })];
   if (tool.kind === "status") return ["status", run];
   if (tool.kind === "queues") return ["queues"];
-  if (tool.kind === "batch") return ["batch", JSON.stringify(Array.isArray(p.items) ? p.items : []), "--report", `reports/batch-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.md`];
+  if (tool.kind === "batch") return ["batch", JSON.stringify(Array.isArray(p.items) ? p.items : []), "--report", `reports/batch-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.md`, ...extra()];
   return ["call", tool.unit ?? tool.name, JSON.stringify(p)];
 }
 
@@ -276,10 +313,10 @@ export async function driver(args: string[], rootSetting?: string): Promise<stri
 }
 
 /** Run one tool call. The answer is always one JSON text: a result, a refusal or an error. */
-export async function callTool(tool: FrontTool, params: Record<string, unknown>, rootSetting?: string): Promise<string> {
+export async function callTool(tool: FrontTool, params: Record<string, unknown>, rootSetting?: string, overrides?: RunOverrides): Promise<string> {
   const root = toolRoot(rootSetting);
   if (!root) return refused("The tool folder is not found. The operator must set \"Tool folder\" in LM Studio: in the settings of this plugin, the folder that holds rig.json. It is not a setting of another program.");
-  return drive(argvFor(tool, params), root);
+  return drive(argvFor(tool, params, overrides), root);
 }
 
 /** The words of a message of the operator that answers a human gate: "approve [RUN] [WORDS]".

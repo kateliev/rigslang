@@ -84,11 +84,13 @@ The checker warns about a type that it does not know. Each `in` port compiles it
 | `code <prefix> <path>` | The functions of the steps, gates, tools and queue of this unit live in the file at `path` (relative to the `.rig` file). A `by` or `tools` entry names one as `prefix.function`, for example `by gates.notes_ok`. |
 | ↳ `test <path>` | Optional child of `code`: the test file of that code. For Python (`.py`) files, the checker parses the AST to confirm the function is defined and referenced in code (not only in comments or docstrings) in the test file; other languages fall back to name matching. Such a function is **tested**. |
 | `queue ["name"] by <prefix.function>` | Optional external item discovery step. Returns a list of input records for `queues` and chunked unattended `next-batch` runs. May carry `reads` and `note`. |
-| `rule <group.name> <value> ["label"]` | A parameter. The id has a group and a name, joined by a dot. The value is a number, `on`/`off`, a word, a `"string"`, a `/regex/`, a `[list]`, a `(tuple)`, or a `{key: value}` dict. Put the unit of the value in the label: `rule sort.batch 60 "Bookmarks in one batch"`. |
-| ↳ `range <min> <max>` | Optional child of `rule`: the limits of a number, or of every number in a numeric list, tuple, or dict. |
-| ↳ `options a \| b \| c` | Optional child of `rule`: the values that the rule can have. |
-| ↳ `ui [toggle\|select\|slider\|number\|input]` | Optional child of `rule`: exposes the rule as a control in compiled UI fronts (web dashboard, plugin settings, viewer), wired to per-run rule overrides. The widget defaults from the rule type. |
-| ↳ `note "text"` | Where the value comes from. |
+| `rule <group.name> <value> [<min>..<max>] ["label"]` | A parameter. The id has a group and a name, joined by a dot. The value is a number, `on`/`off`, a word, a `"string"`, a `/regex/`, a `[list]`, a `(tuple)`, or a `{key: value}` dict. An optional inline range (`50..5000`, `0.._`, `_..100`) sets numeric bounds directly on the line. Put the unit of the value in the label: `rule sort.batch 60 1..500 "Bookmarks in one batch"`. |
+| ↳ `range <min> <max>` | Optional child of `rule`: the limits of a number, or of every number in a numeric list, tuple, or dict. Use `_` for an open bound (`range 0 _`, `range _ 100`; at least one bound must be a number). |
+| ↳ `options a \| b \| c` | Optional child of `rule`: the string values that a `choice` rule can have (including unquoted words such as `off`, `on`, `true`, `false`, or `none`). |
+| ↳ `ui [toggle\|select\|slider\|number\|input]` | Optional child of `rule`: exposes the rule as a control in compiled UI fronts (web dashboard, plugin per-chat settings, viewer), wired to per-run rule overrides. The widget defaults from the rule type. |
+| ↳ `note "text"` | Short remark on where the value comes from (kept out of compiled `SKILL.md` prompts; long calibration logs belong in `notes/`). |
+| `rules <group>` | Compact rule table block for `<group>` (`^[a-z][a-z0-9_]*$`). Each child line `<name> <value> [<min>..<max>] ["label"]` desugars to `rule <group>.<name> ...` and accepts the same indented children (`range`, `options`, `ui`, `note`). |
+| `rules "<path>.json"` | Repeatable external JSON sidecar (resolved relative to the `.rig` file). Accepts `{"rules": [...], "presets": {...}}` or a JSON array `[...]` of rule entries (`id`, `value`, optional `type`, `min`, `max`, `options`, `ui`, `label`, `note`). Validated identically to inline rules; `rig.py serve` updates imported rule values inside `<path>.json`. |
 | `preset <name>` | A named set of rule values, for example a fast mode and a careful mode. |
 | ↳ `set <rule-id> <value>` | Child of `preset`: one rule and its value in this preset. The same limits (and tuple length) apply. |
 
@@ -104,23 +106,21 @@ unit sizes
     test tests/test_steps.py
   code gates gates.py
     test tests/test_gates.py
-  rule size.max 1000 "Longest text, in characters"
-    range 1 100000
-    ui
-    note "longer texts did not come up in the tests"
-  rule size.tiers {short: 200, standard: 1000} "Tier limits, in characters"
-    range 1 100000
-    note "per-tier character caps"
-  rule size.mode fast "Mode"
-    options fast | careful
-    ui
+  rules size
+    limit 1000                        1..100000 "Longest text, in characters"
+      ui
+      note "longer texts did not come up in the tests"
+    tiers {short: 200, standard: 1000} 1.._     "Tier limits, in characters"
+    mode  fast                                  "Mode"
+      options fast | careful | off
+      ui
   preset careful
     set size.mode careful
   step measure by steps.measure
     do "count words and characters"
-    reads size.mode
+    reads size.*
   gate fit hard "Within limit"
-    check "at most {size.max} characters (short tier: {size.tiers.short})"
+    check "at most {size.limit} characters (short tier: {size.tiers.short})"
     by gates.fit
     fail -> too-long "over limit"
   end done "Measured"
@@ -157,7 +157,7 @@ Children of `step`, `reason` and `gate`:
 | `out <type>` | step, reason | The type of what the model step or reason block gives. Required on every `by model` step and `reason` block; enforced at runtime by schema validation. |
 | `brief <key>*` | step, reason | Compact summary keys shown to models in `sees`. The runner saves the full payload to `runs/<run>/artifacts/<id>.json` and exposes read-only `artifact` inspection. |
 | `check "text"` | gate | What the gate checks, or what the model or the person must decide, in plain words. |
-| `reads <rule-id>*` | step, reason, gate, queue | Rules used by this node. Inferred automatically from `{group.name}`, `retry`/`budget`/`candidates`, and `R('group.name')` / `R.get('group.name')` in Python AST. |
+| `reads <rule-id>*` | step, reason, gate, queue | Rules used by this node. Supports `<group>.*` wildcards (expanding to all defined rules in `<group>`). Also inferred automatically from `{group.name}`, `retry`/`budget`/`candidates` (including `until` `retry`), and `R('group.name')` / `R.get('group.name')` in Python AST. |
 | `sees <path>*` | step, reason, gate | State paths shown to the model or person. A path is a step/reason id, an input, or a `for` item, then keys: `sees read.summary write`. |
 | `options a \| b \| c` | human gate | Answers the person can give. The first is the default. Needs `by`: code that reads `state[<id>]["answer"]`. |
 | `retry <n>` | hard gate, model gate | On fail: redo the nearest `step` or `reason` before the gate (only gates may stand between them), at most `n` times (`n` >= 1 or a number rule id). |
@@ -273,6 +273,7 @@ Version 2 refuses words removed in version 0 and version 1 (`next`, `pass`, `whe
 The **runner** is `rigkit.py` (`kit/`). It reads the compiled catalogue (`"rig": 2`) and walks the flow:
 
 - **Short run ids** (`r1`, `r2`, ...), reserved atomically.
+- **Read-only run metadata (`state["_rig"]`):** refreshed before every step, gate, arena tool, `rollback`, and `finally` call with `{"run_id", "unattended", "in_rollback", "in_finally", "rolled_back", "end"}`. `unattended` is `True` during `next-batch` execution and `False` during interactive `run`, `answer`, or `rerun`.
 - **Runtime input validation** against compiled `in` schemas.
 - **Automatic `intent` injection** into `waiting.intent` for every `reason` block and `model` gate.
 - **Read-only arena tools** (`tool.py arena RUN TOOL [JSON]`) run on a deep copy of `state` under a hard `budget`.
@@ -291,9 +292,9 @@ The **runner** is `rigkit.py` (`kit/`). It reads the compiled catalogue (`"rig":
 ## 6. Compiled forms & universal fronts
 
 - **Catalogue (`rig.py compile json`):** `"rig": 2`, holding `unit`, `intent`, `intent_spec`, `queue`, `rules` (including `ui`), `presets`, `start`, `rollback`, `finally`, `body`, `flow`, `blocks`, `coverage`.
-- **Agent Skill (`rig.py compile skill [--driver CMD]`):** universal `SKILL.md` for Claude Code, Codex, Cursor, Gemini CLI, Antigravity, or OpenCode.
+- **Agent Skill (`rig.py compile skill [--driver CMD]`):** universal `SKILL.md` for Claude Code, Codex, Cursor, Gemini CLI, Antigravity, or OpenCode. Omits historical rule `note`s; when `--driver` is set and a unit has more than 25 rules, lists only `ui` and `permissions.*` rules plus `<driver> rules`.
 - **MCP (Stdio + Streamable HTTP) & OpenAPI 3.1 (`tool.py mcp`, `tool.py serve-http`):** zero-dependency JSON-RPC 2.0 MCP over stdio or `POST /mcp`, OpenAPI 3.1 at `/openapi.json`, REST endpoints at `/api/*`, MCP Elicitation (`elicitation/create`) when advertised by the client, rule-bound UI controls at `/`, visual/diff localhost approval page at `/approve/<run>`, and batch report viewer at `/reports`.
-- **Local plugin (`rig.py plugin DIR`):** LM Studio plugin reading `front.json` (including `ui_rules`).
+- **Local plugin (`rig.py plugin DIR`):** LM Studio plugin reading `front.json` (exposing per-chat controls from `presets` and `ui_rules`, forwarded as `--preset` and `--set` overrides).
 - **Viewer (`rig.py serve FILE`):** browser table and three-lane graph on `127.0.0.1`.
 
 ## 7. Projects and three levels

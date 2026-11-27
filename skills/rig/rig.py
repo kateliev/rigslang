@@ -64,12 +64,13 @@ NODE_KIDS = {
 }
 BLOCK_OPTIONS = {'for': {'tolerate', 'fail'}, 'until': {'retry', 'fail'}}
 CHILDREN = {
-	'unit': {'in', 'out', 'intent', 'note', 'code', 'rule', 'preset', 'queue'} | set(ITEMS),
+	'unit': {'in', 'out', 'intent', 'note', 'code', 'rule', 'rules', 'preset', 'queue'} | set(ITEMS),
 	'intent': {'audience', 'style', 'never', 'note'},
 	'queue': {'by', 'reads', 'note'},
 	'code': {'test', 'note'},
 	'preset': {'set'},
 	'rule': {'range', 'options', 'ui', 'note'},
+	'rules': set(),
 }
 CHILDREN.update(NODE_KIDS)
 for _b in BLOCKS:
@@ -92,7 +93,9 @@ REMOVED = {
 	'example': 'removed in version 2: write unit tests in your test file',
 	'uses': 'removed in version 2: import helper modules in Python code',
 }
-NUMBER = re.compile(r'^-?\d+(\.\d+)?$')
+NUMBER = re.compile(r'^-?\d+(\.\d+)?([eE][+-]?\d+)?$')
+INLINE_RANGE = re.compile(r'^(_|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\.\.(_|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)$')
+GROUP_ID = re.compile(r'^[a-z][a-z0-9_]*$')
 RULE_ID = re.compile(r'^[A-Za-z_][\w-]*(\.[\w-]+)+$')
 PATH = re.compile(r'^[A-Za-z_][\w-]*(\.[\w-]+)*$')
 PLACE = re.compile(r'\{([A-Za-z_][\w-]*(?:\.[\w-]+)+)\}')
@@ -219,6 +222,21 @@ def ser(arg):
 	return '(' + ' '.join(ser(a) for a in v) + ')' if kind == 'list' else v
 
 
+def _split_inline_range(r):
+	'''Desugar optional inline "<lo>..<hi>" after <value> on a rule node into a "range" child.'''
+	if len(r.args) >= 3 and r.args[2][0] == 'word':
+		m = INLINE_RANGE.match(r.args[2][1])
+		if m:
+			del r.args[2]
+			if len(r.spans) > 2:
+				del r.spans[2]
+			lo_tok = ('word', '_') if m.group(1) == '_' else ('num', m.group(1))
+			hi_tok = ('word', '_') if m.group(2) == '_' else ('num', m.group(2))
+			g = Node('range', [lo_tok, hi_tok], r.line, r.indent + 2)
+			g.parent = r
+			r.children.insert(0, g)
+
+
 def parse(text):
 	'''Text -> the root node (head "file"). Raises RigError.'''
 	lines = text.replace('\r\n', '\n').split('\n')
@@ -258,6 +276,36 @@ def parse(text):
 		stack.append(node)
 	for u in root.children:
 		u.root = root  # a unit knows its file: "by" can name the other units in it
+		if u.head != 'unit':
+			continue
+		norm = []
+		for c in u.children:
+			if c.head == 'rule':
+				_split_inline_range(c)
+				norm.append(c)
+			elif c.head == 'rules' and len(c.args) == 1 and c.args[0][0] == 'word' and GROUP_ID.match(c.args[0][1]):
+				grp = c.args[0][1]
+				if not c.children:
+					norm.append(c)
+					continue
+				for rc in c.children:
+					if rc.head == 'rule':
+						rc._bad_compact = 'inside "rules {}", write "<name> <value>", without "rule"'.format(grp)
+						rc.parent = u
+						norm.append(rc)
+						continue
+					rid = '{}.{}'.format(grp, rc.head)
+					rnode = Node('rule', [('word', rid)] + list(rc.args), rc.line, rc.indent)
+					rnode.spans = [(rc.indent, rc.indent + len(rc.head))] + list(rc.spans)
+					rnode.parent = u
+					rnode.children = list(rc.children)
+					for kc in rnode.children:
+						kc.parent = rnode
+					_split_inline_range(rnode)
+					norm.append(rnode)
+			else:
+				norm.append(c)
+		u.children = norm
 	return root
 
 
@@ -397,7 +445,7 @@ def parse_literal(arg):
 				i += 1
 		return 'str', ''.join(out), None
 	if kind == 'num':
-		return 'number', (float(v) if '.' in v else int(v)), None
+		return 'number', (float(v) if ('.' in v or 'e' in v or 'E' in v) else int(v)), None
 	if kind == 're':
 		return 'pattern', v[1:-1], None
 	if kind == 'list':  # synthetic compatibility if constructed directly
@@ -739,9 +787,16 @@ def seconds(word):
 	return int(m.group(1)) * SECONDS[m.group(2)] if m else None
 
 
+def choice_val(tok):
+	'''A choice option or value token as a string (keeping unquoted words like off/true/none as strings).'''
+	if tok is None:
+		return None
+	return value(tok) if tok[0] == 'str' else ser(tok)
+
+
 def options_of(n):
 	'''The values of an "options" line: "a | b | c", or "a b c" for one-word values.'''
-	toks = [ser(a) if a[0] != 'str' else value(a) for a in n.args]
+	toks = [choice_val(a) for a in n.args]
 	if '|' in toks:
 		out, cur = [], []
 		for t in toks + ['|']:
@@ -751,7 +806,7 @@ def options_of(n):
 			else:
 				cur.append(t)
 		return out
-	return [value(a) for a in n.args]
+	return toks
 
 
 # - The flow: nodes and blocks ------------------------
@@ -841,10 +896,212 @@ class Ctx(object):
 
 	def add(self, root, path):
 		base = os.path.dirname(os.path.abspath(path)) if path else None
+		if path:
+			expand_external_rules(root, path)
 		for u in units(root):
 			if u.word(0) not in self.units:
 				self.units[u.word(0)] = u
 				self.base[u.word(0)] = base
+			for sf in getattr(u, '_sidecar_files', ()):
+				self.files.add(sf)
+
+
+def _py_expr_str(val, as_tuple=False):
+	if isinstance(val, bool):
+		return 'True' if val else 'False'
+	if val is None:
+		return 'None'
+	if isinstance(val, (int, float)):
+		return repr(val)
+	if isinstance(val, str):
+		return json.dumps(val, ensure_ascii=False)
+	if isinstance(val, (list, tuple)):
+		inner = ', '.join(_py_expr_str(x) for x in val)
+		if as_tuple:
+			return '({},)'.format(inner) if len(val) == 1 else '({})'.format(inner)
+		return '[{}]'.format(inner)
+	if isinstance(val, dict):
+		return '{' + ', '.join('{}: {}'.format(json.dumps(str(k), ensure_ascii=False), _py_expr_str(v)) for k, v in val.items()) + '}'
+	return json.dumps(str(val), ensure_ascii=False)
+
+
+def _json_val_to_tok(val, explicit_type=None, has_options=False):
+	'''Convert a Python/JSON rule value into a rig.py token (kind, text).'''
+	if has_options or explicit_type == 'choice':
+		if isinstance(val, bool):
+			return ('word', 'true' if val else 'false')
+		if val is None:
+			return ('word', 'none')
+		if isinstance(val, str):
+			return ('str', json.dumps(val, ensure_ascii=False)) if (' ' in val or not val or val in ('|',)) else ('word', val)
+		return ('word', str(val))
+	if explicit_type == 'switch' or (explicit_type is None and isinstance(val, bool)):
+		if isinstance(val, bool):
+			return ('word', 'on' if val else 'off')
+		return ('str', json.dumps(str(val), ensure_ascii=False))
+	if explicit_type in ('tuple', 'range'):
+		if isinstance(val, (list, tuple)):
+			return ('expr', _py_expr_str(val, as_tuple=True))
+		return ('str', json.dumps(str(val), ensure_ascii=False))
+	if explicit_type in ('dict', 'per_master') or (explicit_type is None and isinstance(val, dict)):
+		if isinstance(val, dict):
+			return ('expr', _py_expr_str(val, as_tuple=False))
+		return ('str', json.dumps(str(val), ensure_ascii=False))
+	if explicit_type == 'list' or (explicit_type is None and isinstance(val, list)):
+		if isinstance(val, list):
+			return ('expr', _py_expr_str(val, as_tuple=False))
+		return ('str', json.dumps(str(val), ensure_ascii=False))
+	if explicit_type == 'number' or (explicit_type is None and isinstance(val, (int, float)) and not isinstance(val, bool)):
+		if isinstance(val, (int, float)) and not isinstance(val, bool):
+			return ('num', repr(val) if isinstance(val, float) else str(val))
+		return ('str', json.dumps(str(val), ensure_ascii=False))
+	if explicit_type == 'pattern':
+		if isinstance(val, str):
+			return ('re', '/' + val + '/')
+		return ('str', json.dumps(str(val), ensure_ascii=False))
+	if val is None:
+		return ('str', '""')
+	return ('str', json.dumps(str(val), ensure_ascii=False))
+
+
+def expand_external_rules(root, path=None, sidecars=None):
+	'''Load any external `rules "<path>.json"` declarations on units of root relative to path.'''
+	base = os.path.dirname(os.path.abspath(path)) if path else getattr(root, 'base', None)
+	if not base:
+		return root
+	norm_base = os.path.normpath(base)
+	if sidecars is None and getattr(root, '_expanded_base', None) == norm_base:
+		return root
+	key = (norm_base, json.dumps(sidecars, sort_keys=True) if sidecars else None)
+	if getattr(root, '_expanded_key', None) == key:
+		return root
+	root.base = base
+	root._expanded_base = norm_base
+	root._expanded_key = key
+	known_types = {'switch': 'switch', 'choice': 'choice', 'number': 'number', 'tuple': 'tuple', 'range': 'tuple',
+		'list': 'list', 'dict': 'dict', 'per_master': 'dict', 'pattern': 'pattern', 'text': 'text'}
+	for u in units(root):
+		u.base = base
+		u.children = [c for c in u.children if not getattr(c, 'from_json', None)]
+		u._sidecar_errors = []
+		u._sidecar_files = []
+		new_children = []
+		for c in u.children:
+			new_children.append(c)
+			if c.head != 'rules' or len(c.args) != 1 or c.args[0][0] != 'str':
+				continue
+			rel = value(c.args[0])
+			jpath = os.path.normpath(os.path.join(base, rel))
+			u._sidecar_files.append(jpath)
+			if not os.path.exists(jpath):
+				u._sidecar_errors.append((c.line, 'the rules file "{}" does not exist'.format(rel)))
+				continue
+			raw = read_text(jpath)
+			if raw is None:
+				u._sidecar_errors.append((c.line, 'could not read rules file "{}"'.format(rel)))
+				continue
+			try:
+				data = json.loads(raw)
+			except ValueError as e:
+				u._sidecar_errors.append((c.line, 'rules file "{}": invalid JSON ({})'.format(rel, e)))
+				continue
+			if isinstance(data, list):
+				raw_rules, raw_presets = data, {}
+			elif isinstance(data, dict):
+				raw_rules = data.get('rules', [])
+				raw_presets = data.get('presets', {})
+				if not isinstance(raw_rules, list) or not isinstance(raw_presets, dict):
+					u._sidecar_errors.append((c.line, 'rules file "{}": expected "rules" list and optional "presets" object'.format(rel)))
+					continue
+			else:
+				u._sidecar_errors.append((c.line, 'rules file "{}": expected a JSON object or array'.format(rel)))
+				continue
+			sc_map = (sidecars or {}).get(rel) or {}
+			inline_by_id = dict((r.word(0), r) for r in u.children if r.head == 'rule' and r.word(0))
+			loaded_by_id = {}
+			for idx, entry in enumerate(raw_rules):
+				if not isinstance(entry, dict) or not isinstance(entry.get('id'), str):
+					u._sidecar_errors.append((c.line, 'rules file "{}" item {}: expected object with string "id"'.format(rel, idx)))
+					continue
+				rid = entry['id']
+				raw_type = entry.get('type')
+				if raw_type is not None and raw_type not in known_types:
+					u._sidecar_errors.append((c.line, 'rules file "{}" rule "{}": unknown type "{}"'.format(rel, rid, raw_type)))
+					continue
+				norm_type = known_types.get(raw_type)
+				has_opts = isinstance(entry.get('options'), list) and len(entry['options']) > 0
+				val = entry['value'] if 'value' in entry else entry.get('default')
+				if raw_type == 'range' and (not isinstance(val, list) or len(val) != 2):
+					u._sidecar_errors.append((c.line, 'rules file "{}" rule "{}": type "range" needs a 2-item [min, max] list'.format(rel, rid)))
+					continue
+				if rid in sc_map:
+					try:
+						ov_toks = tokenize(str(sc_map[rid]).strip(), c.line)
+						val_tok = ov_toks[0] if len(ov_toks) == 1 else ('str', json.dumps(str(sc_map[rid]), ensure_ascii=False))
+					except RigError as e:
+						u._sidecar_errors.append((c.line, 'rule "{}": {}'.format(rid, str(e).split(': ', 1)[-1])))
+						continue
+				else:
+					val_tok = _json_val_to_tok(val, explicit_type=raw_type, has_options=has_opts)
+				rargs = [('word', rid), val_tok]
+				if isinstance(entry.get('label'), str) and entry['label']:
+					rargs.append(('str', json.dumps(entry['label'], ensure_ascii=False)))
+				rnode = Node('rule', rargs, c.line, c.indent)
+				rnode.parent = u
+				rnode.from_json = rel
+				rnode.json_path = jpath
+				if norm_type and not has_opts:
+					rnode.explicit_type = norm_type
+				has_lo = 'min' in entry and entry['min'] is not None
+				has_hi = 'max' in entry and entry['max'] is not None
+				if has_lo or has_hi:
+					lo_tok = _json_val_to_tok(entry['min'], 'number') if has_lo else ('word', '_')
+					hi_tok = _json_val_to_tok(entry['max'], 'number') if has_hi else ('word', '_')
+					g = Node('range', [lo_tok, hi_tok], c.line, c.indent + 2)
+					g.parent = rnode
+					rnode.children.append(g)
+				if 'options' in entry:
+					if not isinstance(entry['options'], list) or not entry['options']:
+						u._sidecar_errors.append((c.line, 'rules file "{}" rule "{}": "options" must be a non-empty list'.format(rel, rid)))
+					else:
+						opt_args = []
+						for oi, ov in enumerate(entry['options']):
+							if oi:
+								opt_args.append(('word', '|'))
+							opt_args.append(('str', json.dumps(str(ov), ensure_ascii=False)))
+						onode = Node('options', opt_args, c.line, c.indent + 2)
+						onode.parent = rnode
+						rnode.children.append(onode)
+				if entry.get('ui'):
+					ui_val = entry['ui']
+					uargs = [('word', ui_val)] if isinstance(ui_val, str) and ui_val not in ('true', '') else []
+					uinode = Node('ui', uargs, c.line, c.indent + 2)
+					uinode.parent = rnode
+					rnode.children.append(uinode)
+				if isinstance(entry.get('note'), str) and entry['note'].strip():
+					nnode = Node('note', [('str', json.dumps(entry['note'], ensure_ascii=False))], c.line, c.indent + 2)
+					nnode.parent = rnode
+					rnode.children.append(nnode)
+				new_children.append(rnode)
+				loaded_by_id[rid] = rnode
+			for pname, pmap in raw_presets.items():
+				if not isinstance(pmap, dict):
+					u._sidecar_errors.append((c.line, 'rules file "{}" preset "{}": expected an object of rule overrides'.format(rel, pname)))
+					continue
+				pnode = Node('preset', [('word', str(pname))], c.line, c.indent)
+				pnode.parent = u
+				pnode.from_json = rel
+				pnode.json_path = jpath
+				for prid, pval in pmap.items():
+					ref_r = loaded_by_id.get(prid) or inline_by_id.get(prid)
+					rt = rule_type(ref_r) if ref_r is not None else None
+					ptok = _json_val_to_tok(pval, explicit_type=rt, has_options=(rt == 'choice'))
+					snode = Node('set', [('word', str(prid)), ptok], c.line, c.indent + 2)
+					snode.parent = pnode
+					pnode.children.append(snode)
+				new_children.append(pnode)
+		u.children = new_children
+	return root
 
 
 def ctx_of(u, ctx=None):
@@ -1104,7 +1361,8 @@ def walk_strings(n, skip=('example',)):
 def placeholders(n):
 	'''The rule ids named as {group.name} in the strings of n, in order, without repeats.'''
 	out = []
-	for _, t in walk_strings(n):
+	skip = ('example',) + (ITEMS if n.head in BLOCKS else ())
+	for _, t in walk_strings(n, skip=skip):
 		for m in PLACE.finditer(t):
 			if m.group(1) not in out:
 				out.append(m.group(1))
@@ -1115,11 +1373,18 @@ def node_reads(f, u=None, ctx=None):
 	'''The rules that a step, reason or gate reads: its "reads" lines, placeholders in its strings,
 	retry/budget/candidates rules, and R("group.name") calls inferred from bound Python code.'''
 	out = []
+	unit_rule_list = [r.word(0) for r in u.kids('rule') if r.word(0)] if u is not None else []
 	byrule = dict((r.word(0), r) for r in u.kids('rule')) if u is not None else None
 	for c in f.kids('reads'):
 		for a in c.args:
-			if a[1] not in out:
-				out.append(a[1])
+			tok = a[1]
+			if tok.endswith('.*') and u is not None:
+				prefix = tok[:-1]
+				for rid in unit_rule_list:
+					if rid.startswith(prefix) and rid not in out:
+						out.append(rid)
+			elif tok not in out:
+				out.append(tok)
 	for rid in placeholders(f):
 		target = rid
 		if byrule is not None and rid not in byrule:
@@ -1166,6 +1431,9 @@ def rule_type(r):
 	a = r.args[1] if len(r.args) > 1 else None
 	if r.kids('options'):
 		return 'choice'
+	exp = getattr(r, 'explicit_type', None)
+	if exp:
+		return exp
 	if a is None:
 		return 'text'
 	kind, _, err = parse_literal(a)
@@ -1211,7 +1479,7 @@ def rule_problem(r, a):
 		if has_range:
 			return 'range is for numbers (or a list, tuple or dict of numbers)'
 		opts = options_of(r.kids('options')[0])
-		if value(a) not in opts and ser(a) not in [str(o) for o in opts]:
+		if choice_val(a) not in opts:
 			return 'use one of: ' + ', '.join(str(o) for o in opts)
 		return None
 	kind, v, err = parse_literal(a)
@@ -1464,6 +1732,8 @@ def check(root, path=None, ctx=None):
 	err, warn = [], []
 	names = set()
 	base = os.path.dirname(os.path.abspath(path)) if path else None
+	if path:
+		expand_external_rules(root, path)
 	cctx = ctx or (Ctx(root, path) if path else None)
 	for top in root.children:
 		if top.head != 'unit':
@@ -1512,21 +1782,41 @@ def check(root, path=None, ctx=None):
 						err.append((c['line'], 'the {} file "{}" does not exist'.format('code' if k == 'file' else 'test', c[k])))
 
 		# Rules and presets
-		rules = set(r.word(0) for r in u.kids('rule'))
-		byrule = dict((r.word(0), r) for r in u.kids('rule'))
+		err.extend(getattr(u, '_sidecar_errors', ()))
+		for rs in u.kids('rules'):
+			if len(rs.args) == 1 and rs.args[0][0] == 'str':
+				if rs.children:
+					err.append((rs.children[0].line, 'rules "{}" takes no body'.format(value(rs.args[0]))))
+			elif len(rs.args) == 1 and rs.args[0][0] == 'word' and GROUP_ID.match(rs.args[0][1]):
+				warn.append((rs.line, '"rules {}" has no rules'.format(rs.args[0][1])))
+			else:
+				err.append((rs.line, 'write rules "<path>.json" or rules <group> (lowercase letters, digits and _)'))
+		rules = set()
+		byrule = {}
 		for r in u.kids('rule'):
+			if getattr(r, '_bad_compact', None):
+				err.append((r.line, r._bad_compact))
+				continue
 			rid = r.word(0)
 			if not rid or not RULE_ID.match(rid):
 				err.append((r.line, 'rule id "{}": write it as group.name'.format(rid or '')))
 				continue
+			if rid in rules:
+				err.append((r.line, 'rule "{}" is defined twice'.format(rid)))
+			rules.add(rid)
+			byrule.setdefault(rid, r)
 			if len(r.args) > 2 and r.args[2][0] != 'str':
-				err.append((r.line, 'rule "{}": after the value, only the label as a "string"'.format(rid)))
+				err.append((r.line, 'rule "{}": after the value, only the label as a "string" (or <min>..<max> before it)'.format(rid)))
 			elif len(r.args) > 3:
 				err.append((r.line, 'rule "{}": write the value, then the label as one "string"'.format(rid)))
+			if len(r.kids('range')) > 1:
+				err.append((r.kids('range')[1].line, 'rule "{}": at most one range per rule'.format(rid)))
 			for g in r.kids('range'):
-				if len(g.args) != 2 or any(a[0] != 'num' for a in g.args):
-					err.append((g.line, 'rule "{}": write range <min> <max>, two numbers'.format(rid)))
-				elif value(g.args[0]) > value(g.args[1]):
+				if len(g.args) != 2 or any(a[0] != 'num' and a != ('word', '_') for a in g.args):
+					err.append((g.line, 'rule "{}": write range <min> <max>, two numbers (or _ for an open side)'.format(rid)))
+				elif g.args[0] == ('word', '_') and g.args[1] == ('word', '_'):
+					err.append((g.line, 'rule "{}": range needs at least one number (not _ and _)'.format(rid)))
+				elif g.args[0][0] == 'num' and g.args[1][0] == 'num' and value(g.args[0]) > value(g.args[1]):
 					err.append((g.line, 'rule "{}": the range starts above its end'.format(rid)))
 			for ui in r.kids('ui'):
 				if ui.args and ui.word(0) not in UI_CONTROLS:
@@ -1582,6 +1872,17 @@ def check(root, path=None, ctx=None):
 					if bad:
 						err.append((s.line, 'preset "{}", rule "{}": {}'.format(pn, rid, bad)))
 
+		def _check_reads_node(rd_node):
+			for a in rd_node.args:
+				tok = a[1]
+				if tok.endswith('.*'):
+					grp = tok[:-2]
+					prefix = grp + '.'
+					if not grp or not any((r or '').startswith(prefix) for r in rules):
+						err.append((rd_node.line, 'no rules in group "{}"'.format(grp)))
+				elif tok not in rules:
+					err.append((rd_node.line, 'rule "{}" is not defined in this unit'.format(tok)))
+
 		# Pluggable queue declaration
 		queues = u.kids('queue')
 		if len(queues) > 1:
@@ -1600,9 +1901,7 @@ def check(root, path=None, ctx=None):
 					if bound_level(b.word(0), u, cctx) == 'none' and c_line['file'] and os.path.exists(os.path.join(base, c_line['file'])):
 						err.append((b.line, '"{}" has no function "{}"'.format(c_line['file'], fn)))
 			for rd in q.kids('reads'):
-				for a in rd.args:
-					if a[1] not in rules:
-						err.append((rd.line, 'rule "{}" is not defined in this unit'.format(a[1])))
+				_check_reads_node(rd)
 			queue_reads.update(node_reads(q, u, cctx))
 
 		# The flow
@@ -1645,9 +1944,7 @@ def check(root, path=None, ctx=None):
 			read.update(node_reads(f, u, cctx))
 			for c in f.children:
 				if c.head == 'reads':
-					for a in c.args:
-						if a[1] not in rules:
-							err.append((c.line, 'rule "{}" is not defined in this unit'.format(a[1])))
+					_check_reads_node(c)
 				if c.head in PROSE:
 					for _, t in walk_strings(c):
 						if PROSE_NUMBER.search(PLACE.sub('', t)):
@@ -1775,6 +2072,7 @@ def check(root, path=None, ctx=None):
 		for it in walk_items(u):
 			if it.head not in BLOCKS:
 				continue
+			read.update(node_reads(it, u, cctx))
 			opts = BLOCK_OPTIONS.get(it.head, set())
 			seen_body = False
 			for c in it.children:
@@ -1851,9 +2149,11 @@ def rule_info(r, token=None):
 	'''One rule as a catalogue entry. token: a preset value that replaces the value.'''
 	a = r.args[1] if len(r.args) > 1 else None
 	rtype = rule_type(r)
-	def_val = value(a) if a else None
+	vfn = choice_val if rtype == 'choice' else value
+	def_val = vfn(a) if a else None
+	cur_tok = token if token is not None else a
 	d = {'id': r.word(0), 'group': r.word(0).split('.')[0], 'label': rule_label(r) or r.word(0),
-		'type': rtype, 'value': value(token if token is not None else a) if (token or a) else None,
+		'type': rtype, 'value': vfn(cur_tok) if cur_tok else None,
 		'default': def_val}
 	if rtype == 'tuple' and isinstance(def_val, list):
 		d['length'] = len(def_val)
@@ -1875,7 +2175,16 @@ def rule_info(r, token=None):
 
 
 def presets_of(u):
-	return dict((p.word(0), dict((x.word(0), value(x.args[1])) for x in p.kids('set') if len(x.args) > 1)) for p in u.kids('preset'))
+	byrule = dict((r.word(0), r) for r in u.kids('rule'))
+	out = {}
+	for p in u.kids('preset'):
+		pmap = {}
+		for x in p.kids('set'):
+			if len(x.args) > 1:
+				rid = x.word(0)
+				pmap[rid] = choice_val(x.args[1]) if (rid in byrule and rule_type(byrule[rid]) == 'choice') else value(x.args[1])
+		out[p.word(0)] = pmap
+	return out
 
 
 def preset_tokens(u, preset):
@@ -1961,7 +2270,7 @@ def node_info(f, fl, u=None, ctx=None):
 	return d
 
 
-def block_info(bid, b):
+def block_info(bid, b, u=None, ctx=None):
 	n = b['node']
 	d = {'id': bid, 'kind': b['kind']}
 	if b['kind'] == 'for':
@@ -1972,6 +2281,9 @@ def block_info(bid, b):
 		d['name'] = name_of(n)
 	if n.kids('retry'):
 		d['retry'] = value(n.kids('retry')[0].args[0])
+	rd = node_reads(n, u, ctx)
+	if rd:
+		d['reads'] = rd
 	if n.kids('tolerate'):
 		d['tolerate'] = float(n.kids('tolerate')[0].word(0).rstrip('%'))
 		if d['tolerate'] == int(d['tolerate']):
@@ -2017,7 +2329,7 @@ def catalog(u, preset=None, ctx=None):
 		'presets': presets_of(u),
 		'rules': [rule_info(r, toks.get(r.word(0))) for r in u.kids('rule')],
 		'flow': [node_info(f, fl, u, ctx) for f in flow_nodes(u)],
-		'blocks': [block_info(b, fl.blocks[b]) for b in order if b in fl.blocks],
+		'blocks': [block_info(b, fl.blocks[b], u, ctx) for b in order if b in fl.blocks],
 	}
 	if u.kids('queue'):
 		q = u.kids('queue')[0]
@@ -2145,26 +2457,30 @@ def skill(u, rules_path=None, preset=None, driver=None):
 		out.append('')
 	if c['rules']:
 		out += ['## Rules', '']
+		cap_table = bool(driver and len(c['rules']) > 25)
+		shown_rules = [r for r in u.kids('rule') if r.kids('ui') or (r.word(0) or '').startswith('permissions.')] if cap_table else list(u.kids('rule'))
 		if rules_path:
-			out += ['Read the value of each rule from `' + rules_path + '`: the `rules` list, by `id`. Do not copy the values into your work. In the text below, `{group.name}` means the value of that rule.', '',
-				'| Rule | Meaning |', '|---|---|']
-		else:
-			out += ['| Rule | Value | Meaning |', '|---|---|---|']
-		for r in u.kids('rule'):
-			info = rule_info(r)
-			lim = []
-			if 'min' in info or 'max' in info:
-				lim.append('range {} to {}'.format(info.get('min', '…'), info.get('max', '…')))
-			if 'options' in info:
-				lim.append('one of: ' + ', '.join(str(o) for o in info['options']))
-			mean = info['label'] + ('; ' + ', '.join(lim) if lim else '')
-			if 'note' in info:
-				mean += '. Note: ' + info['note']
+			out += ['Read the value of each rule from `' + rules_path + '`: the `rules` list, by `id`. Do not copy the values into your work. In the text below, `{group.name}` means the value of that rule.', '']
+		if shown_rules:
 			if rules_path:
-				out.append('| `{}` | {} |'.format(info['id'], cell(mean)))
+				out += ['| Rule | Meaning |', '|---|---|']
 			else:
-				out.append('| `{}` | `{}` | {} |'.format(info['id'], cell(val(info['id'])), cell(mean)))
-		out.append('')
+				out += ['| Rule | Value | Meaning |', '|---|---|---|']
+			for r in shown_rules:
+				info = rule_info(r)
+				lim = []
+				if 'min' in info or 'max' in info:
+					lim.append('range {} to {}'.format(info.get('min', '…'), info.get('max', '…')))
+				if 'options' in info:
+					lim.append('one of: ' + ', '.join(str(o) for o in info['options']))
+				mean = info['label'] + ('; ' + ', '.join(lim) if lim else '')
+				if rules_path:
+					out.append('| `{}` | {} |'.format(info['id'], cell(mean)))
+				else:
+					out.append('| `{}` | `{}` | {} |'.format(info['id'], cell(val(info['id'])), cell(mean)))
+			out.append('')
+		if cap_table:
+			out += ['Run `{} rules` to inspect all {} rules.'.format(driver, len(c['rules'])), '']
 	if not c['flow']:
 		return '\n'.join(out).rstrip('\n') + '\n'
 	if driver:
@@ -2347,9 +2663,11 @@ def load(path):
 	with open(path, encoding='utf-8', newline='') as f:
 		text = f.read()
 	try:
-		return text, parse(text)
+		root = parse(text)
 	except RigError as e:
 		raise SystemExit('{}: {}'.format(path, e))
+	expand_external_rules(root, path)
+	return text, root
 
 
 def find(root, name):
@@ -2462,7 +2780,44 @@ def run_list(folder):
 	return [x[2] for x in rows]
 
 
-def bundle(text, path=None):
+def _save_sidecars(root, path, sidecars):
+	'''Persist edited JSON sidecar rule values into their "<path>.json" files without touching the .rig file.'''
+	if not sidecars or not path:
+		return []
+	base = os.path.dirname(os.path.abspath(path))
+	allowed = {}
+	byrule = {}
+	for u in units(root):
+		for rs in u.kids('rules'):
+			if len(rs.args) == 1 and rs.args[0][0] == 'str':
+				rel = value(rs.args[0])
+				allowed[rel] = os.path.normpath(os.path.join(base, rel))
+		for r in u.kids('rule'):
+			if r.word(0):
+				byrule[r.word(0)] = r
+	wrote = []
+	for rel, rmap in sorted(sidecars.items()):
+		if not rmap or rel not in allowed:
+			continue
+		jpath = allowed[rel]
+		with open(jpath, encoding='utf-8') as f:
+			data = json.load(f)
+		entries = data if isinstance(data, list) else data.get('rules', [])
+		changed = False
+		for entry in entries:
+			if isinstance(entry, dict) and entry.get('id') in rmap and entry['id'] in byrule:
+				new_val = rule_info(byrule[entry['id']])['value']
+				if 'default' in entry and entry.get('value') == entry.get('default'):
+					entry['default'] = new_val
+				entry['value'] = new_val
+				changed = True
+		if changed:
+			write(jpath, json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+			wrote.append(jpath)
+	return wrote
+
+
+def bundle(text, path=None, sidecars=None):
 	'''Everything the viewer shows for one file, compiled here: the viewer has no parser of its own.
 	-> {"file", "text", "errors", "warnings", "units": [...]}; each unit has its catalogue, skill,
 	tool definition, status, the levels of its gates, and where each rule value is in the text.'''
@@ -2472,6 +2827,8 @@ def bundle(text, path=None):
 	except RigError as e:
 		out['errors'] = [[e.line, str(e).split(': ', 1)[-1]]]
 		return out
+	if path:
+		expand_external_rules(root, path, sidecars=sidecars)
 	ctx = Ctx(root, path) if path else Ctx(root)
 	err, warn = check(root, path, ctx)
 	out['errors'], out['warnings'] = [list(x) for x in sorted(err)], [list(x) for x in sorted(warn)]
@@ -2490,7 +2847,9 @@ def bundle(text, path=None):
 		d['lines'] = dict((item_id(x, bids), x.line) for x in walk_items(u) if item_id(x, bids))
 		src = {}
 		for r in u.kids('rule'):
-			if r.word(0) and len(r.args) > 1 and len(r.spans) > 1:
+			if getattr(r, 'from_json', None) and r.word(0) and len(r.args) > 1:
+				src[r.word(0)] = {'json_file': r.from_json, 'text': ser(r.args[1]), 'shown': show(r.args[1])}
+			elif r.word(0) and len(r.args) > 1 and len(r.spans) > 1:
 				a, b = r.spans[1]
 				src[r.word(0)] = {'line': r.line, 'a': a, 'b': b, 'text': ser(r.args[1]), 'shown': show(r.args[1])}
 		d['rules_src'] = src
@@ -2544,22 +2903,43 @@ def serve(path, port, runs=None, **outs):
 		def do_POST(self):
 			if self.path not in ('/file', '/compile'):
 				return self.reply(404, json.dumps({'error': 'not found'}))
-			text = self.rfile.read(int(self.headers.get('Content-Length', 0))).decode('utf-8')
+			raw_body = self.rfile.read(int(self.headers.get('Content-Length', 0))).decode('utf-8')
+			ctype = (self.headers.get('Content-Type') or '').lower()
+			sidecars = None
+			if 'application/json' in ctype:
+				try:
+					payload = json.loads(raw_body)
+					text = payload.get('text', '')
+					sidecars = payload.get('sidecars')
+				except ValueError as e:
+					return self.reply(400, json.dumps({'error': 'invalid JSON: {}'.format(e)}))
+			else:
+				text = raw_body
 			if self.path == '/compile':  # compile changed text for the viewer; write nothing
-				return self.reply(200, json.dumps(bundle(text, path), ensure_ascii=False))
+				return self.reply(200, json.dumps(bundle(text, path, sidecars=sidecars), ensure_ascii=False))
 			try:
-				err, _ = check(parse(text), path)
+				root = parse(text)
+				expand_external_rules(root, path, sidecars=sidecars)
+				err, _ = check(root, path)
 			except RigError as e:
 				return self.reply(400, json.dumps({'error': str(e)}))
 			if err:
 				return self.reply(400, json.dumps({'error': 'line {}: {}'.format(err[0][0], err[0][1])}))
-			with open(path, 'w', encoding='utf-8', newline='') as f:
-				f.write(text)
+			old_rig = read_text(path)
+			saved_files = []
+			if old_rig is None or old_rig != text:
+				with open(path, 'w', encoding='utf-8', newline='') as f:
+					f.write(text)
+				saved_files.append(os.path.basename(path))
+			sc_wrote = _save_sidecars(root, path, sidecars)
+			saved_files.extend(os.path.basename(p) for p in sc_wrote)
 			try:
 				done = outputs(path, **outs)
 			except SystemExit as e:
 				return self.reply(400, json.dumps({'error': str(e)}))
-			self.reply(200, json.dumps({'saved': os.path.basename(path), 'wrote': done, 'bundle': bundle(text, path)}, ensure_ascii=False))
+			with open(path, encoding='utf-8', newline='') as f:
+				fresh_text = f.read()
+			self.reply(200, json.dumps({'saved': ', '.join(saved_files) or os.path.basename(path), 'wrote': done, 'bundle': bundle(fresh_text, path)}, ensure_ascii=False))
 
 		def log_message(self, *a):
 			pass

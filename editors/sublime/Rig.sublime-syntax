@@ -29,7 +29,7 @@ contexts:
     - match: '^\s*(code|test|queue)(?=[\s;]|$)'
       captures:
         1: keyword.other.context.rig
-    - match: '^\s*(rule)(?=[\s;]|$)(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?'
+    - match: '^\s*(rule|rules)(?=[\s;]|$)(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?'
       captures:
         1: storage.type.rule.rig
         2: entity.name.constant.rule.rig
@@ -94,6 +94,8 @@ contexts:
     - include: inline
     - include: percent
     - include: time
+    - include: range-span
+    - include: open-bound
     - include: bar
     - include: number
     - include: constant
@@ -133,6 +135,17 @@ contexts:
   time:
     - match: '(?<![^\s(\[{,:])\d+[smhd](?=[\s()\[\]{},:?;]|$)'
       scope: constant.numeric.rig
+
+  range-span:
+    - match: '(?<![^\s(\[{,:])(_|[-+]?\d+(?:\.\d+)?)(\.\.)(_|[-+]?\d+(?:\.\d+)?)(?=[\s()\[\]{},:?;]|$)'
+      captures:
+        1: constant.numeric.rig
+        2: keyword.operator.range.rig
+        3: constant.numeric.rig
+
+  open-bound:
+    - match: '(?<![^\s(\[{,:])_(?=[\s()\[\]{},:?;]|$)'
+      scope: constant.language.rig
 
   bar:
     - match: '\|'

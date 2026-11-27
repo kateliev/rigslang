@@ -569,6 +569,196 @@ class RigV2Language(unittest.TestCase):
 		self.assertTrue(any('use [a, b] for a list' in t for _, t in errors(unit(
 			'  rule a.b (utm_ fbclid)\n  step s by code.s\n    reads a.b\n  end e\n'))))
 
+	def test_until_retry_rule_is_read_and_validated(self):
+		ok_src = unit('''  rule repair.outer_limit 1 "Max outer rebuilds"
+    range 0 5
+    note "Default single retry."
+  until evaluate.settled
+    retry repair.outer_limit
+    step draft "Build draft" by code.draft
+  end done
+''')
+		self.assertEqual(errors(ok_src), [])
+		self.assertEqual(warnings(ok_src), [])
+		c = catalogue(ok_src)
+		self.assertIn('repair.outer_limit', block(c, 'until:evaluate.settled')['reads'])
+		bad_missing = unit('''  until evaluate.settled
+    retry missing.rule
+    step draft by code.draft
+  end done
+''')
+		self.assertTrue(any('write retry <n>' in t for _, t in errors(bad_missing)))
+		bad_type = unit('''  rule repair.flag on "Flag"
+  until evaluate.settled
+    retry repair.flag
+    step draft by code.draft
+      reads repair.flag
+  end done
+''')
+		self.assertTrue(any('the rule must be a number' in t for _, t in errors(bad_type)))
+
+	def test_choice_rule_preserves_reserved_words_in_options_and_presets(self):
+		src = unit('''  rule mode.balance balanced "Balance mode"
+    options strict | balanced | off
+  rule mode.space off "Space-separated choice"
+    options strict balanced off
+  rule mode.words none "Boolean-like choice words"
+    options true | false | on | off | none
+  preset minimal
+    set mode.balance off
+    set mode.space strict
+    set mode.words false
+  step run_it by code.run_it
+    reads mode.balance mode.space mode.words
+  end done
+''')
+		self.assertEqual(errors(src), [])
+		self.assertEqual(warnings(src), [])
+		c = catalogue(src)
+		by_id = dict((r['id'], r) for r in c['rules'])
+		self.assertEqual(by_id['mode.balance']['options'], ['strict', 'balanced', 'off'])
+		self.assertEqual(by_id['mode.space']['options'], ['strict', 'balanced', 'off'])
+		self.assertEqual(by_id['mode.space']['default'], 'off')
+		self.assertIsInstance(by_id['mode.space']['value'], str)
+		self.assertEqual(by_id['mode.words']['options'], ['true', 'false', 'on', 'off', 'none'])
+		self.assertEqual(by_id['mode.words']['default'], 'none')
+		self.assertEqual(c['presets']['minimal'], {'mode.balance': 'off', 'mode.space': 'strict', 'mode.words': 'false'})
+		c_min = rig.catalog(rig.units(rig.parse(src))[0], 'minimal')
+		by_min = dict((r['id'], r) for r in c_min['rules'])
+		self.assertEqual((by_min['mode.balance']['value'], by_min['mode.words']['value']), ('off', 'false'))
+
+	def test_compact_rules_group_inline_ranges_and_reads_wildcard(self):
+		src = unit('''  rules quality
+    min_words   200                 50..5000  "Minimum length (words)"
+      note "Short notes fail review."
+    max_typos   0                   0.._      "Maximum typos"
+      ui number
+      note "Zero tolerance by default."
+    upper_cap   10                  _..100    "Upper cap"
+    weights     {title: 2, body: 1} 0..10     "Section weights"
+      note "Relative scoring weights."
+    strategy    balanced                      "Check mode"
+      options strict | balanced | off
+      ui select
+  rule limits.extra 5 "Extra count"
+    range 0 _
+  rule limits.ceiling 20 "Ceiling"
+    range _ 50
+  step evaluate "Score document" by code.evaluate
+    reads quality.* limits.*
+  end done "Done"
+''')
+		self.assertEqual(errors(src), [])
+		self.assertEqual(warnings(src), [])
+		c = catalogue(src)
+		by_id = dict((r['id'], r) for r in c['rules'])
+		self.assertEqual((by_id['quality.min_words']['min'], by_id['quality.min_words']['max'], by_id['quality.min_words']['label']), (50, 5000, 'Minimum length (words)'))
+		self.assertEqual(by_id['quality.max_typos']['min'], 0)
+		self.assertNotIn('max', by_id['quality.max_typos'])
+		self.assertEqual(by_id['quality.upper_cap']['max'], 100)
+		self.assertNotIn('min', by_id['quality.upper_cap'])
+		self.assertEqual((by_id['quality.weights']['min'], by_id['quality.weights']['max']), (0, 10))
+		self.assertEqual(by_id['quality.strategy']['options'], ['strict', 'balanced', 'off'])
+		self.assertEqual(by_id['limits.extra']['min'], 0)
+		self.assertNotIn('max', by_id['limits.extra'])
+		self.assertEqual(by_id['limits.ceiling']['max'], 50)
+		self.assertNotIn('min', by_id['limits.ceiling'])
+		self.assertEqual(node(c, 'evaluate')['reads'], [
+			'quality.min_words', 'quality.max_typos', 'quality.upper_cap', 'quality.weights', 'quality.strategy',
+			'limits.extra', 'limits.ceiling',
+		])
+		# Bundle rules_src spans point directly at each value token on compact lines too
+		b = rig.bundle(src, None)
+		u0 = b['units'][0]
+		lines = src.split('\n')
+		for rid, expected_tok in (('quality.min_words', '200'), ('quality.max_typos', '0'), ('quality.strategy', 'balanced')):
+			sp = u0['rules_src'][rid]
+			self.assertEqual(lines[sp['line'] - 1][sp['a']:sp['b']], expected_tok)
+		# Errors: range _ _, _.._, out of open bounds, and wildcard matching no group
+		self.assertTrue(any('at least one number' in t for _, t in errors(unit('  rule a.b 5 _.._ "Bad"\n  step s by code.s\n    reads a.b\n  end e\n'))))
+		self.assertTrue(any('at least one number' in t for _, t in errors(unit('  rule a.b 5 "Bad"\n    range _ _\n  step s by code.s\n    reads a.b\n  end e\n'))))
+		self.assertTrue(any('below the range' in t for _, t in errors(unit('  rule a.b -1 0.._ "Bad"\n  step s by code.s\n    reads a.b\n  end e\n'))))
+		self.assertTrue(any('above the range' in t for _, t in errors(unit('  rule a.b 150 _..100 "Bad"\n  step s by code.s\n    reads a.b\n  end e\n'))))
+		self.assertTrue(any('no rules in group "ghost"' in t for _, t in errors(unit('  step s by code.s\n    reads ghost.*\n  end e\n'))))
+
+	def test_external_rules_json_sidecar_and_validation(self):
+		folder = tempfile.mkdtemp(prefix='rig-sidecar-')
+		self.addCleanup(shutil.rmtree, folder, True)
+		sidecar = {
+			'presets': {
+				'strict': {'limits.max_errors': 0, 'mode.balance': 'strict'},
+			},
+			'rules': [
+				{'id': 'limits.max_errors', 'value': 3, 'min': 0, 'max': 100, 'ui': 'number', 'label': 'Max errors (count)', 'note': 'Baseline audit.'},
+				{'id': 'mode.balance', 'value': 'balanced', 'options': ['strict', 'balanced', 'off'], 'ui': 'select', 'label': 'Balance strategy'},
+				{'id': 'scale.bounds', 'type': 'range', 'value': [0.5, 2.0], 'min': 0.1, 'max': 5.0, 'label': 'Scale bounds'},
+				{'id': 'tiers.map', 'type': 'per_master', 'value': {'light': 10, 'heavy': 40}, 'min': 0, 'label': 'Tier map'},
+			],
+		}
+		with open(os.path.join(folder, 'rules.json'), 'w', encoding='utf-8') as f:
+			json.dump(sidecar, f)
+		with open(os.path.join(folder, 'extra.json'), 'w', encoding='utf-8') as f:
+			json.dump([{'id': 'extra.flag', 'value': True, 'label': 'Extra flag'}], f)
+		with open(os.path.join(folder, 'code.py'), 'w', encoding='utf-8') as f:
+			f.write('def run_it(state, R):\n\treturn R("limits.max_errors")\n')
+		rig_path = os.path.join(folder, 'checker.rig')
+		rig_src = '''unit document-checker
+  intent "check documents up to {limits.max_errors} errors (heavy: {tiers.map.heavy})"
+  code code code.py
+  rules "rules.json"
+  rules "extra.json"
+  rule permissions.write off "Allow writes"
+  preset off_mode
+    set mode.balance off
+  step run_it by code.run_it
+    reads mode.* scale.* tiers.* extra.* permissions.*
+  end done "Done"
+'''
+		with open(rig_path, 'w', encoding='utf-8') as f:
+			f.write(rig_src)
+		_, root = rig.load(rig_path)
+		err, warn = rig.check(root, rig_path)
+		self.assertEqual(err, [])
+		self.assertEqual(warn, [])
+		u = rig.units(root)[0]
+		c = rig.catalog(u, 'strict')
+		by_id = dict((r['id'], r) for r in c['rules'])
+		self.assertEqual((by_id['limits.max_errors']['value'], by_id['limits.max_errors']['default']), (0, 3))
+		self.assertEqual((by_id['scale.bounds']['type'], by_id['scale.bounds']['length']), ('tuple', 2))
+		self.assertEqual(by_id['tiers.map']['type'], 'dict')
+		self.assertEqual(by_id['extra.flag']['type'], 'switch')
+		self.assertEqual(c['presets']['off_mode'], {'mode.balance': 'off'})
+		# Duplicate rule across rules.json and .rig is refused
+		dup_src = rig_src.replace('  rule permissions.write off "Allow writes"\n',
+			'  rule permissions.write off "Allow writes"\n  rule limits.max_errors 5 "Dup"\n')
+		with open(rig_path, 'w', encoding='utf-8') as f:
+			f.write(dup_src)
+		_, dup_root = rig.load(rig_path)
+		dup_err, _ = rig.check(dup_root, rig_path)
+		self.assertTrue(any('limits.max_errors" is defined twice' in t for _, t in dup_err), dup_err)
+
+	def test_skill_omits_rule_notes_and_caps_large_tables_with_driver(self):
+		rules_lines = []
+		for i in range(28):
+			rules_lines.append('  rule cal.k{} {} 0..100 "Metric {}"\n    note "Historical calibration survey note {}."'.format(i, i, i, i))
+		rules_lines.append('  rule tune.knob 5 0..10 "Interactive knob"\n    ui slider\n    note "Long provenance note that should not bloat SKILL.md."')
+		rules_lines.append('  rule permissions.write off "Allow writes"\n    note "Dry run by default."')
+		src = unit('\n'.join(rules_lines) + '\n  step calc by code.calc\n    reads cal.* tune.* permissions.*\n  end done "Done"\n')
+		u = rig.units(rig.parse(src))[0]
+		# Without driver: lists all 30 rules, zero ". Note:" bloat
+		sk_full = rig.skill(u)
+		self.assertNotIn('. Note:', sk_full)
+		self.assertNotIn('Historical calibration survey', sk_full)
+		self.assertIn('`cal.k0`', sk_full)
+		self.assertIn('`cal.k27`', sk_full)
+		# With driver and > 25 rules: lists only ui + permissions rules, plus "<driver> rules" hint
+		sk_drv = rig.skill(u, 'gen/x.json', None, 'python3 tool.py')
+		self.assertNotIn('. Note:', sk_drv)
+		self.assertIn('`tune.knob`', sk_drv)
+		self.assertIn('`permissions.write`', sk_drv)
+		self.assertNotIn('`cal.k0`', sk_drv)
+		self.assertIn('Run `python3 tool.py rules` to inspect all 30 rules.', sk_drv)
+
 
 class Types(unittest.TestCase):
 	def test_type_problems(self):

@@ -15,11 +15,11 @@ Read the value of each rule from `../gen/band-facts.json`: the `rules` list, by 
 
 | Rule | Meaning |
 |---|---|
-| `answer.max_words` | Longest paragraph, in words; range 40 to 300. Note: an earlier form of this tool had the limit only in the text of a step; the model wrote 142 words for a limit of 120 |
-| `answer.rounds` | Most rewrites of the paragraph, for each gate that checks it; range 0 to 5. Note: the regression set has a case that needs one rewrite; no case needed more than two |
-| `albums.max` | Most albums in the list; range 1 to 100. Note: longer lists were mostly singles and live albums |
-| `search.results` | Search results to look at; range 1 to 20. Note: a live run for a famous band gave a list page as the first result; the step now prefers the title that is the name (README.md) |
-| `http.timeout` | Time to wait for each request, in seconds; range 1 to 60. Note: the two services answered in under two seconds; ten leaves room for a slow day |
+| `answer.max_words` | Longest paragraph, in words; range 40 to 300 |
+| `answer.rounds` | Most rewrites of the paragraph, for each gate that checks it; range 0 to 5 |
+| `albums.max` | Most albums in the list; range 1 to 100 |
+| `search.results` | Search results to look at; range 1 to 20 |
+| `http.timeout` | Time to wait for each request, in seconds; range 1 to 60 |
 
 ## How to run
 

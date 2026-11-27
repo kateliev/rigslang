@@ -17,29 +17,30 @@ unit my-flow
   code steps steps.py
     test tests/test_steps.py
 
-  rule limits.max 100 "Max items"       ; number, on/off, choice, text, /regex/, [list], (tuple), {dict}
-    range 1 1000                        ; checks number, or every number in [list], (tuple), {dict}
-    ui                                  ; expose as UI control (toggle|select|slider|number|input)
-    note "where the value comes from"
-  rule limits.tiers {fast: 20, careful: 100} "Max items per mode"
-    range 1 1000
-  rule limits.bounds (0.5, 2.0) "Allowed scale (min, max)"
-    range 0.1 5.0
-  rule batch.size 10 "Items per chunk"
-    range 1 100
+  ; Rules: single `rule`, compact `rules <group>` table, or external `rules "rules.json"` sidecar
+  rules limits
+    cap     100                 1..1000 "Max items"        ; inline <min>..<max> or open 0.._ / _..100
+      ui                                                   ; expose UI control (toggle|select|slider|number|input)
+    tiers   {fast: 20, careful: 100} 1.._ "Max per mode"   ; [list], (tuple), {dict}
+    bounds  (0.5, 2.0)          0.1..5.0 "Allowed scale"
+    mode    careful                      "Strategy"
+      options strict | careful | off                       ; choice strings (off/true/none stay strings)
+      ui select
+  rule batch.size 10 1..100 "Items per chunk"
     ui
   rule permissions.write off "Allow writes"
     ui
   preset careful
-    set limits.max 50
+    set limits.cap 50
 
   queue by steps.pending                ; optional external item discovery for queues & next-batch
   step read "Read" by steps.read        ; deterministic code step
     do "read the item"
+    reads limits.*                      ; group wildcard expands to all limits.* rules
     brief count summary                 ; save full payload to artifact; show compact keys in sees
     timeout 30s
   gate valid hard "Valid input"         ; hard | soft | model | human
-    check "count <= {limits.max}"
+    check "count <= {limits.cap}"
     by gates.valid
     fail -> stop "too many items"
   step classify "Classify" by model     ; lightweight single-shot fill-in (fast worker tier)
@@ -91,10 +92,11 @@ unit my-flow
 ## 2. Exact Python signatures
 
 ```python
-# Step (steps.py): value is stored at state[<step_id>]
+# Step (steps.py): value is stored at state[<step_id>]; state['_rig'] holds run lifecycle metadata
 def read(state, R):
     limit = R('limits.max')
-    return {'count': 1, 'summary': 'ok', 'full_data': [...]}
+    unattended = state['_rig']['unattended']  # also: run_id, in_rollback, in_finally, rolled_back, end
+    return {'count': 1, 'summary': 'ok', 'unattended': unattended, 'full_data': [...]}
 
 # Queue discovery (steps.py): returns list of input dicts
 def pending(state, R):

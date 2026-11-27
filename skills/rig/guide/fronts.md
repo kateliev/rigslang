@@ -86,7 +86,7 @@ python3 RIG plugin DIR --owner NAME
 
 This adds the folder `plugin/`: an LM Studio plugin. Its code is the same for every tool. `rig.py build` keeps the code and the README current; do not edit them. Everything about the tool comes from `plugin/src/gen/front.json`, which the build compiles:
 
-- **The tools.** `start_run` (with the inputs of the unit), `answer_gate` (only when the flow has a gate for the model), `work_run` (when the flow has a `by model` step or `reason` block), `run_status`, `start_batch`, and `queues`. Rules marked with `ui` are exported in `ui_rules` for plugin settings.
+- **The tools.** `start_run` (with the inputs of the unit), `answer_gate` (only when the flow has a gate for the model), `work_run` (when the flow has a `by model` step or `reason` block), `run_status`, `start_batch`, and `queues`. Presets and rules marked with `ui` are exported in `presets` and `ui_rules` and registered as per-chat plugin settings (`context.withConfigSchematics`), forwarding `--preset` and `--set` overrides on `start_run` and `start_batch`.
 - **The rules text.** Short numbered lines injected before the first message of a chat.
 - **The warm stdio driver.** `src/bridge.ts` keeps one persistent `tool.py serve-stdio` child process per session (with queued requests, timeouts, auto-restart, and fallback to one-shot spawn), avoiding Python startup cost on every tool call.
 - **Self-directing `waiting.next_action`.** The bridge strips CLI-only `waiting.answer` and adds `waiting.next_action` so the model sees the exact next tool call (`work_run`, `answer_gate`, or `NONE` with `show_verbatim` at a human gate).

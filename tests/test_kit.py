@@ -1641,6 +1641,320 @@ class RigV2Runtime(unittest.TestCase):
 		finally:
 			shutil.rmtree(tmp)
 
+	def test_nested_until_soft_problems_do_not_leak_across_outer_retries(self):
+		src = '''unit nested
+  intent "test nested until soft-problem tracking"
+  in mode str "pass_on_rebuild | fail_both | inner_exhaust_then_pass"
+  code s steps.py
+  code g gates.py
+  step pre by s.pre
+  gate pre-warn soft by g.pre_warn
+  until rebuild.settled
+    retry 1
+    step rebuild by s.rebuild
+    until plan_fix.done
+      retry 1
+      gate quality-ok soft by g.quality_ok
+      step plan_fix by s.plan_fix
+    step check_outer by s.check_outer
+  end done "Done"
+'''
+		c = catalogue(src)
+
+		def make_kit(with_pre_warn=False):
+			outer_round = [0]
+			inner_round = [0]
+
+			def pre(st, R):
+				return {'ok': True}
+
+			def pre_warn(st, R):
+				return {'pass': not with_pre_warn, 'problems': ['initial note'] if with_pre_warn else []}
+
+			def rebuild(st, R):
+				outer_round[0] += 1
+				inner_round[0] = 0
+				return {'attempt': outer_round[0], 'settled': outer_round[0] >= 2}
+
+			def quality_ok(st, R):
+				inner_round[0] += 1
+				m = st['mode']
+				if m == 'pass_on_rebuild':
+					if outer_round[0] == 1:
+						return {'pass': False, 'problems': ['score below limit (r0)']}
+					return {'pass': True}
+				if m == 'inner_exhaust_then_pass':
+					if outer_round[0] == 1:
+						return {'pass': False, 'problems': ['unfixable on r0']}
+					return {'pass': True}
+				return {'pass': False, 'problems': ['score below limit (attempt {})'.format(outer_round[0])]}
+
+			def plan_fix(st, R):
+				if st['mode'] == 'inner_exhaust_then_pass' and outer_round[0] == 1:
+					return {'done': False}
+				return {'done': True}
+
+			def check_outer(st, R):
+				return {'checked': outer_round[0]}
+
+			return rigkit.Kit(c, runs=None).bind('s', {
+				'pre': pre, 'rebuild': rebuild, 'plan_fix': plan_fix, 'check_outer': check_outer,
+			}).bind('g', {'pre_warn': pre_warn, 'quality_ok': quality_ok})
+
+		# 1. Inner soft gate fails on outer round 0, outer until retries (round 1), inner soft gate passes -> []
+		r_pass = make_kit(with_pre_warn=False).run({'mode': 'pass_on_rebuild'})
+		self.assertEqual(r_pass['outcome']['end'], 'done')
+		self.assertEqual(r_pass['problems'], [])
+
+		# Pre-loop soft problems recorded before outer until are preserved
+		r_pre = make_kit(with_pre_warn=True).run({'mode': 'pass_on_rebuild'})
+		self.assertEqual(r_pre['problems'], ['pre-warn: initial note'])
+
+		# Inner until exhausting its own retries on outer round 0 also cleans up when outer round 1 passes
+		r_exh = make_kit(with_pre_warn=False).run({'mode': 'inner_exhaust_then_pass'})
+		self.assertEqual(r_exh['problems'], [])
+
+		# 2. Inner soft gate fails on outer round 0 and fails again on outer round 1 -> one entry (attempt 2), not duplicates
+		r_fail = make_kit(with_pre_warn=False).run({'mode': 'fail_both'})
+		self.assertEqual(r_fail['outcome']['end'], 'done')
+		self.assertEqual(r_fail['problems'], ['quality-ok: score below limit (attempt 2)'])
+
+	def test_choice_rule_runtime_and_cli_set_off_and_false(self):
+		src = '''unit ch
+  intent "check choice rules with reserved words"
+  code s s.py
+  rules mode
+    balance balanced "Balance mode"
+      options strict | balanced | off
+    flag true "Flag choice"
+      options true | false | none
+  preset minimal
+    set mode.balance off
+    set mode.flag false
+  step check_it by s.check_it
+    reads mode.*
+  end done "Done"
+'''
+		seen = {}
+		k = rigkit.Kit(catalogue(src), runs=None).bind('s', {
+			'check_it': lambda st, R: seen.update({'balance': R('mode.balance'), 'flag': R('mode.flag')}) or dict(seen),
+		})
+		self.assertEqual(k.run({}, preset='minimal')['result'], {'balance': 'off', 'flag': 'false'})
+		lines = []
+		self.assertEqual(k.cli(['run', '{}', '--set', 'mode.balance=off', '--set', 'mode.flag=false'], out=lines.append), 0)
+		self.assertEqual(json.loads(lines[-1])['result'], {'balance': 'off', 'flag': 'false'})
+		with self.assertRaises(ValueError):
+			k.run({}, rules={'mode.balance': 'invalid'})
+
+	def test_state_rig_lifecycle_metadata_in_finally_rollback_and_next_batch(self):
+		src = '''unit lifecycle
+  intent "inspect state[_rig] metadata"
+  in item str "item"
+  code s s.py
+  code g g.py
+  rule batch.size 2 1..10 "Chunk"
+  queue by s.pending
+  step work by s.work
+    reads batch.size
+  gate ok hard by g.ok
+    fail -> bad
+  gate ask human "Approve?"
+    if work.ask
+    check "confirm"
+    fail -> bad
+  end done "Done"
+  end bad "Bad"
+  rollback
+    step undo by s.undo
+  finally
+    step fin by s.fin
+'''
+		tmp = tempfile.mkdtemp()
+		try:
+			events = []
+			k = rigkit.Kit(catalogue(src), runs=os.path.join(tmp, 'runs'))
+			k.bind('s', {
+				'pending': lambda st, R: [{'item': 'ok'}, {'item': 'wait'}],
+				'work': lambda st, R: (events.append(('work', st['item'], dict(st['_rig']))) or {'ask': st['item'] == 'wait'}),
+				'undo': lambda st, R: (events.append(('undo', st['item'], dict(st['_rig']))) or {'undone': True}),
+				'fin': lambda st, R: (events.append(('fin', st['item'], dict(st['_rig']))) or {'done_fin': True}),
+			}).bind('g', {'ok': lambda st, R: st['item'] != 'fail'})
+
+			# Interactive clean run -> finally sees end='done', rolled_back=False, unattended=False
+			r1 = k.run({'item': 'ok'})
+			self.assertEqual(r1['outcome']['end'], 'done')
+			fin_meta = [m for tag, it, m in events if tag == 'fin' and it == 'ok'][-1]
+			self.assertEqual((fin_meta['end'], fin_meta['rolled_back'], fin_meta['in_finally'], fin_meta['unattended']), ('done', False, True, False))
+
+			# Hard gate failure -> rollback sees in_rollback=True, finally sees rolled_back=True and end='bad'
+			events.clear()
+			r2 = k.run({'item': 'fail'})
+			self.assertEqual(r2['outcome']['end'], 'bad')
+			rb_meta = [m for tag, _, m in events if tag == 'undo'][-1]
+			fin_fail = [m for tag, _, m in events if tag == 'fin'][-1]
+			self.assertEqual((rb_meta['in_rollback'], rb_meta['end']), (True, 'bad'))
+			self.assertEqual((fin_fail['in_finally'], fin_fail['rolled_back'], fin_fail['end']), (True, True, 'bad'))
+
+			# next_batch sets unattended=True during chunk execution & deferral rollback, then resets to False on interactive approve
+			events.clear()
+			nb = k.next_batch()
+			self.assertEqual(nb['ends'], {'done': 1})
+			self.assertEqual(len(nb['waits_for_person']), 1)
+			self.assertTrue(all(m['unattended'] is True for _, _, m in events))
+			events.clear()
+			wait_id = nb['waits_for_person'][0]
+			r_app = k.approve(wait_id, ['yes'])
+			self.assertEqual(r_app['outcome']['end'], 'done')
+			fin_resumed = [m for tag, _, m in events if tag == 'fin'][-1]
+			self.assertEqual((fin_resumed['unattended'], fin_resumed['end']), (False, 'done'))
+		finally:
+			shutil.rmtree(tmp)
+
+	@unittest.skipUnless(shutil.which('node'), 'node is not installed')
+	def test_plugin_front_ui_rules_presets_and_chat_config_overrides(self):
+		tmp = tempfile.mkdtemp()
+		try:
+			folder = os.path.join(tmp, 'p')
+			buf = io.StringIO()
+			with contextlib.redirect_stdout(buf):
+				rig_project.new(folder, 'demo-tool', 3)
+			rig_path = os.path.join(folder, 'demo-tool.rig')
+			with open(rig_path, encoding='utf-8') as f:
+				txt = f.read()
+			extra_rules = (
+				'  rule limits.min_length 3 1..1000 "Shortest item, in characters"\n'
+				'    ui slider\n'
+				'    note "' + ('Long calibration provenance text ' * 4) + '"\n'
+				'  rule mode.strategy balanced "Strategy"\n'
+				'    options strict | balanced | off\n'
+				'    ui select\n'
+				'    note "Short hint."\n'
+				'  preset strict\n'
+				'    set limits.min_length 10\n'
+				'    set mode.strategy strict\n'
+			)
+			txt = txt.replace(
+				'  rule limits.min_length 3 "Shortest item, in characters"\n    range 1 1000\n    note "TODO: say where this value comes from"\n',
+				extra_rules,
+			).replace(
+				'    do "read the item and measure it"',
+				'    do "read the item and measure it"\n    reads mode.strategy',
+			)
+			with open(rig_path, 'w', encoding='utf-8') as f:
+				f.write(txt)
+			with contextlib.redirect_stdout(buf):
+				rig_project.plugin(folder, 'tester')
+			pdir = os.path.join(folder, 'plugin')
+			with open(os.path.join(pdir, 'src', 'gen', 'front.json'), encoding='utf-8') as f:
+				fr = json.load(f)
+			self.assertEqual(fr['presets'], ['strict'])
+			ui_by_id = dict((r['id'], r) for r in fr['ui_rules'])
+			self.assertIn('limits.min_length', ui_by_id)
+			self.assertNotIn('note', ui_by_id['limits.min_length'])  # > 80-char historical note stripped from UI
+			self.assertEqual(ui_by_id['mode.strategy']['note'], 'Short hint.')
+			# Link node_modules from examples/bookmarks/plugin if available so @lmstudio/sdk & tsc run directly
+			sdk_nm = os.path.join(BOOKMARKS, 'plugin', 'node_modules')
+			if os.path.isdir(sdk_nm):
+				os.symlink(sdk_nm, os.path.join(pdir, 'node_modules'))
+				tsc_bin = os.path.join(pdir, 'node_modules', '.bin', 'tsc')
+				if os.path.exists(tsc_bin):
+					tc = subprocess.run([tsc_bin, '--noEmit'], cwd=pdir, capture_output=True, text=True)
+					self.assertEqual(tc.returncode, 0, tc.stdout + tc.stderr)
+				script = (
+					'import { argvFor, front } from "./src/bridge.ts";'
+					'import { chatConfig, DEFAULT_PRESET, extractOverrides } from "./src/index.ts";'
+					'const defCfg = chatConfig.parse({ fields: [] });'
+					'const defOv = extractOverrides(defCfg) ?? null;'
+					'const customRaw = chatConfig.buildPartialConfig({ preset: "strict", "limits.min_length": 12, "mode.strategy": "off" });'
+					'const customOv = extractOverrides(chatConfig.parse(customRaw));'
+					'const runTool = front.tools.find((t) => t.kind === "run");'
+					'const batchTool = front.tools.find((t) => t.kind === "batch");'
+					'console.log(JSON.stringify({ hasConfig: !!chatConfig, DEFAULT_PRESET, defOv, customOv, '
+					'runArgv: argvFor(runTool, { item: "hello" }, customOv), '
+					'batchArgv: argvFor(batchTool, { items: [{ item: "hello" }] }, customOv) }));'
+				)
+				nr = subprocess.run(['node', '--no-warnings', '--input-type=module', '-e', script], cwd=pdir, capture_output=True, text=True, timeout=15)
+				self.assertEqual(nr.returncode, 0, nr.stderr)
+				got = json.loads(nr.stdout.strip().splitlines()[-1])
+				self.assertTrue(got['hasConfig'])
+				self.assertIsNone(got['defOv'])
+				self.assertEqual(got['customOv'], {'preset': 'strict', 'set': {'limits.min_length': '12', 'mode.strategy': 'off'}})
+				self.assertEqual(got['runArgv'], ['run', '{"item":"hello"}', '--preset', 'strict', '--set', 'limits.min_length=12', '--set', 'mode.strategy=off'])
+				self.assertEqual(got['batchArgv'][-6:], ['--preset', 'strict', '--set', 'limits.min_length=12', '--set', 'mode.strategy=off'])
+		finally:
+			shutil.rmtree(tmp)
+
+	def test_project_sidecar_rules_build_doctor_and_serve_save(self):
+		import socket
+		import urllib.request
+		tmp = tempfile.mkdtemp()
+		with socket.socket() as sock:
+			sock.bind(('127.0.0.1', 0))
+			port = sock.getsockname()[1]
+		try:
+			folder = os.path.join(tmp, 'p')
+			buf = io.StringIO()
+			with contextlib.redirect_stdout(buf):
+				rig_project.new(folder, 'demo-tool', 1)
+			sidecar_path = os.path.join(folder, 'rules.json')
+			with open(sidecar_path, 'w', encoding='utf-8') as f:
+				json.dump({'rules': [{'id': 'limits.min_length', 'value': 3, 'min': 1, 'max': 1000, 'label': 'Shortest item'}]}, f)
+			rig_path = os.path.join(folder, 'demo-tool.rig')
+			with open(rig_path, encoding='utf-8') as f:
+				orig_rig = f.read()
+			new_rig = orig_rig.replace(
+				'  rule limits.min_length 3 "Shortest item, in characters"\n    range 1 1000\n    note "TODO: say where this value comes from"',
+				'  rules "rules.json"',
+			)
+			with open(rig_path, 'w', encoding='utf-8') as f:
+				f.write(new_rig)
+			with contextlib.redirect_stdout(buf):
+				self.assertEqual(rig_project.build(folder), 0)
+			# Doctor passes with zero bare-number-rule note warnings because rules come from rules.json
+			doc_buf = io.StringIO()
+			with contextlib.redirect_stdout(doc_buf):
+				self.assertEqual(rig_project.doctor(folder, False, True), 0)
+			doc_json = json.loads(doc_buf.getvalue())
+			self.assertFalse(any('every number rule has a note' in c['text'] for c in doc_json['checks']))
+			# Editing rules.json makes gen/demo-tool.json stale in build --check
+			with open(sidecar_path, 'w', encoding='utf-8') as f:
+				json.dump({'rules': [{'id': 'limits.min_length', 'value': 5, 'min': 1, 'max': 1000, 'label': 'Shortest item'}]}, f)
+			with contextlib.redirect_stdout(buf):
+				self.assertEqual(rig_project.build(folder, True), 1)
+				self.assertEqual(rig_project.build(folder), 0)
+				self.assertEqual(rig_project.build(folder, True), 0)
+			# rig.py serve updates rules.json in place without rewriting demo-tool.rig
+			srv = subprocess.Popen(
+				[sys.executable, os.path.join(ROOT, 'skills', 'rig', 'rig.py'), 'serve', 'demo-tool.rig', '--port', str(port), '--json', 'gen/demo-tool.json'],
+				cwd=folder, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+			)
+			try:
+				base = 'http://127.0.0.1:{}'.format(port)
+				for _ in range(50):
+					try:
+						with urllib.request.urlopen(base + '/bundle', timeout=2) as r:
+							b0 = json.loads(r.read().decode('utf-8'))
+							break
+					except OSError:
+						time.sleep(0.1)
+				else:
+					self.fail('serve did not start')
+				self.assertEqual(b0['units'][0]['rules_src']['limits.min_length']['json_file'], 'rules.json')
+				payload = json.dumps({'text': new_rig, 'sidecars': {'rules.json': {'limits.min_length': '7'}}}).encode('utf-8')
+				req = urllib.request.Request(base + '/file', data=payload, headers={'Content-Type': 'application/json'}, method='POST')
+				with urllib.request.urlopen(req, timeout=3) as r:
+					res = json.loads(r.read().decode('utf-8'))
+				self.assertEqual(res['saved'], 'rules.json')
+				with open(rig_path, encoding='utf-8') as f:
+					self.assertEqual(f.read(), new_rig)
+				with open(sidecar_path, encoding='utf-8') as f:
+					self.assertEqual(json.load(f)['rules'][0]['value'], 7)
+			finally:
+				srv.terminate()
+				srv.wait(timeout=5)
+		finally:
+			shutil.rmtree(tmp)
+
 
 if __name__ == '__main__':
 	unittest.main()

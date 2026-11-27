@@ -352,9 +352,20 @@ def check_value(rule, value):
 			return False
 		raise ValueError('{}: on or off, not {!r}'.format(rid, value))
 	if t == 'choice':
-		if value not in rule.get('options', []):
-			raise ValueError('{}: one of {}, not {!r}'.format(rid, ', '.join(str(o) for o in rule.get('options', [])), value))
-		return value
+		opts = rule.get('options', [])
+		if value in opts:
+			return value
+		if isinstance(value, bool):
+			s = 'true' if value else 'false'
+			if s in opts:
+				return s
+		elif value is None:
+			for s in ('none', 'null'):
+				if s in opts:
+					return s
+		elif isinstance(value, (int, float)) and str(value) in opts:
+			return str(value)
+		raise ValueError('{}: one of {}, not {!r}'.format(rid, ', '.join(str(o) for o in opts), value))
 	if t == 'number':
 		return _check_num(rid, value, rule, default_sample=rule.get('default'))
 	if t == 'tuple':
@@ -591,6 +602,17 @@ def truthy(v):
 
 def passed(result):
 	return bool(result.get('pass')) if isinstance(result, dict) else bool(result)
+
+
+def _remove_problem(run, msg):
+	'''Remove the most recent matching soft-problem message from run["problems"], keeping answered indices aligned.'''
+	for idx in range(len(run['problems']) - 1, -1, -1):
+		if run['problems'][idx] == msg:
+			del run['problems'][idx]
+			for ak, av in list(run.get('answered', {}).items()):
+				if av > idx:
+					run['answered'][ak] = av - 1
+			break
 
 
 def schema_problems(v, s, where='result'):
@@ -974,8 +996,20 @@ class Kit(object):
 			return 0
 		return int(R(n)) if isinstance(n, str) else int(n)
 
+	def _refresh_rig_meta(self, run):
+		'''Refresh read-only lifecycle metadata at state["_rig"] before invoking step, gate, rollback, or finally code.'''
+		end_info = run.get('ended') or run.get('outcome') or {}
+		run['state']['_rig'] = {
+			'run_id': run['id'],
+			'unattended': bool(run.get('unattended', False)),
+			'in_rollback': bool(run.get('in_rollback', False)),
+			'in_finally': bool(run.get('in_finally', False)),
+			'rolled_back': bool(run.get('rolled_back', False)),
+			'end': end_info.get('end') if isinstance(end_info, dict) else None,
+		}
+
 	# - Runs
-	def run(self, inputs=None, run_id=None, rules=None, preset=None, state=None, at=None, origin=None):
+	def run(self, inputs=None, run_id=None, rules=None, preset=None, state=None, at=None, origin=None, unattended=False):
 		'''Start a run for one item and walk it as far as code can.'''
 		if self.start is None:
 			raise Refused('This unit has no flow.')
@@ -999,9 +1033,11 @@ class Kit(object):
 			'inputs': inputs, 'rules': dict(rules or {}), 'preset': preset, 'state': copy.deepcopy(state) if state is not None else dict(inputs),
 			'at': at or self.start, 'trace': [], 'problems': [], 'guessed': [], 'left': [], 'waiting': None, 'since': None,
 			'error': None, 'outcome': None, 'ended': None, 'in_finally': False, 'in_rollback': False, 'rolled_back': False,
+			'unattended': bool(unattended),
 			'loops': {}, 'rounds': {}, 'retries': {}, 'answered': {}, 'loop_soft': {}, 'arena_used': 0, 'artifacts': {}}
 		if origin:
 			run['from'] = origin
+		self._refresh_rig_meta(run)
 		self.put(run['id'], 'flow', self.catalogue)  # pin: resume walks this copy, also when the source changes
 		self.put(run['id'], 'rules', R.values())
 		self.put(run['id'], 'answers', [])
@@ -1064,6 +1100,7 @@ class Kit(object):
 			try:
 				if kind == 'step':
 					for fn in fns:
+						self._refresh_rig_meta(run)
 						run['state'][nid] = run_code(fn, run['state'], R, node.get('timeout'))
 					if node.get('brief'):
 						run.setdefault('artifacts', {})[nid] = self._put_artifact(run['id'], nid, run['state'][nid])
@@ -1072,6 +1109,7 @@ class Kit(object):
 				else:
 					result = {'pass': True}
 					for fn in fns:
+						self._refresh_rig_meta(run)
 						result = run_code(fn, run['state'], R)
 						if not passed(result):
 							break
@@ -1084,6 +1122,7 @@ class Kit(object):
 				run['trace'].append({'node': nid, 'kind': kind, 'error': text})
 				run['problems'].append('{}: {}'.format(nid, text))
 				self.finish(run, V, {'end': 'error', 'label': 'error at "{}": {}'.format(nid, text)}, rollback=True)
+		self._refresh_rig_meta(run)
 		self.save(run)
 		return self.report(run)
 
@@ -1143,6 +1182,7 @@ class Kit(object):
 		V = self.view_of(run)
 		if not V.rollback:
 			raise Refused('This unit has no rollback block.')
+		run['unattended'] = False
 		run['rolled_back'] = False
 		self._run_rollback(run)
 		out = self.report(self.load(run_id))
@@ -1186,19 +1226,43 @@ class Kit(object):
 				run['trace'].append({'node': bid, 'kind': 'until', 'round': 0})
 				run['at'] = b['first']
 				return
+
+			def _merge_ended_soft():
+				ended_soft = (run.get('loop_soft') or {}).pop(bid, None) or {}
+				parent_until = list(run['rounds'].keys())[-1] if run['rounds'] else None
+				if parent_until is not None and ended_soft:
+					psoft = run.setdefault('loop_soft', {}).setdefault(parent_until, {})
+					for gid, msgs in ended_soft.items():
+						mlist = msgs if isinstance(msgs, list) else [msgs]
+						cur = psoft.get(gid)
+						if cur is None:
+							psoft[gid] = list(mlist)
+						elif isinstance(cur, list):
+							cur.extend(mlist)
+						else:
+							psoft[gid] = [cur] + list(mlist)
+				return parent_until
+
 			if truthy(self.see(run['state'], b['path'], cut=False)):
 				del run['rounds'][bid]
-				run.get('loop_soft', {}).pop(bid, None)
+				_merge_ended_soft()
 				run['trace'].append({'node': bid, 'kind': 'until', 'pass': True})
 				run['at'] = b.get('next')
 				return
 			if r >= self.count_of(b.get('retry'), R):
 				del run['rounds'][bid]
-				run.get('loop_soft', {}).pop(bid, None)
+				parent_until = _merge_ended_soft()
 				run['trace'].append({'node': bid, 'kind': 'until', 'pass': False})
-				run['problems'].append('{}: "{}" is not true after {} rounds'.format(bid, b['path'], r + 1))
+				until_msg = '{}: "{}" is not true after {} rounds'.format(bid, b['path'], r + 1)
+				run['problems'].append(until_msg)
+				if parent_until is not None and not b.get('fail'):
+					run.setdefault('loop_soft', {}).setdefault(parent_until, {}).setdefault(bid, []).append(until_msg)
 				run['at'] = b['fail'][0]['to'] if b.get('fail') else b.get('next')
 				return
+			prev_soft = (run.get('loop_soft') or {}).pop(bid, None) or {}
+			for msgs in prev_soft.values():
+				for m in (msgs if isinstance(msgs, list) else [msgs]):
+					_remove_problem(run, m)
 			run['rounds'][bid] = r + 1
 			run['trace'].append({'node': bid, 'kind': 'until', 'round': r + 1})
 			run['at'] = b['first']
@@ -1273,13 +1337,8 @@ class Kit(object):
 			lsoft = run.setdefault('loop_soft', {}).setdefault(active_until, {})
 			prev_msg = lsoft.pop(nid, None)
 			if prev_msg is not None:
-				for idx in range(len(run['problems']) - 1, -1, -1):
-					if run['problems'][idx] == prev_msg:
-						del run['problems'][idx]
-						for ak, av in list(run.get('answered', {}).items()):
-							if av > idx:
-								run['answered'][ak] = av - 1
-						break
+				for m in (prev_msg if isinstance(prev_msg, list) else [prev_msg]):
+					_remove_problem(run, m)
 		if v['pass']:
 			run['retries'].pop(nid, None)
 			run['at'] = node.get('next')
@@ -1289,7 +1348,14 @@ class Kit(object):
 		run['problems'].append(prob_msg)
 		if node['kind'] == 'soft':  # reported; the flow goes on
 			if active_until is not None:
-				run.setdefault('loop_soft', {}).setdefault(active_until, {})[nid] = prob_msg
+				lsoft = run.setdefault('loop_soft', {}).setdefault(active_until, {})
+				cur_msgs = lsoft.get(nid)
+				if cur_msgs is None:
+					lsoft[nid] = [prob_msg]
+				elif isinstance(cur_msgs, list):
+					cur_msgs.append(prob_msg)
+				else:
+					lsoft[nid] = [cur_msgs, prob_msg]
 			run['at'] = node.get('next')
 			return
 		left = self.count_of(node.get('retry'), R) - run['retries'].get(nid, 0)
@@ -1419,6 +1485,7 @@ class Kit(object):
 		if fn is None:
 			raise Refused('Tool "{}" has no bound function.'.format(tool_name))
 		# Deep copy state so arena tools can never mutate run['state']
+		self._refresh_rig_meta(run)
 		state_copy = copy.deepcopy(run['state'])
 		import inspect
 		nparams = len(inspect.signature(fn).parameters)
@@ -1441,6 +1508,7 @@ class Kit(object):
 		if not node or not node.get('timeout') or age(run['since']) <= node['timeout']:
 			return False
 		R = self.rules_of(run)
+		run['unattended'] = False
 		run['since'] = None
 		if node['kind'] in ('step', 'reason'):
 			run['answered'][node['id']] = len(run['problems'])  # when the node waits again, it shows why
@@ -1490,6 +1558,7 @@ class Kit(object):
 			entry['meta'] = dict(meta)
 		log.append(entry)
 		self.put(run_id, 'answers', log)
+		run['unattended'] = False
 		run['since'] = None
 		if kind in ('step', 'reason'):
 			eff_schema = self._effective_schema(cur, R)
@@ -1521,6 +1590,7 @@ class Kit(object):
 				run['state'][nid] = {'answer': text}
 				result = {'pass': True}
 				for fn in self.node_code(cur) or []:
+					self._refresh_rig_meta(run)
 					result = run_code(fn, run['state'], R)
 					if not passed(result):
 						break
@@ -1694,6 +1764,7 @@ class Kit(object):
 		run = self.load(run_id)
 		if run['outcome'] is not None:
 			return self.report(run)
+		run['unattended'] = False
 		if self.expire(run):
 			return self.report(self.load(run_id))
 		return self.walk(run)
@@ -1715,6 +1786,7 @@ class Kit(object):
 		why = (reason or '').strip() or 'dropped'
 		run['outcome'] = {'end': 'dropped', 'label': why}
 		run['waiting'] = None
+		run['unattended'] = False
 		run['since'] = None
 		run['trace'].append({'node': 'dropped', 'kind': 'end', 'why': why})
 		self.save(run)
@@ -1927,7 +1999,7 @@ class Kit(object):
 			rows, in_row, stopped = [], 0, None
 			for item in chunk:
 				try:
-					r = self.run(item, rules=rules, preset=preset)
+					r = self.run(item, rules=rules, preset=preset, unattended=True)
 					if 'waiting' in r:
 						run_obj = self.load(r['run'])
 						if self.view_of(run_obj).rollback and not run_obj.get('rolled_back'):

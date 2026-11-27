@@ -124,6 +124,9 @@
    }
   }
  ],
+ "presets": [
+  "hotfix"
+ ],
  "ui_rules": [
   {
    "id": "tests.required",

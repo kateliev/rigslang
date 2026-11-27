@@ -7,7 +7,7 @@ description: Build and maintain instrumental agents with Rig v2 — domain-agnos
 
 Rig is a kit and a method for building **instrumental agents**: a model that operates tools to do a defined job. Its name is the three parts of the work: **R**eason (`reason` blocks and `step ... by model`), **I**ntent (structured `intent` with `audience`, `style`, and `never` invariants), **G**ate (`hard`, `soft`, `model`, `human`).
 
-One `.rig` file is the source of a tool: its rules, queue, steps, reason blocks, gates, ends, rollback, and finally. It enforces a three-layer split: **the Idea** (`.rig`, pure-Python engine & gates, `rigkit.py`), **the World** (thin target adapters), and **the Caller** (Agent Skill, stdio & Streamable HTTP MCP, OpenAPI 3.1, localhost approval UI, local plugin).
+One `.rig` file is the source of a tool: its rules (inline `rule`, compact `rules <group>` tables, or external `rules "rules.json"` sidecars), queue, steps, reason blocks, gates, ends, rollback, and finally. It enforces a three-layer split: **the Idea** (`.rig`, pure-Python engine & gates, `rigkit.py`), **the World** (thin target adapters), and **the Caller** (Agent Skill, stdio & Streamable HTTP MCP, OpenAPI 3.1, localhost approval UI, local plugin).
 
 `RIG` below means `python3 <this folder>/rig.py` (Python 3, standard library only).
 

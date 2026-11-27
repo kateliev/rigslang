@@ -305,7 +305,7 @@ const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 const PLACE = /\{([A-Za-z_][\w-]*(?:\.[\w-]+)+)\}/g;
 const params = new URLSearchParams(location.search);
 const S = {
-  B: null, text: null, dirty: false, changed: new Set(),
+  B: null, text: null, sidecars: {}, dirty: false, changed: new Set(),
   tab: store.get("tab") || "units", unit: null, sel: null, view: null,
   served: params.get("serve") === "1" && location.protocol.startsWith("http"),
   skillRef: store.get("skillRef") === "1",
@@ -352,7 +352,7 @@ const fillText = (U, t) => (t || "").replace(PLACE, (m, id) => { const p = resol
 const isChanged = (U, id) => S.changed.has(U.name + "/" + id);
 
 function load(B) {
-  S.B = B; S.text = B.text; S.dirty = false; S.changed = new Set(); S.sel = null; S.view = null;
+  S.B = B; S.text = B.text; S.sidecars = {}; S.dirty = false; S.changed = new Set(); S.sel = null; S.view = null;
   const fl = units().filter(u => u.flow);
   S.unit = fl.length ? fl[0].name : units().length ? units()[0].name : null;
   render();
@@ -373,16 +373,26 @@ async function fetchCatalogue(url) {
     load(fromCatalogue(await r.json(), url.split("/").pop()));
   } catch (e) { msg("Could not load " + url + ": " + e.message, false); }
 }
+function postBody() {
+  return Object.keys(S.sidecars).length
+    ? { headers: { "Content-Type": "application/json; charset=utf-8" }, body: JSON.stringify({ text: S.text, sidecars: S.sidecars }) }
+    : { headers: { "Content-Type": "text/plain; charset=utf-8" }, body: S.text };
+}
 async function recompile() {  // rig.py compiles the changed text; nothing is written
   try {
-    const r = await fetch("/compile", { method: "POST", headers: { "Content-Type": "text/plain; charset=utf-8" }, body: S.text });
+    const r = await fetch("/compile", { method: "POST", ...postBody() });
     const B = await r.json(); B.text = S.text; S.B = B;
   } catch (e) { msg("Could not compile: " + e.message, false); }
   render();
 }
 
-// - Edits: rule values are written into the Rig text ---
-function editText(s, tokText) {
+// - Edits: rule values are written into the Rig text (or sidecar JSON) ---
+function editRuleSrc(s, id, tokText) {
+  if (s.json_file) {
+    (S.sidecars[s.json_file] ||= {})[id] = tokText;
+    S.dirty = true;
+    return;
+  }
   const ls = S.text.split("\n"), raw = ls[s.line - 1];
   ls[s.line - 1] = raw.slice(0, s.a) + tokText + raw.slice(s.b);
   S.text = ls.join("\n"); S.dirty = true;
@@ -390,7 +400,7 @@ function editText(s, tokText) {
 async function setRule(U, id, tokText) {
   const s = U.rules_src[id];
   if (!s || !S.served) return;
-  editText(s, tokText); S.changed.add(U.name + "/" + id);
+  editRuleSrc(s, id, tokText); S.changed.add(U.name + "/" + id);
   await recompile();
 }
 async function applyPreset(U, pname) {
@@ -398,7 +408,7 @@ async function applyPreset(U, pname) {
   let n = 0;
   for (const [id, tok] of sets) {  // each rule is on its own line: one edit does not move the columns of another
     const cur = U.rules_src[id];
-    if (cur && cur.text !== tok) { editText(cur, tok); S.changed.add(U.name + "/" + id); n++; }
+    if (cur && cur.text !== tok) { editRuleSrc(cur, id, tok); S.changed.add(U.name + "/" + id); n++; }
   }
   await recompile();
   msg(`Preset ${pname} applied: ${n} value${n === 1 ? "" : "s"} changed. Save to keep it.`);
@@ -572,6 +582,8 @@ function flowTable(U) {
 function rulesTable(U) {
   const c = cat(U), readers = {};
   for (const f of c.flow || []) for (const rid of f.reads || []) (readers[rid] ||= []).push(f.id);
+  for (const b of c.blocks || []) for (const rid of b.reads || []) (readers[rid] ||= []).push(b.id);
+  if (c.queue) for (const rid of c.queue.reads || []) (readers[rid] ||= []).push("queue");
   let group = null;
   const rows = [];
   for (const r of c.rules) {
@@ -696,7 +708,7 @@ function nodeEl(n) {
   if (n.type === "term") return el("div", { class: "node term", "data-node": n.id, onclick: () => select(n.id) },
     el("div", { class: "hd", ...drag }, port("in flow f-fail", n.id + ":in"), el("span", { class: "t" }, n.f.name || n.id, " ", el("span", { class: "n" }, "■ " + n.id))));
   if (n.type === "params") {
-    const used = new Set(G.c.flow.flatMap(f => f.reads || []));
+    const used = new Set([...G.c.flow.flatMap(f => f.reads || []), ...(G.c.blocks || []).flatMap(b => b.reads || []), ...((G.c.queue && G.c.queue.reads) || [])]);
     return el("div", { class: "node params", "data-node": n.id },
       el("div", { class: "hd", ...drag }, el("span", { class: "t" }, n.group), el("span", { class: "kind" }, "rules")),
       n.rules.map(r => el("div", { class: "row" + (used.has(r.id) ? "" : " unused") + (isChanged(U, r.id) ? " changed" : ""), "data-rule": r.id,
@@ -1038,10 +1050,10 @@ $("#close").addEventListener("click", () => { if (S.dirty && !confirm("Close wit
 $("#save").addEventListener("click", async () => {
   if (!S.served) return;
   try {
-    const res = await fetch("/file", { method: "POST", headers: { "Content-Type": "text/plain; charset=utf-8" }, body: S.text });
+    const res = await fetch("/file", { method: "POST", ...postBody() });
     const j = await res.json();
     if (!res.ok) { msg(j.error || "not saved", false); return; }
-    S.B = j.bundle; S.text = j.bundle.text; S.dirty = false; S.changed = new Set(); render();
+    S.B = j.bundle; S.text = j.bundle.text; S.sidecars = {}; S.dirty = false; S.changed = new Set(); render();
     msg(`Saved ${j.saved}` + (j.wrote && j.wrote.length ? `; compiled ${j.wrote.map(p => p.split(/[\\/]/).pop()).join(", ")}` : "") + ".");
   } catch (e) { msg("Not saved: " + e.message, false); }
 });

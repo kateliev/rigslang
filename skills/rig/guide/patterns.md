@@ -136,6 +136,51 @@ A tool that works inside an application needs code that reaches it: an MCP serve
 - The steps run inside the host; the gates do not need it. So the gates and the flow can be tested on any computer, and only the steps need the host.
 - A tool that installs alone keeps its own copy of shared code. A check command says when a copy is stale (`rig.py build --check` does this for `rigkit.py`).
 
+## 13. Inner repair `until` exit placement and `state["_rig"]`
+
+**Failure:** a repair loop exited at the bottom of the loop before re-running its `soft` gates, leaving stale warnings in `problems`.
+
+- The runner clears a `soft` gate problem when that `soft` gate runs again inside the active `until` loop and passes (and clears attempt-0 `soft` problems when an outer `until` starts a fresh rebuild round).
+- Place the loop exit flag (`until plan_repair.done`) on the planner step **after** the `soft` gates, so the planner sets `done: true` only when all `soft` gates above it just passed on the current round:
+
+```rig
+until plan_repair.done
+  retry repair.max_rounds
+  gate spacing-ok soft by gates.spacing_ok
+  gate balance-ok soft by gates.balance_ok
+  step plan_repair "Plan next repair" by steps.plan_repair
+```
+
+- Every step, gate, `rollback` step, and `finally` step receives read-only run metadata in `state["_rig"]`: `run_id`, `unattended` (`True` inside `next-batch`, `False` in interactive `run` or `answer`), `in_rollback`, `in_finally`, `rolled_back`, and `end`. A `finally` step can inspect `state["_rig"]["end"]` and `state["_rig"]["rolled_back"]` without extra state plumbing.
+
+## 14. Diagnostic force-through before `rollback`
+
+**Failure:** an early `hard` gate stopped a broken item immediately, before downstream diagnostic steps could save a failure snapshot.
+
+- Add a debug switch rule (default `off`). When the switch is `off`, the early `hard` gate fails at once.
+- When the debug switch is `on`, record the early check failure in step state, let downstream diagnostic steps write a side snapshot for inspection, and trip a catch-up `hard` gate before `finish`.
+- Because the catch-up gate is `hard`, `rollback` still restores clean target state while keeping the diagnostic snapshot on the side:
+
+```rig
+rules debug
+  force_diagnostics off "Run diagnostics before stopping on early failure"
+    ui toggle
+
+step measure by steps.measure
+  reads debug.force_diagnostics
+gate input-ok hard by gates.input_ok
+  fail -> stopped "invalid input"
+step save_diagnostics by steps.save_diagnostics
+  if measure.early_failure
+gate catch-up-ok hard by gates.catch_up_ok
+  fail -> stopped "stopped after saving diagnostics"
+step finish by steps.finish
+end done "Done"
+end stopped "Stopped"
+rollback
+  step restore by steps.restore
+```
+
 ## Check list for level 3 (production)
 
 - [ ] The default target is a copy. A real target needs a word from the person.

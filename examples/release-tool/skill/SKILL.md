@@ -18,11 +18,11 @@ Read the value of each rule from `../gen/release.json`: the `rules` list, by `id
 
 | Rule | Meaning |
 |---|---|
-| `notes.min_words` | Shortest release notes, in words; range 10 to 500. Note: shorter notes did not answer the usual questions |
-| `notes.rounds` | Most rewrites of the notes; range 0 to 5. Note: a third rewrite did not pass where two had failed; the person then writes the notes |
+| `notes.min_words` | Shortest release notes, in words; range 10 to 500 |
+| `notes.rounds` | Most rewrites of the notes; range 0 to 5 |
 | `version.pattern` | Version format |
 | `tests.required` | Tests must pass |
-| `permissions.publish` | The tool may publish. Note: off: a dry run. The run ends at ready and changes nothing. |
+| `permissions.publish` | The tool may publish |
 
 ## How to run
 

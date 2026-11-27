@@ -11,13 +11,13 @@ Before any change of a level 3 (production) tool, read its `notes/project-facts.
 | For | Do |
 |---|---|
 | One run, to try something | `python3 tool.py run '<JSON>' --set group.name=value` (or `--set group.name.key=value` on a `dict` rule, or `--preset NAME`). The source does not change. |
-| To keep | Change the value of the `rule` in the `.rig` file, or on the page of `RIG serve FILE --json gen/NAME.json`. Then `RIG build DIR`. |
+| To keep | Change the value of the rule in the `.rig` file (or in `rules.json` when using `rules "rules.json"`), or on the page of `RIG serve FILE --json gen/NAME.json` (which saves sidecar edits directly to `rules.json`). Then `RIG build DIR`. |
 
-Say which rule changed and why, with the evidence, and write the reason into the `note` of the rule. Do not change a limit to make one item pass.
+Say which rule changed and why, with the evidence, in `notes/` (or in a short `note` on early prototypes without `notes/`). Do not change a limit to make one item pass.
 
 ## A new number
 
-Never put it in code. Add a `rule` to the source: `rule group.name <value> "label, with the unit"`, then `range <min> <max>` or `options a | b`, and a `note` that says where the value comes from. Read it in code with `R('group.name')`, and name it in text as `{group.name}`. Then build.
+Never put it in code. Add it to the source (`rule group.name <value> [<min>..<max>] "label"`, a compact `rules <group>` table, or `rules "rules.json"`), with bounds (`1..100`, `0.._`, or `options a | b`). Read it in code with `R('group.name')`, and name it in text as `{group.name}` (or `reads group.*` on a step). Then build.
 
 ## A gate
 

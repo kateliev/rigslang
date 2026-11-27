@@ -9,7 +9,7 @@ For every agent that builds or changes a Rig tool. Read this page before each pi
 3. **Never put a decision in a front.** A decision that code can make is a function in `gates.py`. The skill and the plugin read the verdict.
 4. **Every gate in code gets a test** that references its function in code (verified via AST for Python), with the rule defaults and with one changed rule.
 5. **Design each job of the model for the weakest model that will run it.** The model picks among candidates that code found; it does not search or carry a long chat ([weak-model.md](weak-model.md)).
-6. **Do not set or change a limit from one item.** Write in the `note` of the rule where the value comes from. When a test set disagrees with a value, stop and report: the person decides.
+6. **Do not set or change a limit from one item.** In an early single-file prototype, write in the `note` of the rule where the value comes from. Once a project has a `notes/` folder or stores calibration constants in `rules.json`, put historical calibration surveys in `notes/` (for example `notes/rule-provenance.md`), keeping `.rig`, `rules.json`, and `SKILL.md` lean. When a test set disagrees with a value, stop and report: the person decides.
 
 ## The run
 

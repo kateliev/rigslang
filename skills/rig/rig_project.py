@@ -175,7 +175,10 @@ def front(m, files, main):
 		prompt = 'Rules for the tool {}{}:\n'.format(m.get('name', main.word(0)), ' (' + rig.fill_values(main, intent) + ')' if intent else '') + '\n'.join('{}. {}'.format(i + 1, r) for i, r in enumerate(rules))
 	out = {'name': m.get('name'), 'prompt': prompt, 'driver': shlex.split(driver), 'timeout_s': m['plugin'].get('timeout_s', 120), 'tools': tools}
 	if flow:
-		ui_rules = [r for r in c.get('rules', []) if r.get('ui')]
+		presets = sorted(c.get('presets', {}).keys())
+		if presets:
+			out['presets'] = presets
+		ui_rules = [dict((k, v) for k, v in r.items() if k != 'note' or len(str(v)) <= 80) for r in c.get('rules', []) if r.get('ui')]
 		if ui_rules:
 			out['ui_rules'] = ui_rules
 	if any(t['kind'] == 'work' for t in tools):
@@ -322,9 +325,12 @@ def doctor(folder, run_tests=True, as_json=False):
 	add(1, not nowho, 'every step says who does it: code, or the model', '; '.join(nowho))
 	noout = [w for w in warns if 'add "out <type>"' in w]
 	add(1, not noout, 'every model step or reason block has an "out" type', '; '.join(noout))
-	rules = [r for u, _ in units for r in u.kids('rule')]
-	bare_rules = [r.word(0) for r in rules if rig.rule_type(r) == 'number' and not r.kids('note')]
-	add(1, not bare_rules, 'every number rule has a note that says where the value comes from', ', '.join(bare_rules), soft=True)
+	has_notes_dir = os.path.isdir(os.path.join(folder, 'notes'))
+	has_json_rules = any(getattr(r, 'from_json', None) for u, _ in units for r in u.kids('rule')) or any(len(rs.args) == 1 and rs.args[0][0] == 'str' for u, _ in units for rs in u.kids('rules'))
+	if not has_notes_dir and not has_json_rules:
+		rules = [r for u, _ in units for r in u.kids('rule')]
+		bare_rules = [r.word(0) for r in rules if rig.rule_type(r) == 'number' and not r.kids('note')]
+		add(1, not bare_rules, 'every number rule has a note that says where the value comes from', ', '.join(bare_rules), soft=True)
 	if gates:
 		cv = rig.coverage(main, [c for u, c in units if u is main][0]) if main is not None else None
 		if cv:
