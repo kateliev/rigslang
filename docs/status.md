@@ -22,7 +22,7 @@ The pattern comes from a private production agent. Only the concept and the mach
 | Universal HTTP / MCP / OpenAPI front (`tool.py mcp`, `tool.py serve-http`, `rig.py mcp-config`) | `skills/rig/kit/rigkit.py`, `skills/rig/rig_project.py` | verified via stdio JSON-RPC, Streamable HTTP MCP, OpenAPI 3.1, `/viewer`, `/http.css`, and `/approve/<run>` tests; live external MCP/OpenAPI hosts not yet verified |
 | The graph viewer & external resources: three lanes (`code`, `model`, `person`), `reason` nodes, `rollback`/`finally` boxes, structured `intent`, `ui` rule badges; external `viewer.html`, `viewer.js`, and user-editable `viewer.css` (`--graph-col`, `--graph-gap`, `--graph-lane-pad`) & `http.css` copied into `<tool>/resources/` | `skills/rig/resources/`, `viewer/index.html`, `rig.py serve` | updated for v2; v1 checked in browser (2026-11-25) |
 | The pattern example, level 3 (`font-names`: short font file names for a delivery standard; structured `intent` with `never` mappings, `rules` blocks, a tuple rule, presets, a `reason` block with read-only arena tools and `candidates 2`, a `model` gate, a `human` gate, a permission, an undo log for `rollback`) | `examples/font-names/` | passes `build --check`, `doctor` (7 of 9 gates by tested code, 1 by the model, 1 by a person), 31 unit tests and 11 regression cases; no live model run yet; no plugin |
-| A second example, level 2 (`family-namer`: a name for a new font family from a story; a single-shot `step ... by model`, a `reason` block in `mode creative` with `candidates 3`, randomness by code with the seed rule `names.seed`, a `human` gate with `options 1 \| 2 \| 3` and `by steps.choice`; two name lists from Wikipedia; its output folder is the input of font-names) | `examples/family-namer/` | passes `build --check`, `doctor` (6 of 8 gates by tested code, 1 by the model, 1 by a person), 22 unit tests and 9 regression cases; no live model run yet; not the pattern |
+| A second example, level 2 (`family-namer`: a name for a new font family from a story; a single-shot `step ... by model`, a `reason` block in `mode creative` with `candidates 3`, randomness by code with the seed rule `names.seed`, a `human` gate with `options 1 \| 2 \| 3` and `by steps.choice`; three name lists from Wikipedia, of which `plants` makes font-names reach its reason block `abbreviate`; its output folder is the input of font-names) | `examples/family-namer/` | passes `build --check`, `doctor` (6 of 8 gates by tested code, 1 by the model, 1 by a person), 23 unit tests and 10 regression cases; no live model run yet; not the pattern |
 
 Verification on 2026-11-27 (RIGS v2.1):
 
@@ -30,6 +30,7 @@ Verification on 2026-11-27 (RIGS v2.1):
 - `python3 -W default -m unittest discover -s tests` (2026-11-27, Windows, Node 22.23.5): all 142 tests pass with 0 warnings. The suite includes the `test_docs.py` link, removed-word and `tool.py` docstring checks, the grammar scope checks, the loopback HTTP `serve` / `serve-http` tests, and the plugin bridge tests that run `.ts` files in Node (they need a Node that runs TypeScript without a flag).
 - `rig.py build --check`, `rig.py doctor` and `rig.py test` pass on `examples/font-names` and `examples/family-namer`.
 - The chain (2026-11-27, recorded answers): family-namer ended at `done` with `out/Diomedes` (4 empty `.otf` files); font-names on that folder ended at `same` with `--preset mac`, and gave `DMDSBD.otf`, `DMDSBDIT.otf`, `DMDSIT.otf`, `DMDSRG.otf` with `--preset dos` (dry run `ready`; with `permissions.rename=on`, `done`, then `restore`).
+- The chain on the list `plants` (2026-11-27, played answers in family-namer): font-names on `out/MetasequoiaGlyptostroboides` with `--preset mac` waits at `abbreviate` for the weak words `Metasequoia` and `Glyptostroboides`. `abbreviate` and `readable` were not answered. Record: `examples/family-namer/reports/chain-plants-2026-11-27.md`.
 - `rig.py new` at levels 1, 2, and 3 for both `--template flow` and `--template host` all pass their own `rig.py doctor`.
 
 ## Tested with real models
@@ -43,7 +44,8 @@ The full record of earlier v1 live runs is in [history/notes-2026-11.md](history
 
 ## Not verified
 
-- A live model run of `examples/family-namer`: the fast `topic` step, the creative `reason pick` with three candidates, and the `fits` guess. Verified with recorded answers only.
+- A live model run of `examples/family-namer`: the fast `topic` step (for example, that a model picks `plants` for a tree story), the creative `reason pick` with three candidates, and the `fits` guess. Verified with recorded answers only.
+- A live model answer of `abbreviate` and `readable` in font-names, on the plants chain.
 - A live model run of `reason abbreviate` in `examples/font-names` (the arena tools `try_names` and `table`, the budget, two candidates). Verified with recorded answers only.
 - Live external MCP/OpenAPI hosts (Claude Desktop, Claude Code, Cursor, LM Studio, Open WebUI, AnythingLLM, Jan) against `tool.py mcp` and `tool.py serve-http`. Verified via automated unit and loopback HTTP tests only.
 - Live `tool.py work` calls against real OpenAI-compatible, Ollama, and Anthropic endpoints (including two-tier routing and read-only `reason` arena loops). Verified via mocked HTTP unit tests only.

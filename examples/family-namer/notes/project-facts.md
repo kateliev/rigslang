@@ -24,10 +24,16 @@ It names a new font family after a figure or a thing that a story asks for, and 
 |---|---|---|---|
 | `trojan-heroes` | 65: 33 Achaeans, 32 Trojans and allies (with 3 Amazons) | [List of Trojan War characters](https://en.wikipedia.org/wiki/List_of_Trojan_War_characters) | 2026-11-27 |
 | `winds` | 13: the 4 chief winds, the 4 lesser winds of the Tower of the Winds, and 5 more winds that the article names | [Anemoi](https://en.wikipedia.org/wiki/Anemoi) | 2026-11-27 |
+| `plants` | 29 trees, by their binomial names: conifers and broadleaf trees | [List of trees and shrubs by taxonomic family](https://en.wikipedia.org/wiki/List_of_trees_and_shrubs_by_taxonomic_family) (1352 species) | 2026-11-27 |
 
 - The names are facts from the articles, in the common English (Latin) spelling. The notes are our own short words, not sentences of the articles.
 - The Trojan list has heroes who fought: no gods, no seers, no servants. A name that is on both sides (Acamas, Antiphus, Amphimachus) is in the list once.
-- Every name becomes a valid family name of at most `family.max_name` characters. The longest is `AjaxTheLesser` (13). `test_the_lists_of_the_tool_are_valid` checks this.
+- Every name becomes a valid family name of at most `family.max_name` characters. In the hero and wind lists the longest is `AjaxTheLesser` (13); in `plants` it is `MastichodendronFoetidissimum` (28). `test_the_lists_of_the_tool_are_valid` checks this.
+- `plants` is for the chain: each name must make font-names (`--preset mac`, HFS 31) stop at its reason block `abbreviate`. How the names were chosen:
+  1. From the article, every binomial whose genus and epithet have at least 21 letters: a first cut, counted by reading, so it keeps names near the limit (hybrids, hyphenated epithets and infraspecific names left out). Code checked each of these names in step 2.
+  2. A script ran `engine.build_rows` and `engine.weak_words` of `examples/font-names/engine.py` on the placeholders of each name (`Regular`, `Italic`, `Bold`, `BoldItalic`; HFS; `shorten.abbr_letters` longest + 1, as `steps.plan` of font-names). 58 names were weak; 57 of them have at most 28 letters. A family name of 22 letters or fewer fits HFS with the table (`-BdIt.otf`), so every weak name has 23 to 28 letters.
+  3. Of the 57, the 29 trees stayed: the story asks for a tree. Shrubs, palms, a cycad, the poison ivies and oaks, and names without a common name in the article were left out.
+  4. `test_every_plant_makes_font_names_ask_the_model` runs the same check on the list, so a change of either tool shows.
 
 ## Decisions of the owner
 

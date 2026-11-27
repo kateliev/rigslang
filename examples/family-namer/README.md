@@ -15,11 +15,12 @@ What this example shows that font-names does not: a single-shot `step ... by mod
 | File | What it is |
 |---|---|
 | `family-namer.rig` | The source: the rules, the steps, the reason block, the gates and the ends. Change the flow and the values here. |
-| `lists/` | The name lists, one JSON file for each list: `trojan-heroes.json` (65 names) and `winds.json` (13 names). Each list names its source. |
+| `lists/` | The name lists, one JSON file for each list: `plants.json` (29 trees), `trojan-heroes.json` (65 names) and `winds.json` (13 names). Each list names its source. |
 | `gates.py` | Every decision that code can make. Pure Python, with tests. |
 | `steps.py` | The work: read the lists, draw, make family names, read the choice of the person, write the placeholders. The only code that touches the files. |
 | `tool.py` | The runner: one command line that every front calls. |
 | `tests/` | The tests of the gates and the steps, the regression set, and the case folder `cases/taken` (a family folder that exists). |
+| `reports/` | Records of real runs, for example the chain on the list `plants`. |
 | `gen/` | Compiled from the source: the catalogue. Do not edit. |
 | `skill/SKILL.md` | Compiled from the source: the Agent Skill. Do not edit. |
 | `rigkit.py` | The tool's own copy of the RIGS runtime. `rig.py build` keeps it current. |
@@ -61,25 +62,48 @@ Or let a model do its part: `python3 tool.py work r1 --api-url URL --model NAME`
 
 ## The chain: family-namer, then font-names
 
-The folder of the new family is the input of font-names. These runs used the folder from the run above:
+The folder of the new family is the input of font-names. The run ids below are the ids of a new `runs/` folder in font-names, in this order.
+
+### Heroes: font-names needs no model
+
+These runs used the folder `out/Diomedes` from the run above:
 
 ```bash
 cd ../font-names
 python3 tool.py run '{"folder": "../family-namer/out/Diomedes"}' --preset mac
 ```
 
-The run ends at `same`: every name already fits HFS (31 characters). The longest family of the lists is `AjaxTheLesser` (13 letters), so with these styles no name is longer than 28 characters.
+Run `r1` ends at `same`: every name already fits HFS (31 characters). The longest family of the hero and wind lists is `AjaxTheLesser` (13 letters), so with these styles no name is longer than 28 characters.
 
 ```bash
 python3 tool.py run '{"folder": "../family-namer/out/Diomedes"}' --preset dos
 python3 tool.py approve r2 yes
 ```
 
-The preset `dos` (8.3, no model) gives `DMDSBD.otf`, `DMDSBDIT.otf`, `DMDSIT.otf` and `DMDSRG.otf`. The run ends at `ready`: a dry run, nothing renamed. With `--set permissions.rename=on` the same run renamed the four files and ended at `done`, and `python3 tool.py restore r1` put the old names back.
+The preset `dos` (8.3, no model) gives `DMDSBD.otf`, `DMDSBDIT.otf`, `DMDSIT.otf` and `DMDSRG.otf`. Run `r2` ends at `ready`: a dry run, nothing renamed. To rename, start a new run with the permission:
+
+```bash
+python3 tool.py run '{"folder": "../family-namer/out/Diomedes"}' --preset dos --set permissions.rename=on
+python3 tool.py approve r3 yes
+python3 tool.py restore r3
+```
+
+Run `r3` renamed the four files and ended at `done`. `restore r3` put the old names back.
+
+### Plants: font-names asks the model
+
+The list `plants` holds trees with long binomial names. With the preset `mac`, their file names do not fit HFS with the built-in table, so font-names stops at its reason block `abbreviate`. A story such as "A calm book face named after a tree" asks for this list. With `names.seed=7`, played answers and the choice 1, family-namer wrote `out/MetasequoiaGlyptostroboides`. Then:
+
+```bash
+cd ../font-names
+python3 tool.py run '{"folder": "../family-namer/out/MetasequoiaGlyptostroboides"}' --preset mac
+```
+
+The run waits at `abbreviate` for the weak words `Metasequoia` and `Glyptostroboides`. Without fair abbreviations, the names would be `MtsqGlptstrbds-Rg` and so on (dropped vowels). The commands, the played answers and the exact `waiting` JSON are in [reports/chain-plants-2026-11-27.md](reports/chain-plants-2026-11-27.md). A real model gives the next answers: `python3 tool.py work r1 --api-url URL --model NAME`.
 
 ## Change
 
-Change a value or the flow in `family-namer.rig`, and the code in `gates.py` and `steps.py`. To add a list, put a JSON file in `lists/`: `{"name": ..., "about": ..., "source": ..., "names": [{"name": ..., "note": ...}]}`. The test `test_the_lists_of_the_tool_are_valid` checks that every name becomes a valid family name. Then:
+Change a value or the flow in `family-namer.rig`, and the code in `gates.py` and `steps.py`. To add a list, put a JSON file in `lists/`: `{"name": ..., "about": ..., "source": ..., "names": [{"name": ..., "note": ...}]}`. The test `test_the_lists_of_the_tool_are_valid` checks that every name becomes a valid family name. For `plants`, `test_every_plant_makes_font_names_ask_the_model` also checks with the engine of font-names that each name makes it stop at `abbreviate`. Then:
 
 ```bash
 python3 RIG build .

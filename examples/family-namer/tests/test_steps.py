@@ -1,5 +1,6 @@
 """Tests of the steps and of whole runs, on temporary folders. No model: the test plays its answers.
 The picks come from the draw of the run itself, never from a list written here."""
+import importlib.util
 import json
 import os
 import shutil
@@ -13,6 +14,7 @@ import rigkit  # noqa: E402
 import steps  # noqa: E402
 import tool  # noqa: E402
 
+FONT_NAMES_ENGINE = os.path.join(os.path.dirname(HERE), 'font-names', 'engine.py')		# the next tool of the chain
 STORY = {'story': 'A sturdy serif for a museum show about the siege of Troy'}
 TOPIC = {'result': {'list': 'trojan-heroes', 'why': 'the story is about the siege of Troy'}}
 
@@ -57,6 +59,25 @@ class Steps(unittest.TestCase):
 				fam = steps.family_of(n)
 				self.assertRegex(fam, r'^[A-Za-z][A-Za-z0-9]*$', n)
 				self.assertLessEqual(len(fam), R('family.max_name'), n)
+
+	@unittest.skipUnless(os.path.exists(FONT_NAMES_ENGINE), 'the example font-names is not next to this one')
+	def test_every_plant_makes_font_names_ask_the_model(self):
+		'''The list plants is for the chain: with the preset mac of font-names, the placeholders of each
+		plant need dropped vowels or a cut, so font-names stops at its reason block abbreviate.
+		This is the check that chose the names (notes/project-facts.md).'''
+		spec = importlib.util.spec_from_file_location('font_names_engine', FONT_NAMES_ENGINE)
+		engine = importlib.util.module_from_spec(spec)
+		spec.loader.exec_module(engine)
+		fn = rigkit.read_json(os.path.join(os.path.dirname(FONT_NAMES_ENGINE), 'gen', 'font-names.json'))
+		fr = rigkit.Rules(fn, fn['presets']['mac'])
+		R = self.rules()
+		plants = next(d for d in steps.read_lists(R) if d['name'] == 'plants')
+		self.assertGreaterEqual(len(plants['names']), 20)
+		for n in plants['names']:
+			fam = steps.family_of(n['name'])
+			inst = [{'family': fam, 'name': s, 'italic': 'Italic' in s, 'variable': False} for s in R('family.styles')]
+			rows = engine.build_rows(inst, engine.settings_of(fr, R('family.formats')[0]))
+			self.assertTrue(engine.weak_words(inst, rows, fr('shorten.abbr_letters')[1] + 1), n['name'])
 
 	def test_sample_with_a_seed_is_repeatable(self):
 		state = {'lists': steps.lists({}, self.rules()), 'topic': {'list': 'Trojan-Heroes'}}
@@ -117,7 +138,7 @@ class Steps(unittest.TestCase):
 		r = self.kit.run(STORY)
 		w = r['waiting']
 		self.assertEqual((w['node'], w['kind']), ('topic', 'step'))
-		self.assertEqual([d['name'] for d in w['sees']['lists']], ['trojan-heroes', 'winds'])
+		self.assertEqual([d['name'] for d in w['sees']['lists']], ['plants', 'trojan-heroes', 'winds'])
 		self.assertEqual(w['schema']['required'], ['list', 'why'])
 
 	def test_pick_is_a_creative_reason_with_three_candidates(self):

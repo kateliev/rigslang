@@ -509,5 +509,68 @@
     "done"
    ]
   }
+ },
+ {
+  "name": "a tree story draws from plants",
+  "inputs": {
+   "story": "A calm book face named after a tree"
+  },
+  "rules": {
+   "names.seed": 7,
+   "files.out": "tests/out"
+  },
+  "answers": {
+   "topic": {
+    "result": {
+     "list": "plants",
+     "why": "the story asks for a tree, and plants is the list of trees"
+    }
+   },
+   "pick": {
+    "result": [
+     {
+      "name": "Metasequoia glyptostroboides",
+      "why": "the dawn redwood, a calm and very old tree"
+     },
+     {
+      "name": "Sequoiadendron giganteum",
+      "why": "the giant sequoia stands still for thousands of years"
+     },
+     {
+      "name": "Chamaecyparis nootkatensis",
+      "why": "a quiet cypress of the northern coast"
+     }
+    ]
+   },
+   "fits": {
+    "pass": true,
+    "why": "all three are trees, as the story asks"
+   },
+   "choose": {
+    "person": true,
+    "answer": "1"
+   }
+  },
+  "expect": {
+   "end": "done",
+   "path": [
+    "lists",
+    "topic",
+    "topic-ok",
+    "has-list",
+    "sample",
+    "pick",
+    "picks-ok",
+    "names",
+    "names-ok",
+    "fits",
+    "choose",
+    "free",
+    "write",
+    "written",
+    "report",
+    "done"
+   ]
+  }
  }
 ]
