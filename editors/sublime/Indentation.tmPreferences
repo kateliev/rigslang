@@ -2,11 +2,11 @@
 <plist version="1.0">
 <dict>
 	<key>scope</key>
-	<string>source.rig - meta.embedded</string>
+	<string>source.rig</string>
 	<key>settings</key>
 	<dict>
 		<key>increaseIndentPattern</key>
-		<string>^\s*(unit|rule|step|gate|ensure|note|cast)\b.*$</string>
+		<string>^\s*(unit|intent|rule|rules(?!\s*")|step|reason|gate|queue|note|code|preset|for|until|if|else|section|rollback|finally)\b.*$</string>
 	</dict>
 </dict>
 </plist>

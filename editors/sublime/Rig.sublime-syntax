@@ -9,6 +9,7 @@ file_extensions: [rig]
 
 contexts:
   main:
+    - include: template-directive
     - include: comment
     - match: '^(unit)\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*)'
       captures:
@@ -26,13 +27,30 @@ contexts:
     - match: '^\s*(intent|audience|style|never|check)(?=[\s;]|$)'
       captures:
         1: keyword.other.matrix.rig
-    - match: '^\s*(code|test|queue)(?=[\s;]|$)'
+    - match: '^\s*(code)(?=[\s;]|$)(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?'
       captures:
         1: keyword.other.context.rig
-    - match: '^\s*(rule|rules)(?=[\s;]|$)(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?'
+        2: entity.name.namespace.rig
+        3: string.unquoted.path.rig
+    - match: '^\s*(test)(?=[\s;]|$)(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?'
+      captures:
+        1: keyword.other.context.rig
+        2: string.unquoted.path.rig
+    - match: '^\s*(queue)(?=[\s;]|$)'
+      captures:
+        1: keyword.other.context.rig
+    - match: '^\s*(rule)(?=[\s;]|$)(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?'
       captures:
         1: storage.type.rule.rig
         2: entity.name.constant.rule.rig
+    - match: '^\s*(rules)\s+([a-z][a-z0-9_]*)(?=[\s;]|$)'
+      captures:
+        1: storage.type.rule.rig
+        2: entity.name.constant.rule.rig
+      push: rules-block
+    - match: '^\s*(rules)(?=[\s;]|$)'
+      captures:
+        1: storage.type.rule.rig
     - match: '^\s*(preset)(?=[\s;]|$)(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?'
       captures:
         1: storage.type.rule.rig
@@ -41,7 +59,11 @@ contexts:
       captures:
         1: keyword.other.context.rig
         2: variable.other.constant.rule.rig
-    - match: '^\s*(note|options|range|ui)(?=[\s;]|$)'
+    - match: '^\s*(ui)(?=[\s;]|$)(?:\s+(toggle|select|slider|number|input)(?=[\s;]|$))?'
+      captures:
+        1: keyword.other.context.rig
+        2: storage.modifier.ui.rig
+    - match: '^\s*(note|options|range)(?=[\s;]|$)'
       captures:
         1: keyword.other.context.rig
     - match: '^\s*(step|reason|end)(?=[\s;]|$)(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?'
@@ -66,34 +88,51 @@ contexts:
     - match: '^\s*(else|section|rollback|finally)(?=[\s;]|$)'
       captures:
         1: keyword.control.block.rig
-    - match: '^\s*(by)(?=[\s;]|$)(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?'
+    - match: '^\s*(by)(?=[\s;]|$)(?:\s+(model)(?=[\s;]|$))?'
       captures:
         1: keyword.control.flow.rig
-        2: support.function.rig
+        2: storage.modifier.lane.rig
+      push: fn-refs
+    - match: '^\s*(tools)(?=[\s;]|$)'
+      captures:
+        1: keyword.control.flow.rig
+      push: fn-refs
     - match: '^\s*(mode)(?=[\s;]|$)(?:\s+(careful|creative)(?=[\s;]|$))?'
       captures:
         1: keyword.control.flow.rig
         2: storage.modifier.mode.rig
-    - match: '^\s*(do|fail|retry|timeout|tolerate|tools|budget|candidates|brief)(?=[\s;]|$)'
+    - match: '^\s*(retry|budget|candidates)(?=[\s;]|$)(?:\s+([A-Za-z_][\w-]*\.[\w.-]+)(?=[\s;]|$))?'
+      captures:
+        1: keyword.control.flow.rig
+        2: variable.other.constant.rule.rig
+    - match: '^\s*(do|fail|timeout|tolerate)(?=[\s;]|$)'
       captures:
         1: keyword.control.flow.rig
     - match: '^\s*(reads)(?=[\s;]|$)'
       captures:
         1: keyword.control.flow.rig
       push: rule-refs
-    - match: '^\s*(sees)(?=[\s;]|$)'
+    - match: '^\s*(sees|brief)(?=[\s;]|$)'
       captures:
         1: keyword.control.flow.rig
+      push: path-refs
     - include: items
 
   items:
+    - include: template-directive
     - include: comment
     - include: string
     - include: regex
+    - include: arrow-continue
     - include: arrow
+    - include: inline-by-model
+    - include: inline-by
     - include: inline
+    - include: field-key
     - include: percent
     - include: time
+    - include: range-open-hi
+    - include: range-open-lo
     - include: range-span
     - include: open-bound
     - include: bar
@@ -110,6 +149,12 @@ contexts:
     - include: brace-open
     - include: brace-close
 
+  template-directive:
+    - match: '(;)(\s*(?:>>>|<<<)\s+level\s+\d+)\s*$'
+      captures:
+        1: comment.line.semicolon.rig
+        2: keyword.control.directive.rig
+
   comment:
     - match: ';.*$'
       scope: comment.line.semicolon.rig
@@ -118,15 +163,38 @@ contexts:
     - match: '(?<![^\s(\[{,:])/(?:\\.|[^/\\])*/(?=[\s)\],}]|$)'
       scope: string.regexp.rig
 
+  arrow-continue:
+    - match: '(?<![^\s(\[{,:])(->)\s+(continue)(?=[\s()\[\]{},:?;]|$)'
+      captures:
+        1: keyword.operator.arrow.rig
+        2: keyword.control.flow.rig
+
   arrow:
     - match: '(?<![^\s(\[{,:])(->)(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?'
       captures:
         1: keyword.operator.arrow.rig
         2: variable.function.target.rig
 
+  inline-by-model:
+    - match: '(?<![^\s(\[{,:])(by)\s+(model)(?=[\s()\[\]{},:?;]|$)'
+      captures:
+        1: keyword.control.flow.rig
+        2: storage.modifier.lane.rig
+
+  inline-by:
+    - match: '(?<![^\s(\[{,:])(by)(?:\s+([^\s()\[\]{},:?";][^\s()\[\]{},:?;]*))?'
+      captures:
+        1: keyword.control.flow.rig
+        2: support.function.rig
+
   inline:
-    - match: '(?<![^\s(\[{,:])(?:by|fail)(?=[\s()\[\]{},:?;]|$)'
+    - match: '(?<![^\s(\[{,:])fail(?=[\s()\[\]{},:?;]|$)'
       scope: keyword.control.flow.rig
+
+  field-key:
+    - match: '(?<=[{,\s])([A-Za-z_][\w-]*)(?=\??:)'
+      captures:
+        1: variable.other.member.rig
 
   percent:
     - match: '(?<![^\s(\[{,:])\d+(?:\.\d+)?%(?=[\s()\[\]{},:?;]|$)'
@@ -136,8 +204,22 @@ contexts:
     - match: '(?<![^\s(\[{,:])\d+[smhd](?=[\s()\[\]{},:?;]|$)'
       scope: constant.numeric.rig
 
+  range-open-hi:
+    - match: '(?<![^\s(\[{,:])([-+]?\d+(?:\.\d+)?)(\.\.)(_)(?=[\s()\[\]{},:?;]|$)'
+      captures:
+        1: constant.numeric.rig
+        2: keyword.operator.range.rig
+        3: constant.language.rig
+
+  range-open-lo:
+    - match: '(?<![^\s(\[{,:])(_)(\.\.)([-+]?\d+(?:\.\d+)?)(?=[\s()\[\]{},:?;]|$)'
+      captures:
+        1: constant.language.rig
+        2: keyword.operator.range.rig
+        3: constant.numeric.rig
+
   range-span:
-    - match: '(?<![^\s(\[{,:])(_|[-+]?\d+(?:\.\d+)?)(\.\.)(_|[-+]?\d+(?:\.\d+)?)(?=[\s()\[\]{},:?;]|$)'
+    - match: '(?<![^\s(\[{,:])([-+]?\d+(?:\.\d+)?)(\.\.)([-+]?\d+(?:\.\d+)?)(?=[\s()\[\]{},:?;]|$)'
       captures:
         1: constant.numeric.rig
         2: keyword.operator.range.rig
@@ -214,9 +296,45 @@ contexts:
         - match: '$\n?'
           pop: true
 
+  rules-block:
+    - match: '^(?=\s*(?:unit|in|out|intent|code|queue|rule|rules|preset|step|reason|gate|for|until|if|else|section|end|rollback|finally)(?:[\s;]|$)| {0,2}[^\s;])'
+      pop: true
+    - include: template-directive
+    - include: comment
+    - match: '^\s*(ui)(?=[\s;]|$)(?:\s+(toggle|select|slider|number|input)(?=[\s;]|$))?'
+      captures:
+        1: keyword.other.context.rig
+        2: storage.modifier.ui.rig
+    - match: '^\s*(note|options|range)(?=[\s;]|$)'
+      captures:
+        1: keyword.other.context.rig
+    - match: '^\s+([a-z][a-z0-9_-]*)(?=\s+[^\s;])'
+      captures:
+        1: entity.name.constant.rule.rig
+    - include: items
+
   rule-refs:
     - match: '$\n?'
       pop: true
+    - include: template-directive
     - include: comment
     - match: '[^\s()\[\]{},:?";][^\s()\[\]{},:?;]*'
       scope: variable.other.constant.rule.rig
+
+  path-refs:
+    - match: '$\n?'
+      pop: true
+    - include: template-directive
+    - include: comment
+    - match: '[^\s()\[\]{},:?";][^\s()\[\]{},:?;]*'
+      scope: variable.other.path.rig
+
+  fn-refs:
+    - match: '$\n?'
+      pop: true
+    - include: template-directive
+    - include: comment
+    - match: '(?<![^\s])model(?=[\s;]|$)'
+      scope: storage.modifier.lane.rig
+    - match: '[^\s()\[\]{},:?";][^\s()\[\]{},:?;]*'
+      scope: support.function.rig

@@ -870,6 +870,131 @@ class EditorGrammars(unittest.TestCase):
 		for w in sorted(rig.REMOVED):
 			self.assertNotIn(w, words, w)
 
+	def test_syntax_assertions_pass(self):
+		'''Run every column scope assertion in editors/sublime/syntax_test_rig.rig against rig.tmLanguage.json.'''
+		grammar_path = os.path.join(ROOT, 'editors', 'vscode', 'syntaxes', 'rig.tmLanguage.json')
+		sublime_path = os.path.join(ROOT, 'editors', 'sublime', 'Rig.sublime-syntax')
+		test_path = os.path.join(ROOT, 'editors', 'sublime', 'syntax_test_rig.rig')
+		with open(grammar_path, encoding='utf-8') as f:
+			tm = json.load(f)
+		with open(sublime_path, encoding='utf-8') as f:
+			sub_txt = f.read()
+		self.assertIn('rules-block:', sub_txt)
+		self.assertIn('fn-refs:', sub_txt)
+		repo = tm['repository']
+
+		def expand(patterns):
+			out = []
+			for p in patterns:
+				if 'include' in p:
+					ref = p['include'][1:]
+					r = repo[ref]
+					out.extend(expand(r['patterns']) if 'patterns' in r and 'begin' not in r and 'match' not in r else [r])
+				else:
+					out.append(p)
+			return out
+
+		def best_match(rules, line, pos):
+			best = None
+			for idx, rule in enumerate(rules):
+				rx = rule.get('begin') or rule.get('match')
+				m = re.compile(rx).search(line, pos)
+				if m and (best is None or m.start() < best[0] or (m.start() == best[0] and idx < best[1])):
+					best = (m.start(), idx, m, rule)
+			return best
+
+		def add_caps(tokens, base_scopes, m, caps, default_name=None):
+			if default_name:
+				tokens.append((m.start(), m.end(), base_scopes + [default_name]))
+			if not caps:
+				if not default_name and m.end() > m.start():
+					tokens.append((m.start(), m.end(), list(base_scopes)))
+				return
+			cur = m.start()
+			spans = []
+			for k, v in sorted(((int(k), v['name']) for k, v in caps.items()), key=lambda x: x[0]):
+				if k <= (m.lastindex or 0) and m.start(k) != -1 and m.end(k) > m.start(k):
+					spans.append((m.start(k), m.end(k), v))
+			spans.sort(key=lambda x: (x[0], -x[1]))
+			for a, b, sc in spans:
+				if a > cur:
+					tokens.append((cur, a, list(base_scopes)))
+				tokens.append((a, b, base_scopes + [sc]))
+				cur = max(cur, b)
+			if cur < m.end():
+				tokens.append((cur, m.end(), list(base_scopes)))
+
+		top_rules = expand(tm['patterns'])
+		stack = []  # [(end_re, rules, scopes)]
+
+		def tokenize_line(line):
+			tokens = []
+			pos = 0
+			n = len(line)
+			while pos <= n:
+				cur_scopes = ['source.rig'] + [sc for _, _, scs in stack for sc in scs]
+				end_hit = None
+				if stack:
+					end_re, _, _ = stack[-1]
+					end_hit = end_re.search(line, pos)
+				active_rules = stack[-1][1] if stack else top_rules
+				hit = best_match(active_rules, line, pos) if pos < n else None
+				if end_hit and (hit is None or end_hit.start() <= hit[0]):
+					if end_hit.start() > pos:
+						tokens.append((pos, end_hit.start(), cur_scopes))
+					_, _, popped = stack.pop()
+					if end_hit.end() > end_hit.start():
+						tokens.append((end_hit.start(), end_hit.end(), cur_scopes))
+						pos = end_hit.end()
+						continue
+					if pos == n:
+						break
+					continue
+				if hit is None:
+					if pos < n:
+						tokens.append((pos, n, cur_scopes))
+					break
+				m_start, _, m, rule = hit
+				if m_start > pos:
+					tokens.append((pos, m_start, cur_scopes))
+				if 'begin' in rule:
+					extra = [rule['name']] if rule.get('name') else []
+					add_caps(tokens, cur_scopes + extra, m, rule.get('beginCaptures'))
+					stack.append((re.compile(rule['end']), expand(rule.get('patterns', [])), extra))
+					pos = m.end() if m.end() > m_start else m_start + 1
+				else:
+					add_caps(tokens, cur_scopes, m, rule.get('captures'), rule.get('name'))
+					pos = m.end() if m.end() > m_start else m_start + 1
+			return tokens or [(0, max(1, n), ['source.rig'])]
+
+		def has_scope(scopes, sel):
+			return any(sc == sel or sc.startswith(sel + '.') for sc in scopes)
+
+		with open(test_path, encoding='utf-8') as f:
+			lines = f.read().split('\n')
+		last = None
+		checks = 0
+		for i, line in enumerate(lines):
+			toks = tokenize_line(line)
+			m = re.match(r'^;( *)(<-|\^+) (- )?(\S+)', line)
+			if i > 0 and m and last is not None:
+				col = 0 if m.group(2) == '<-' else len(m.group(1)) + 1
+				ln = 1 if m.group(2) == '<-' else len(m.group(2))
+				neg = bool(m.group(3))
+				want = m.group(4)
+				for c in range(col, col + ln):
+					tok = next((t for t in last[2] if t[0] <= c < t[1]), None)
+					scopes = tok[2] if tok else ['source.rig']
+					ok = (not has_scope(scopes, want)) if neg else has_scope(scopes, want)
+					checks += 1
+					self.assertTrue(
+						ok,
+						'line {} col {}: want {}{} got {}\n  {}'.format(last[0] + 1, c, '- ' if neg else '', want, scopes, last[1]),
+					)
+			else:
+				last = (i, line, toks)
+		self.assertGreater(checks, 100)
+
 
 if __name__ == '__main__':
 	unittest.main()

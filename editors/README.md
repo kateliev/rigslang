@@ -1,51 +1,53 @@
 # Editor support
 
-Syntax highlighting for `.rig` files in VS Code and Sublime Text.
+Syntax highlighting for Rig v2 `.rig` files in VS Code and Sublime Text.
 
-Both grammars are made from one table in [build.py](build.py). Do not edit the generated files. Change `build.py`, then run:
+Both grammars are built from one table in [build.py](build.py). Do not edit the generated grammar files directly. Change `build.py`, then run:
 
 ```bash
-python editors/build.py
+python3 editors/build.py
 ```
 
 ## What is highlighted
 
-- The head word of each line, by group: what the unit does (`in`, `out`, `intent`, `example`, `check`), the context (`note`, `rule`, `range`, `options`, `preset`, `set`, `uses`, `code`, `test`), the nodes (`step`, `gate`, `end`), the blocks (`for`, `until`, `if`, `else`, `section`, `finally`) and the children of the flow (`by`, `do`, `fail`, `retry`, `timeout`, `tolerate`, `reads`, `sees`).
-- `by` and `fail` at the end of a `step` or `gate` line.
-- Names: units, rules, steps, gates and ends where they are defined; the item and the path of a `for`; the path of `until` and `if`. Rule names after `reads`, and the end after `->`.
-- Strings, rule names in strings (`{group.name}`), `/regex/`, numbers, times (`5m`, `3d`), percents (`20%`), `|` between options, `on`/`off` and `;` comments.
-- Gate kinds (`hard`, `soft`, `model`, `human`) and unit scopes (`tool`, `agent`).
+- **Head words by group:**
+  - Unit signature and intent: `unit`, `in`, `out`, `intent`, `audience`, `style`, `never`, `check`.
+  - Context and rules: `code` (prefix + file path), `test`, `queue`, `rule`, `rules` (`rules <group>` compact tables and `rules "<path>.json"` sidecars), `preset`, `set`, `ui` (`toggle`, `select`, `slider`, `number`, `input`), `note`, `options`, `range`.
+  - Flow nodes: `step`, `reason`, `gate` (`hard`, `soft`, `model`, `human`), `end`.
+  - Blocks: `for ... in ...`, `until`, `if`, `else`, `section`, `rollback`, `finally`.
+  - Node modifiers and wiring: `by` (`by model` and `by <prefix.fn>`, standalone or inline), `tools` (`<prefix.fn>*`), `mode` (`careful`, `creative`), `do`, `fail` (`-> <end>` and `-> continue`), `retry`, `budget`, `candidates` (numbers or dotted rule ids), `timeout`, `tolerate`, `reads` (including `<group>.*` wildcards), `sees`, `brief`.
+- **Types and data literals:** built-in types (`str`, `text`, `word`, `path`, `int`, `float`, `bool`, `list`, `dict`, `tuple`, `any`, `Literal`), optional `?`, union/choice `|`, `[list]`, `(tuple)`, `{key: value}` dicts and `{field: T, opt?: T}` records (with field/member keys highlighted).
+- **Values and bounds:** strings with escapes and `{group.name}` / `{group.name.key}` rule placeholders, `/regex/`, inline bounds (`1..1000`, `0.._`, `_..100`) and open `_` bounds, times (`5m`, `3d`), percents (`20%`), booleans/nulls (`on`, `off`, `true`, `false`, `none`, `null`), `;` comments, and `; >>> level N` template directives.
 
-The words of language version 0 that version 1 refuses (`next`, `pass`, `judge`, `cast`, …) are not highlighted.
+Words removed from earlier versions (`next`, `pass`, `judge`, `cast`, `ensure`, `snippet`, …) stay unhighlighted.
 
 ## VS Code
 
-Copy the folder `editors/vscode` into your extensions folder, then restart VS Code:
+Copy `editors/vscode` into your extensions folder, then reload VS Code:
 
 | System | Extensions folder |
 |---|---|
 | Windows | `%USERPROFILE%\.vscode\extensions\rig-language` |
 | macOS, Linux | `~/.vscode/extensions/rig-language` |
 
-The extension also sets 2-space indentation, `;` comments (Ctrl+/) and folding by indentation for `.rig` files.
+The extension sets 2-space indentation, bracket pairs (`()`, `[]`, `{}`), `;` line comments (`Ctrl+/`), and indentation folding for `.rig` files.
 
 ## Sublime Text 4
 
 1. Select **Preferences > Browse Packages…**.
-2. Copy the folder `editors/sublime` into that folder and name it `Rig`.
+2. Copy `editors/sublime` into that folder and name it `Rig`.
 
-The package also sets 2-space indentation, `;` comments (Ctrl+/) and word boundaries that keep `notes.min_words` as one word.
+The package sets 2-space indentation, `;` line comments (`Ctrl+/`), block indentation rules, and word separators that keep dotted and hyphenated Rig names (`notes.min_words`, `long-enough`) as one word.
 
 ## Tests
 
-[sublime/syntax_test_rig.rig](sublime/syntax_test_rig.rig) is a syntax test in the Sublime Text format. To run it in Sublime Text, open the file and select **Tools > Build**. The package folder must be named `Rig`.
+[sublime/syntax_test_rig.rig](sublime/syntax_test_rig.rig) is a column-level scope test in Sublime Text's syntax test format:
 
-The same file also tests the VS Code grammar:
-
-```bash
-cd editors
-npm install --no-save vscode-textmate vscode-oniguruma
-node test-vscode.js
-```
-
- The generated grammar is checked by `python -m unittest discover tests`: the test fails if `build.py` was changed and the grammars were not built again.
+- **Python unit tests (zero extra packages):** `python3 -m unittest discover -s tests` checks that the generated grammars are current, every head word matches [spec.md](../skills/rig/spec.md), and every scope assertion in `syntax_test_rig.rig` passes.
+- **Sublime Text:** open `syntax_test_rig.rig` and select **Tools > Build** (with the package named `Rig`).
+- **VS Code TextMate engine (optional):**
+  ```bash
+  cd editors
+  npm install --no-save vscode-textmate vscode-oniguruma
+  node test-vscode.js
+  ```

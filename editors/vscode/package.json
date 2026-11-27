@@ -1,8 +1,8 @@
 {
 	"name": "rig-language",
 	"displayName": "Rig",
-	"description": "Syntax highlighting for Rig (.rig) files: intent, checks and gates.",
-	"version": "0.1.0",
+	"description": "Syntax highlighting for Rig v2 (.rig) files: reason, intent, rules, flows and gates.",
+	"version": "2.1.0",
 	"publisher": "riglang",
 	"license": "Apache-2.0",
 	"repository": {
@@ -33,14 +33,7 @@
 			{
 				"language": "rig",
 				"scopeName": "source.rig",
-				"path": "./syntaxes/rig.tmLanguage.json",
-				"embeddedLanguages": {
-					"meta.embedded.block.py.rig": "python",
-					"meta.embedded.block.js.rig": "javascript",
-					"meta.embedded.block.ts.rig": "typescript",
-					"meta.embedded.block.sh.rig": "shellscript",
-					"meta.embedded.block.rust.rig": "rust"
-				}
+				"path": "./syntaxes/rig.tmLanguage.json"
 			}
 		],
 		"configurationDefaults": {

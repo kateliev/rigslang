@@ -121,7 +121,7 @@ unit sort-tool  ; a comment
 ; ^^ keyword.control.block.rig
 ;    ^^^^^^^^ variable.other.path.rig
     gate new-ok human "Make these folders?"
-;                ^^^^^ storage.modifier.gate.rig
+;               ^^^^^ storage.modifier.gate.rig
   else
 ; ^^^^ keyword.control.block.rig
     gate tone model
@@ -140,6 +140,99 @@ unit sort-tool  ; a comment
   rollback
 ; ^^^^^^^^ keyword.control.block.rig
     step undo by steps.undo
+;                ^^^^^^^^^^ support.function.rig
   finally
 ; ^^^^^^^ keyword.control.block.rig
     step summary by steps.summary
+
+; >>> level 3
+; <- comment.line.semicolon.rig
+; ^^^^^^^^^^^ keyword.control.directive.rig
+unit v2-features
+  intent "check v2.1 constructs"
+    audience "operators"
+;   ^^^^^^^^ keyword.other.matrix.rig
+    style "concise"
+;   ^^^^^ keyword.other.matrix.rig
+  code inspect src/inspect.py
+; ^^^^ keyword.other.context.rig
+;      ^^^^^^^ entity.name.namespace.rig
+;              ^^^^^^^^^^^^^^ string.unquoted.path.rig
+  queue "Pending" by inspect.pending
+; ^^^^^ keyword.other.context.rig
+;                 ^^ keyword.control.flow.rig
+;                    ^^^^^^^^^^^^^^^ support.function.rig
+  rules "rules.json"
+; ^^^^^ storage.type.rule.rig
+;       ^^^^^^^^^^^^ string.quoted.double.rig
+  rules size
+; ^^^^^ storage.type.rule.rig
+;       ^^^^ entity.name.constant.rule.rig
+    limit 1000 1..100000 "Longest text"
+;   ^^^^^ entity.name.constant.rule.rig
+;         ^^^^ constant.numeric.rig
+;              ^ constant.numeric.rig
+;               ^^ keyword.operator.range.rig
+;                 ^^^^^^ constant.numeric.rig
+      ui slider
+;     ^^ keyword.other.context.rig
+;        ^^^^^^ storage.modifier.ui.rig
+    tiers {short: 200, standard: 1000} 1.._ "Tier limits"
+;   ^^^^^ entity.name.constant.rule.rig
+;          ^^^^^ variable.other.member.rig
+;                                      ^ constant.numeric.rig
+;                                       ^^ keyword.operator.range.rig
+;                                         ^ constant.language.rig
+    mode fast "Mode inside rules block stays a rule name"
+;   ^^^^ entity.name.constant.rule.rig
+      options fast | careful | off
+;                              ^^^ constant.language.rig
+  step fill by model
+;           ^^ keyword.control.flow.rig
+;              ^^^^^ storage.modifier.lane.rig
+    reads size.*
+;         ^^^^^^ variable.other.constant.rule.rig
+    brief summary count
+;   ^^^^^ keyword.control.flow.rig
+;         ^^^^^^^ variable.other.path.rig
+    out {label: str, score?: float | None}
+;        ^^^^^ variable.other.member.rig
+;               ^^^ support.type.rig
+;                    ^^^^^ variable.other.member.rig
+;                         ^ keyword.operator.optional.rig
+;                            ^^^^^ support.type.rig
+;                                  ^ punctuation.separator.rig
+;                                    ^^^^ constant.language.rig
+  reason plan "Propose options"
+; ^^^^^^ storage.type.node.rig
+;        ^^^^ entity.name.function.node.rig
+    mode creative
+;   ^^^^ keyword.control.flow.rig
+;        ^^^^^^^^ storage.modifier.mode.rig
+    tools inspect.read inspect.measure
+;   ^^^^^ keyword.control.flow.rig
+;         ^^^^^^^^^^^^ support.function.rig
+;                      ^^^^^^^^^^^^^^^ support.function.rig
+    budget 4
+;   ^^^^^^ keyword.control.flow.rig
+;          ^ constant.numeric.rig
+    candidates size.limit
+;   ^^^^^^^^^^ keyword.control.flow.rig
+;              ^^^^^^^^^^ variable.other.constant.rule.rig
+    sees text fill.label
+;   ^^^^ keyword.control.flow.rig
+;        ^^^^ variable.other.path.rig
+;             ^^^^^^^^^^ variable.other.path.rig
+    out list[str]
+  for item in plan
+    gate check-item hard
+      retry size.limit
+;     ^^^^^ keyword.control.flow.rig
+;           ^^^^^^^^^^ variable.other.constant.rule.rig
+      fail -> continue
+;          ^^ keyword.operator.arrow.rig
+;             ^^^^^^^^ keyword.control.flow.rig
+  ensure "removed v0 words are not keywords"
+; ^^^^^^ - keyword
+; ^^^^^^ - storage
+; <<< level 3

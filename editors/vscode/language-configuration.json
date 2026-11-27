@@ -22,9 +22,9 @@
 	"folding": {
 		"offSide": true
 	},
-	"wordPattern": "[^\\s()\\[\\]{},:;\"]+",
+	"wordPattern": "[^\\s()\\[\\]{},:?|\";]+",
 	"indentationRules": {
-		"increaseIndentPattern": "^\\s*(unit|intent|rule|step|reason|gate|queue|note|code|preset|for|until|if|else|section|rollback|finally)\\b.*$",
+		"increaseIndentPattern": "^\\s*(unit|intent|rule|rules(?!\\s*\")|step|reason|gate|queue|note|code|preset|for|until|if|else|section|rollback|finally)\\b.*$",
 		"decreaseIndentPattern": "^\\s*$"
 	}
 }

@@ -1,6 +1,6 @@
 # Status
 
-Branch: `main`. Last change: 2026-11-27 (Rig v2.1: externalized viewer & HTTP resources in `skills/rig/resources/`, external `__NAME__.rig` templates, rule ergonomics, JSON rules sidecar, `state["_rig"]` metadata, lean `SKILL.md`, per-chat LM Studio plugin settings, and nested `until` / `choice` fixes). The history of the work is in the commit messages.
+Branch: `main`. Last change: 2026-11-27 (Rig v2.1: updated VS Code & Sublime Text syntax grammars + automated `syntax_test_rig.rig` scope checks, externalized viewer & HTTP resources in `skills/rig/resources/`, external `__NAME__.rig` templates, rule ergonomics, JSON rules sidecar, `state["_rig"]` metadata, lean `SKILL.md`, per-chat LM Studio plugin settings, and nested `until` / `choice` fixes). The history of the work is in the commit messages.
 
 ## What Rig is now
 
@@ -27,8 +27,8 @@ The pattern comes from a private production agent. Only the concept and the mach
 
 Verification on 2026-11-27 (Rig v2.1):
 
-- `python3 editors/build.py --check`: passes.
-- `python3 -W default -m unittest discover -s tests`: all 140 tests pass with 0 warnings (including `test_docs.py` link, removed-word, and `tool.py` docstring checks, external viewer/HTTP resource preservation tests, `@lmstudio/sdk` config schematics, and loopback HTTP `serve` / `serve-http` tests).
+- `python3 editors/build.py --check`: passes (both `rig.tmLanguage.json` and `Rig.sublime-syntax`, with column-level scope assertions in `editors/sublime/syntax_test_rig.rig` verified in `unittest`).
+- `python3 -W default -m unittest discover -s tests`: all 141 tests pass with 0 warnings (including `test_docs.py` link, removed-word, and `tool.py` docstring checks, `syntax_test_rig.rig` grammar scope checks, external viewer/HTTP resource preservation tests, `@lmstudio/sdk` config schematics, and loopback HTTP `serve` / `serve-http` tests).
 - `rig.py build --check`, `rig.py doctor`, `rig.py test`, and `tsc --noEmit` pass on `examples/release-tool`, `examples/band-facts`, and `examples/bookmarks`.
 - `rig.py new` at levels 1, 2, and 3 for both `--template flow` and `--template host` all pass their own `rig.py doctor`.
 
@@ -44,7 +44,7 @@ The full record of earlier v1 live runs is in [history/notes-2026-11.md](history
 - Live external MCP/OpenAPI hosts (Claude Desktop, Claude Code, Cursor, LM Studio, Open WebUI, AnythingLLM, Jan) against `tool.py mcp` and `tool.py serve-http`. Verified via automated unit and loopback HTTP tests only.
 - Live `tool.py work` calls against real OpenAI-compatible, Ollama, and Anthropic endpoints (including two-tier routing and read-only `reason` arena loops). Verified via mocked HTTP unit tests only.
 - Live browser check of the updated v2 viewer (`reason` nodes, `rollback` boxes, structured `intent`, `ui` badges) and `/approve/<run>` visual/diff UI.
-- Editor TextMate grammar test (`editors/test-vscode.js`, `syntax_test_rig.rig`; needs `vscode-textmate`).
+- Native Sublime Text / `vscode-textmate` runner on `editors/sublime/syntax_test_rig.rig` (column assertions are verified by the pure-Python TextMate tokenizer in `tests/test_rig.py`; `editors/test-vscode.js` needs `vscode-textmate`).
 
 ## Open
 
